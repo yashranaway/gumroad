@@ -31,7 +31,6 @@ import { assertDefined } from "$app/utils/assert";
 import { isValidEmail } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -732,4 +731,4 @@ const CollaboratorsPage = () => {
   return <RouterProvider router={router} />;
 };
 
-export default register({ component: CollaboratorsPage, propParser: () => ({}) });
+export default CollaboratorsPage;
