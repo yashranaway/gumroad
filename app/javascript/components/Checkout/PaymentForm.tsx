@@ -597,7 +597,6 @@ const CustomerDetails = () => {
           </div>
         </div>
       ) : null}
-      {isTippingEnabled(state) ? <TipSelector /> : null}
       {state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments ? (
         <GiftForm isMembership={state.products[0]?.nativeType === "membership"} />
       ) : null}
@@ -1017,7 +1016,6 @@ const PayPal = () => {
   return (
     <>
       <SharedInputs />
-      {isTippingEnabled(state) ? <TipSelector /> : null}
       <div>
         {nativePaypal && implementation === "native" ? (
           <NativePayPal implementation={nativePaypal} />
@@ -1162,7 +1160,6 @@ const StripePaymentRequest = () => {
   return (
     <>
       <SharedInputs />
-      {isTippingEnabled(state) ? <TipSelector /> : null}
       <div>
         <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
           {payLabel}
@@ -1225,6 +1222,7 @@ export const PaymentForm = ({
           </div>
         </div>
       ) : null}
+      {isTippingEnabled(state) ? <TipSelector /> : null}
       {isTestPurchase || !requiresPayment(state) ? (
         <>
           <EmailAddress />
