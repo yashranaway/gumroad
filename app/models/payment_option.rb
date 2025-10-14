@@ -26,4 +26,19 @@ class PaymentOption < ApplicationRecord
   def update_subscription_last_payment_option
     subscription.update_last_payment_option
   end
+
+  def calculate_installment_payment_price_cents(total_price_cents)
+    return unless has_installment_plan_snapshot?
+
+    base_price = total_price_cents / snapshot_number_of_installments
+    remainder = total_price_cents % snapshot_number_of_installments
+
+    Array.new(snapshot_number_of_installments) do |i|
+      i.zero? ? base_price + remainder : base_price
+    end
+  end
+
+  def has_installment_plan_snapshot?
+    snapshot_number_of_installments.present? && snapshot_total_price_cents.present?
+  end
 end

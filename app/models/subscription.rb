@@ -623,7 +623,11 @@ class Subscription < ApplicationRecord
 
   def recurrence
     if is_installment_plan
-      last_payment_option.installment_plan.recurrence
+      if last_payment_option&.snapshot_recurrence.present?
+        last_payment_option.snapshot_recurrence
+      else
+        last_payment_option.installment_plan.recurrence
+      end
     else
       price.recurrence
     end

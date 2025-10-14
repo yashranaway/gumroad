@@ -46,10 +46,19 @@ class Purchase::BaseService
         charge_occurrence_count:,
         free_trial_ends_at: purchase.is_free_trial_purchase? ? purchase.created_at + purchase.link.free_trial_duration : nil
       )
-      subscription.payment_options << PaymentOption.new(
+      payment_option = PaymentOption.new(
         price: purchase.price,
         installment_plan: purchase.is_installment_payment ? purchase.link.installment_plan : nil
       )
+      
+      # Set snapshot values directly for installment plans
+      if purchase.is_installment_payment && purchase.link.installment_plan.present?
+        payment_option.snapshot_number_of_installments = purchase.link.installment_plan.number_of_installments
+        payment_option.snapshot_recurrence = purchase.link.installment_plan.recurrence
+        payment_option.snapshot_total_price_cents = purchase.minimum_paid_price_cents
+      end
+      
+      subscription.payment_options << payment_option
       subscription.save!
       subscription.purchases << [purchase, giftee_purchase].compact
     end
