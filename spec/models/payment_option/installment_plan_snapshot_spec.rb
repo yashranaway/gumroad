@@ -9,7 +9,7 @@ describe "PaymentOption", :vcr do
   let!(:buyer) { create(:user, credit_card: create(:credit_card)) }
 
   describe "snapshotting on creation" do
-    it "snapshots number_of_installments, recurrence, and total_price_cents when created" do
+    it "creates InstallmentPlanSnapshot with number_of_installments, recurrence, and total_price_cents" do
       purchase = create(:purchase,
                         link: product,
                         email: buyer.email,
@@ -19,10 +19,12 @@ describe "PaymentOption", :vcr do
 
       subscription = purchase.subscription
       payment_option = subscription.last_payment_option
+      snapshot = payment_option.installment_plan_snapshot
 
-      expect(payment_option.snapshot_number_of_installments).to eq(3)
-      expect(payment_option.snapshot_recurrence).to eq("monthly")
-      expect(payment_option.snapshot_total_price_cents).to eq(14700)
+      expect(snapshot).to be_present
+      expect(snapshot.number_of_installments).to eq(3)
+      expect(snapshot.recurrence).to eq("monthly")
+      expect(snapshot.total_price_cents).to eq(14700)
     end
   end
 
@@ -96,8 +98,9 @@ describe "PaymentOption", :vcr do
 
       subscription = purchase.subscription
       payment_option = subscription.last_payment_option
+      snapshot = payment_option.installment_plan_snapshot
 
-      expect(payment_option.snapshot_number_of_installments).to eq(3)
+      expect(snapshot.number_of_installments).to eq(3)
       expect(purchase.price_cents).to eq(4900)
 
       installment_plan.update!(number_of_installments: 2)
@@ -149,11 +152,19 @@ describe "PaymentOption", :vcr do
 
   describe "recurrence protection" do
     it "protects existing schedules when recurrence changes" do
+      subscription = create(:subscription, is_installment_plan: true, link: product)
       payment_option = create(:payment_option,
-                              subscription: create(:subscription, is_installment_plan: true),
+                              subscription: subscription,
                               installment_plan: installment_plan)
+      
+      InstallmentPlanSnapshot.create!(
+        payment_option: payment_option,
+        number_of_installments: 3,
+        recurrence: "monthly",
+        total_price_cents: 14700
+      )
 
-      expect(payment_option.snapshot_recurrence).to eq("monthly")
+      expect(payment_option.installment_plan_snapshot.recurrence).to eq("monthly")
 
       installment_plan.update!(recurrence: "yearly")
 
@@ -168,11 +179,8 @@ describe "PaymentOption", :vcr do
                               subscription: subscription,
                               installment_plan: installment_plan)
 
-      payment_option.update_columns(
-        snapshot_number_of_installments: nil,
-        snapshot_recurrence: nil,
-        snapshot_total_price_cents: nil
-      )
+      # Simulate old record without snapshot
+      payment_option.installment_plan_snapshot&.destroy
 
       purchase = create(:purchase,
                         link: product,

@@ -20,10 +20,11 @@ describe "Product installment plan price and configuration protection", type: :s
 
       purchase = product.sales.last
       subscription = purchase.subscription
+      snapshot = subscription.last_payment_option.installment_plan_snapshot
 
       expect(purchase.price_cents).to eq(4900)
-      expect(subscription.last_payment_option.snapshot_total_price_cents).to eq(14700)
-      expect(subscription.last_payment_option.snapshot_number_of_installments).to eq(3)
+      expect(snapshot.total_price_cents).to eq(14700)
+      expect(snapshot.number_of_installments).to eq(3)
 
       product.update!(price_cents: 19700)
 

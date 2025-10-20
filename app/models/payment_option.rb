@@ -8,6 +8,7 @@ class PaymentOption < ApplicationRecord
   belongs_to :installment_plan,
              foreign_key: :product_installment_plan_id, class_name: "ProductInstallmentPlan",
              optional: true
+  has_one :installment_plan_snapshot, dependent: :destroy
 
   validates :installment_plan, presence: true, if: -> { subscription&.is_installment_plan }
 
@@ -27,18 +28,16 @@ class PaymentOption < ApplicationRecord
     subscription.update_last_payment_option
   end
 
-  def calculate_installment_payment_price_cents(total_price_cents)
-    return unless has_installment_plan_snapshot?
+  # Snapshot installment config at purchase time to prevent future product changes
+  # from affecting this customer's agreed-upon payment schedule
+  def snapshot_installment_plan!(purchase)
+    return unless installment_plan.present?
 
-    base_price = total_price_cents / snapshot_number_of_installments
-    remainder = total_price_cents % snapshot_number_of_installments
-
-    Array.new(snapshot_number_of_installments) do |i|
-      i.zero? ? base_price + remainder : base_price
-    end
-  end
-
-  def has_installment_plan_snapshot?
-    snapshot_number_of_installments.present? && snapshot_total_price_cents.present?
+    InstallmentPlanSnapshot.create!(
+      payment_option: self,
+      number_of_installments: installment_plan.number_of_installments,
+      recurrence: installment_plan.recurrence,
+      total_price_cents: purchase.minimum_paid_price_cents
+    )
   end
 end

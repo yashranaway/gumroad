@@ -3391,8 +3391,9 @@ class Purchase < ApplicationRecord
       nth_installment = subscription&.purchases&.successful&.count || 0
       payment_option = subscription&.last_payment_option
 
-      installment_payments = if payment_option&.has_installment_plan_snapshot?
-        payment_option.calculate_installment_payment_price_cents(payment_option.snapshot_total_price_cents)
+      # Prefer snapshot to lock customer's original terms, fallback to live plan for backwards compatibility
+      installment_payments = if payment_option&.installment_plan_snapshot.present?
+        payment_option.installment_plan_snapshot.calculate_installment_payment_price_cents
       else
         fetch_installment_plan.calculate_installment_payment_price_cents(total_price_cents)
       end

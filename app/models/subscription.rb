@@ -623,8 +623,9 @@ class Subscription < ApplicationRecord
 
   def recurrence
     if is_installment_plan
-      if last_payment_option&.snapshot_recurrence.present?
-        last_payment_option.snapshot_recurrence
+      # Use snapshot to preserve original schedule frequency, fallback to live plan if no snapshot exists
+      if last_payment_option&.installment_plan_snapshot.present?
+        last_payment_option.installment_plan_snapshot.recurrence
       else
         last_payment_option.installment_plan.recurrence
       end
