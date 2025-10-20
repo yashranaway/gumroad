@@ -28,8 +28,6 @@ class PaymentOption < ApplicationRecord
     subscription.update_last_payment_option
   end
 
-  # Snapshot installment config at purchase time to prevent future product changes
-  # from affecting this customer's agreed-upon payment schedule
   def snapshot_installment_plan!(purchase)
     return unless installment_plan.present?
 
