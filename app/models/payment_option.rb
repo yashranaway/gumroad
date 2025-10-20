@@ -27,15 +27,4 @@ class PaymentOption < ApplicationRecord
   def update_subscription_last_payment_option
     subscription.update_last_payment_option
   end
-
-  def snapshot_installment_plan!(purchase)
-    return unless installment_plan.present?
-
-    InstallmentPlanSnapshot.create!(
-      payment_option: self,
-      number_of_installments: installment_plan.number_of_installments,
-      recurrence: installment_plan.recurrence,
-      total_price_cents: purchase.minimum_paid_price_cents
-    )
-  end
 end

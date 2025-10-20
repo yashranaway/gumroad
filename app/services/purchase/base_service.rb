@@ -50,12 +50,17 @@ class Purchase::BaseService
         price: purchase.price,
         installment_plan: purchase.is_installment_payment ? purchase.link.installment_plan : nil
       )
-      
+
+      if purchase.is_installment_payment && purchase.link.installment_plan.present?
+        payment_option.build_installment_plan_snapshot(
+          number_of_installments: purchase.link.installment_plan.number_of_installments,
+          recurrence: purchase.link.installment_plan.recurrence,
+          total_price_cents: purchase.minimum_paid_price_cents
+        )
+      end
+
       subscription.payment_options << payment_option
       subscription.save!
-      
-      payment_option.snapshot_installment_plan!(purchase) if purchase.is_installment_payment
-      
       subscription.purchases << [purchase, giftee_purchase].compact
     end
 
