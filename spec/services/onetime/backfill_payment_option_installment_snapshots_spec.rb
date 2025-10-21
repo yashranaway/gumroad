@@ -46,9 +46,9 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
       payment_option = purchase.subscription.last_payment_option
       original_snapshot = payment_option.installment_plan_snapshot
 
-      expect {
+      expect do
         described_class.perform
-      }.not_to change { InstallmentPlanSnapshot.count }
+      end.not_to change { InstallmentPlanSnapshot.count }
 
       expect(payment_option.reload.installment_plan_snapshot).to eq(original_snapshot)
     end
@@ -57,25 +57,25 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
       subscription = create(:subscription, is_installment_plan: false)
       payment_option = create(:payment_option, subscription: subscription, installment_plan: nil)
 
-      expect {
+      expect do
         described_class.perform
-      }.not_to change { InstallmentPlanSnapshot.count }
+      end.not_to change { InstallmentPlanSnapshot.count }
 
       expect(payment_option.reload.installment_plan_snapshot).to be_nil
     end
 
     it "skips payment_options without original purchase" do
       subscription = create(:subscription, is_installment_plan: true, link: product)
-      payment_option = create(:payment_option,
-                              subscription: subscription,
-                              installment_plan: installment_plan)
+      create(:payment_option,
+             subscription: subscription,
+             installment_plan: installment_plan)
 
       # Ensure no original purchase exists
       subscription.purchases.destroy_all
 
-      expect {
+      expect do
         described_class.perform
-      }.not_to change { InstallmentPlanSnapshot.count }
+      end.not_to change { InstallmentPlanSnapshot.count }
     end
 
     it "handles errors gracefully and continues processing" do
@@ -126,9 +126,9 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
       payment_options = purchases.map { |p| p.subscription.last_payment_option }
       payment_options.each { |po| po.installment_plan_snapshot&.destroy }
 
-      expect {
+      expect do
         described_class.perform
-      }.to change { InstallmentPlanSnapshot.count }.by(3)
+      end.to change { InstallmentPlanSnapshot.count }.by(3)
 
       payment_options.each do |payment_option|
         expect(payment_option.reload.installment_plan_snapshot).to be_present

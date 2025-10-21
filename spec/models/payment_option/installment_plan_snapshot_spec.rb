@@ -156,7 +156,7 @@ describe "PaymentOption", :vcr do
       payment_option = create(:payment_option,
                               subscription: subscription,
                               installment_plan: installment_plan)
-      
+
       InstallmentPlanSnapshot.create!(
         payment_option: payment_option,
         number_of_installments: 3,
