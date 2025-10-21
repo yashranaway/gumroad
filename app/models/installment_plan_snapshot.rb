@@ -12,7 +12,6 @@ class InstallmentPlanSnapshot < ApplicationRecord
     base_price = total_price_cents / number_of_installments
     remainder = total_price_cents % number_of_installments
 
-    # Put remainder in first payment to avoid rounding issues across installments
     Array.new(number_of_installments) do |i|
       i.zero? ? base_price + remainder : base_price
     end
