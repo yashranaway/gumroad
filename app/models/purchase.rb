@@ -3622,7 +3622,7 @@ class Purchase < ApplicationRecord
     end
 
     def gift_purchases_cannot_be_on_installment_plans
-      return unless is_installment_payment?
+      return unless is_installment_payment
 
       if is_gift_sender_purchase? || is_gift_receiver_purchase?
         errors.add(:base, "Gift purchases cannot be on installment plans.")
