@@ -178,7 +178,7 @@ FactoryBot.define do
                    payment_option: payment_option,
                    number_of_installments: purchase.installment_plan.number_of_installments,
                    recurrence: purchase.installment_plan.recurrence,
-                   total_price_cents: purchase.minimum_paid_price_cents)
+                   total_price_cents: purchase.total_price_before_installments || purchase.price_cents)
           end
         end
       end
@@ -208,7 +208,7 @@ FactoryBot.define do
                    payment_option: payment_option,
                    number_of_installments: purchase.installment_plan.number_of_installments,
                    recurrence: purchase.installment_plan.recurrence,
-                   total_price_cents: purchase.minimum_paid_price_cents)
+                   total_price_cents: purchase.total_price_before_installments || purchase.price_cents)
           end
         end
       end
@@ -234,7 +234,7 @@ FactoryBot.define do
                    payment_option: payment_option,
                    number_of_installments: purchase.installment_plan.number_of_installments,
                    recurrence: purchase.installment_plan.recurrence,
-                   total_price_cents: purchase.minimum_paid_price_cents)
+                   total_price_cents: purchase.total_price_before_installments || purchase.price_cents)
           end
         end
       end
@@ -261,7 +261,7 @@ FactoryBot.define do
                    payment_option: payment_option,
                    number_of_installments: purchase.installment_plan.number_of_installments,
                    recurrence: purchase.installment_plan.recurrence,
-                   total_price_cents: purchase.minimum_paid_price_cents)
+                   total_price_cents: purchase.total_price_before_installments || purchase.price_cents)
           end
         end
       end

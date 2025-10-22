@@ -55,7 +55,7 @@ class Purchase::BaseService
         payment_option.build_installment_plan_snapshot(
           number_of_installments: purchase.link.installment_plan.number_of_installments,
           recurrence: purchase.link.installment_plan.recurrence,
-          total_price_cents: purchase.minimum_paid_price_cents
+          total_price_cents: purchase.total_price_before_installments
         )
       end
 

@@ -3385,6 +3385,16 @@ class Purchase < ApplicationRecord
       customizable_price? ? perceived_price_cents : nil
     end
 
+    def total_price_before_installments
+      return nil unless is_installment_payment
+      
+      minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
+      minimum_price_cents *= quantity
+      minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && original_offer_code.blank?
+      
+      minimum_price_cents.round
+    end
+
     def calculate_installment_payment_price_cents(total_price_cents)
       return unless is_installment_payment
 
