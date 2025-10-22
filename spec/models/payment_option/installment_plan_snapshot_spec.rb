@@ -2,11 +2,17 @@
 
 require "spec_helper"
 
-describe "PaymentOption", :vcr, vcr: { record: :new_episodes } do
+describe "PaymentOption", :vcr do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 14700) }
   let(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3, recurrence: "monthly") }
   let!(:buyer) { create(:user, credit_card: create(:credit_card)) }
+
+  before do
+    allow_any_instance_of(Hash).to receive(:to_stripejs_payment_method).and_return(
+      double("Stripe::PaymentMethod", id: "pm_test_123", card: double("card", fingerprint: "fp_test_123"))
+    )
+  end
 
   describe "snapshotting on creation" do
     it "creates InstallmentPlanSnapshot with number_of_installments, recurrence, and total_price_cents" do
