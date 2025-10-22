@@ -43,6 +43,19 @@ FactoryBot.define do
     flow_of_funds { FlowOfFunds.build_simple_flow_of_funds(Currency::USD, total_transaction_cents) }
 
     after(:build) { |purchase| purchase.send(:calculate_fees) }
+    
+    after(:create) do |purchase|
+      if purchase.is_installment_payment && purchase.installment_plan.present? && purchase.subscription
+        payment_option = purchase.subscription.last_payment_option
+        if payment_option && !payment_option.installment_plan_snapshot
+          create(:installment_plan_snapshot,
+                 payment_option: payment_option,
+                 number_of_installments: purchase.installment_plan.number_of_installments,
+                 recurrence: purchase.installment_plan.recurrence,
+                 total_price_cents: purchase.minimum_paid_price_cents)
+        end
+      end
+    end
 
     trait :with_custom_fee do
       transient do
@@ -220,6 +233,17 @@ FactoryBot.define do
       after(:create) do |purchase, evaluator|
         purchase.subscription ||= create(:subscription, link: purchase.link, is_installment_plan: true, user: purchase.purchaser)
         purchase.save!
+        
+        if purchase.is_installment_payment && purchase.installment_plan.present?
+          payment_option = purchase.subscription.last_payment_option
+          if payment_option && !payment_option.installment_plan_snapshot
+            create(:installment_plan_snapshot,
+                   payment_option: payment_option,
+                   number_of_installments: purchase.installment_plan.number_of_installments,
+                   recurrence: purchase.installment_plan.recurrence,
+                   total_price_cents: purchase.minimum_paid_price_cents)
+          end
+        end
       end
     end
 
