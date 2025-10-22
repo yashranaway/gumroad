@@ -10,6 +10,7 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
   describe ".perform" do
     it "creates snapshots for payment_options with installment plans but no snapshots" do
       subscription = create(:subscription, is_installment_plan: true, link: product)
+      subscription.payment_options.destroy_all
       payment_option = create(:payment_option,
                               subscription: subscription,
                               installment_plan: installment_plan)

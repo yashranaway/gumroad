@@ -52,11 +52,14 @@ class Purchase::BaseService
       )
 
       if purchase.is_installment_payment && purchase.link.installment_plan.present?
-        payment_option.build_installment_plan_snapshot(
-          number_of_installments: purchase.link.installment_plan.number_of_installments,
-          recurrence: purchase.link.installment_plan.recurrence,
-          total_price_cents: purchase.total_price_before_installments
-        )
+        total_price = purchase.total_price_before_installments
+        if total_price.present? && total_price > 0
+          payment_option.build_installment_plan_snapshot(
+            number_of_installments: purchase.link.installment_plan.number_of_installments,
+            recurrence: purchase.link.installment_plan.recurrence,
+            total_price_cents: total_price
+          )
+        end
       end
 
       subscription.payment_options << payment_option

@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "PaymentOption", :vcr do
+describe "PaymentOption", :vcr, vcr: { record: :new_episodes } do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 14700) }
   let(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3, recurrence: "monthly") }

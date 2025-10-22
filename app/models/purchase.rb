@@ -2628,7 +2628,8 @@ class Purchase < ApplicationRecord
     minimum_price_cents *= quantity
     minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && original_offer_code.blank?
 
-    minimum_price_cents.round
+    calculated_price = minimum_price_cents.round
+    calculated_price > 0 ? calculated_price : price_cents
   end
 
   private
