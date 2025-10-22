@@ -11,7 +11,7 @@ module Onetime
 
         original_purchase = payment_option.subscription.original_purchase
         total_price = original_purchase.total_price_before_installments || original_purchase.price_cents
-        
+
         InstallmentPlanSnapshot.create!(
           payment_option: payment_option,
           number_of_installments: payment_option.installment_plan.number_of_installments,

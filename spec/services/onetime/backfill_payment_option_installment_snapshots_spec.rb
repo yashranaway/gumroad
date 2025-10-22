@@ -13,12 +13,12 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
       payment_option = create(:payment_option,
                               subscription: subscription,
                               installment_plan: installment_plan)
-      purchase = create(:purchase,
-                        link: product,
-                        subscription: subscription,
-                        is_original_subscription_purchase: true,
-                        is_installment_payment: true,
-                        price_cents: 14700)
+      create(:purchase,
+             link: product,
+             subscription: subscription,
+             is_original_subscription_purchase: true,
+             is_installment_payment: true,
+             price_cents: 14700)
 
       expect(payment_option.reload.installment_plan_snapshot).to be_nil
 
@@ -124,9 +124,9 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
         payment_option
       end
 
-      expect {
+      expect do
         described_class.perform
-      }.to change { InstallmentPlanSnapshot.count }.by(3)
+      end.to change { InstallmentPlanSnapshot.count }.by(3)
 
       payment_options.each do |payment_option|
         expect(payment_option.reload.installment_plan_snapshot).to be_present
