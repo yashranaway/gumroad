@@ -3,7 +3,7 @@
 class Refund < ApplicationRecord
   FRAUD = "fraud"
 
-  include JsonData, FlagShihTzu
+  include JsonData, FlagShihTzu, Refund::BalanceLoadIntegration
 
   belongs_to :user, foreign_key: :refunding_user_id, optional: true
   belongs_to :purchase
@@ -11,6 +11,7 @@ class Refund < ApplicationRecord
   belongs_to :seller, class_name: "User"
   has_many :balance_transactions
   has_one :credit
+  has_one :balance_load
 
   before_validation :assign_product, on: :create
   before_validation :assign_seller, on: :create

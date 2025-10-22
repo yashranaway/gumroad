@@ -122,6 +122,10 @@ class User < ApplicationRecord
   has_many :community_chat_messages, dependent: :destroy
   has_many :last_read_community_chat_messages, dependent: :destroy
   has_many :community_notification_settings, dependent: :destroy
+  has_many :balance_load_credit_cards, dependent: :destroy
+  has_many :alive_balance_load_credit_cards, -> { alive }, class_name: "BalanceLoadCreditCard"
+  has_one :default_balance_load_credit_card, -> { alive.where(is_default: true) }, class_name: "BalanceLoadCreditCard"
+  has_many :balance_loads, dependent: :destroy
   has_many :seller_community_chat_recaps, class_name: "CommunityChatRecap", foreign_key: :seller_id, dependent: :destroy
 
   has_one_attached :avatar
