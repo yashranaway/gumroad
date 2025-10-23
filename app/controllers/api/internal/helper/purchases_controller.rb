@@ -521,9 +521,10 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
           subscription.save
         end
 
-        if subscription.original_purchase.present? && subscription.original_purchase.email != to_email
-          subscription.original_purchase.email = to_email
-          subscription.original_purchase.save
+        original_purchase = subscription.original_purchase
+        if original_purchase.present? && original_purchase.email != to_email
+          original_purchase.email = to_email
+          original_purchase.save
         end
       end
 
