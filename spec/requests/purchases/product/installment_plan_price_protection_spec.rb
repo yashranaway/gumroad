@@ -10,7 +10,7 @@ describe "Product installment plan price and configuration protection", type: :s
   describe "price change protection" do
     it "locks installment amounts when product price increases after purchase" do
       visit product.long_url
-      expect(page).to have_text("First installment of $49, followed by 2 monthly installments of $49", normalize_ws: true)
+      expect(page).to have_text("3 equal monthly installments of $49", normalize_ws: true)
 
       click_on "Pay in 3 installments"
       fill_checkout_form(product)

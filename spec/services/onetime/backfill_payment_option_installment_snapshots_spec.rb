@@ -34,6 +34,7 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
 
     it "skips payment_options that already have snapshots" do
       subscription = create(:subscription, is_installment_plan: true, link: product)
+      subscription.payment_options.destroy_all
       payment_option = create(:payment_option,
                               subscription: subscription,
                               installment_plan: installment_plan)
@@ -63,6 +64,7 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
 
     it "skips payment_options without original purchase" do
       subscription = create(:subscription, is_installment_plan: true, link: product)
+      subscription.payment_options.destroy_all
       create(:payment_option,
              subscription: subscription,
              installment_plan: installment_plan)
@@ -77,6 +79,7 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
 
     it "handles errors gracefully and continues processing" do
       subscription1 = create(:subscription, is_installment_plan: true, link: product)
+      subscription1.payment_options.destroy_all
       payment_option1 = create(:payment_option,
                                subscription: subscription1,
                                installment_plan: installment_plan)
@@ -88,6 +91,7 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
              price_cents: 14700)
 
       subscription2 = create(:subscription, is_installment_plan: true, link: product)
+      subscription2.payment_options.destroy_all
       payment_option2 = create(:payment_option,
                                subscription: subscription2,
                                installment_plan: installment_plan)
@@ -113,6 +117,7 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
     it "processes multiple payment_options in batch" do
       payment_options = 3.times.map do
         subscription = create(:subscription, is_installment_plan: true, link: product)
+        subscription.payment_options.destroy_all
         payment_option = create(:payment_option,
                                 subscription: subscription,
                                 installment_plan: installment_plan)

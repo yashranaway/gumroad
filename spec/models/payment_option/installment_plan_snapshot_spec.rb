@@ -9,7 +9,7 @@ describe "PaymentOption", :vcr do
   let!(:buyer) { create(:user, credit_card: create(:credit_card)) }
 
   before do
-    allow_any_instance_of(Hash).to receive(:to_stripejs_payment_method).and_return(
+    allow(Stripe::PaymentMethod).to receive(:create).and_return(
       double("Stripe::PaymentMethod", id: "pm_test_123", card: double("card", fingerprint: "fp_test_123"))
     )
   end
