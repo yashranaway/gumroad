@@ -31,7 +31,7 @@ describe "Installment plan price protection" do
 
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([4900, 4900, 4900])
-        expect(payments.sum).to eq(14700) # Original total protected
+        expect(payments.sum).to eq(14700)
       end
     end
 
@@ -45,7 +45,7 @@ describe "Installment plan price protection" do
 
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([4900, 4900, 4900])
-        expect(payments.sum).to eq(14700) # Original total maintained
+        expect(payments.sum).to eq(14700)
       end
     end
   end
