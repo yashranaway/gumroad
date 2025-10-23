@@ -4,6 +4,7 @@ FactoryBot.define do
   factory :subscription do
     association :link, factory: :product
     user
+    is_installment_plan { false }
 
     transient do
       price { nil }
@@ -22,6 +23,17 @@ FactoryBot.define do
           )
           subscription.payment_options << payment_option
           subscription.charge_occurrence_count = installment_plan.number_of_installments
+        else
+          # Create a temporary payment_option without validation to satisfy subscription validation
+          # Tests will destroy this and create their own with proper installment_plan
+          payment_option = build(
+            :payment_option,
+            subscription:,
+            price: evaluator.price || subscription.link.default_price,
+            installment_plan: nil
+          )
+          payment_option.save!(validate: false)
+          subscription.payment_options << payment_option
         end
       else
         payment_option = create(

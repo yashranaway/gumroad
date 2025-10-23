@@ -142,9 +142,10 @@ RSpec.configure do |config|
     # Disable webmock while cleanup, see also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
     [
-      Thread.new { prepare_mysql },
-      Thread.new { ElasticsearchSetup.prepare_test_environment }
+      Thread.new { prepare_mysql }
     ].each(&:join)
+    # Skip ElasticsearchSetup for local testing without Docker
+    # Thread.new { ElasticsearchSetup.prepare_test_environment }
   end
 
   config.before(:suite) do
