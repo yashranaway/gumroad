@@ -512,12 +512,18 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
       end
 
       if purchase.is_original_subscription_purchase? && purchase.subscription.present?
+        subscription = purchase.subscription
         if target_user
-          purchase.subscription.user = target_user
-          purchase.subscription.save
+          subscription.user = target_user
+          subscription.save
         else
-          purchase.subscription.user = nil
-          purchase.subscription.save
+          subscription.user = nil
+          subscription.save
+        end
+
+        if subscription.original_purchase.present? && subscription.original_purchase.email != to_email
+          subscription.original_purchase.email = to_email
+          subscription.original_purchase.save
         end
       end
 

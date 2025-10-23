@@ -42,11 +42,20 @@ class Admin::PurchasesController < Admin::BaseController
   def resend_receipt
     if @purchase
       if params[:resend_receipt][:email_address].present?
-        @purchase.email = params[:resend_receipt][:email_address]
+        new_email = params[:resend_receipt][:email_address]
+        @purchase.email = new_email
         @purchase.save!
 
         user = User.alive.find_by(email: @purchase.email)
         @purchase.attach_to_user_and_card(user, nil, nil) if user
+
+        if @purchase.subscription.present? && @purchase.subscription.original_purchase.present?
+          original_purchase = @purchase.subscription.original_purchase
+          if original_purchase.email != new_email
+            original_purchase.email = new_email
+            original_purchase.save
+          end
+        end
       end
 
       @purchase.resend_receipt

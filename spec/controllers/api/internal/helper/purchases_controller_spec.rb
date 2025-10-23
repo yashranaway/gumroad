@@ -33,7 +33,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["success"]).to eq(true)
-        expect(response.parsed_body["count"]).to eq(4) # Updated count to include subscription_purchase
+        expect(response.parsed_body["count"]).to eq(4)
 
         purchase1.reload
         expect(purchase1.email).to eq(to_email)
@@ -53,6 +53,25 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
         subscription.reload
         expect(subscription.user).to eq(target_user)
+      end
+
+      it "updates original_purchase email when reassigning subscription purchases" do
+        subscription = create(:subscription, user: buyer)
+        original_purchase = create(:purchase, email: from_email, purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription)
+        recurring_purchase = create(:purchase, email: from_email, purchaser: buyer, subscription: subscription)
+
+        post :reassign_purchases, params: { from: from_email, to: to_email }
+
+        expect(response).to have_http_status(:success)
+
+        subscription.reload
+        expect(subscription.original_purchase.email).to eq(to_email)
+
+        original_purchase.reload
+        expect(original_purchase.email).to eq(to_email)
+
+        recurring_purchase.reload
+        expect(recurring_purchase.email).to eq(to_email)
       end
 
       it "reassigns purchases and sets purchaser_id to nil when target user doesn't exist" do

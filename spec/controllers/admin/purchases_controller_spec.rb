@@ -123,6 +123,79 @@ describe Admin::PurchasesController, :vcr do
     end
   end
 
+  describe "POST resend_receipt" do
+    before do
+      @purchase = create(:purchase_in_progress, chargeable: create(:chargeable))
+      @purchase.process!
+      @purchase.mark_successful!
+    end
+
+    it "resends receipt without changing email" do
+      original_email = @purchase.email
+
+      post :resend_receipt, params: { id: @purchase.id, resend_receipt: { email_address: "" } }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+      expect(@purchase.reload.email).to eq(original_email)
+      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@purchase.id).on("critical")
+    end
+
+    it "updates email and resends receipt" do
+      new_email = "newemail@example.com"
+
+      post :resend_receipt, params: { id: @purchase.id, resend_receipt: { email_address: new_email } }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+      expect(@purchase.reload.email).to eq(new_email)
+      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@purchase.id).on("critical")
+    end
+
+    it "attaches purchase to user when email matches existing user" do
+      existing_user = create(:user, email: "existing@example.com")
+
+      post :resend_receipt, params: { id: @purchase.id, resend_receipt: { email_address: existing_user.email } }
+
+      expect(response).to be_successful
+      expect(@purchase.reload.purchaser).to eq(existing_user)
+    end
+
+    it "updates original_purchase email when purchase has subscription" do
+      subscription = create(:subscription)
+      original_purchase = create(:purchase, email: "old@example.com", is_original_subscription_purchase: true, subscription: subscription)
+      recurring_purchase = create(:purchase, email: "old@example.com", subscription: subscription)
+      new_email = "new@example.com"
+
+      post :resend_receipt, params: { id: recurring_purchase.id, resend_receipt: { email_address: new_email } }
+
+      expect(response).to be_successful
+      expect(recurring_purchase.reload.email).to eq(new_email)
+      expect(subscription.reload.original_purchase.email).to eq(new_email)
+    end
+
+    it "does not update original_purchase email if already matches" do
+      subscription = create(:subscription)
+      original_purchase = create(:purchase, email: "same@example.com", is_original_subscription_purchase: true, subscription: subscription)
+      recurring_purchase = create(:purchase, email: "old@example.com", subscription: subscription)
+
+      expect(original_purchase).not_to receive(:save)
+
+      post :resend_receipt, params: { id: recurring_purchase.id, resend_receipt: { email_address: "same@example.com" } }
+
+      expect(response).to be_successful
+    end
+
+    it "handles purchase without subscription" do
+      new_email = "new@example.com"
+
+      post :resend_receipt, params: { id: @purchase.id, resend_receipt: { email_address: new_email } }
+
+      expect(response).to be_successful
+      expect(@purchase.reload.email).to eq(new_email)
+    end
+  end
+
   describe "POST undelete" do
     before do
       @purchase = create(:purchase, purchaser: create(:user), is_deleted_by_buyer: true)
