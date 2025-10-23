@@ -105,12 +105,12 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
                                installment_plan: installment_plan)
       PaymentOption.set_callback(:create, :after, :update_subscription_last_payment_option)
       purchase1 = build(:purchase,
-                       link: product,
-                       subscription: subscription1,
-                       is_original_subscription_purchase: true,
-                       is_installment_payment: true,
-                       price_cents: 14700,
-                       installment_plan: installment_plan)
+                        link: product,
+                        subscription: subscription1,
+                        is_original_subscription_purchase: true,
+                        is_installment_payment: true,
+                        price_cents: 14700,
+                        installment_plan: installment_plan)
       purchase1.save!(validate: false)
 
       subscription2 = create(:subscription, link: product)
@@ -124,12 +124,12 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
                                installment_plan: installment_plan)
       PaymentOption.set_callback(:create, :after, :update_subscription_last_payment_option)
       purchase2 = build(:purchase,
-                         link: product,
-                         subscription: subscription2,
-                         is_original_subscription_purchase: true,
-                         is_installment_payment: true,
-                         price_cents: 14700,
-                         installment_plan: installment_plan)
+                        link: product,
+                        subscription: subscription2,
+                        is_original_subscription_purchase: true,
+                        is_installment_payment: true,
+                        price_cents: 14700,
+                        installment_plan: installment_plan)
       purchase2.save!(validate: false)
 
       allow(InstallmentPlanSnapshot).to receive(:create!).and_call_original
@@ -157,12 +157,12 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
                                 installment_plan: installment_plan)
         PaymentOption.set_callback(:create, :after, :update_subscription_last_payment_option)
         purchase = build(:purchase,
-                           link: product,
-                           subscription: subscription,
-                           is_original_subscription_purchase: true,
-                           is_installment_payment: true,
-                           price_cents: 14700,
-                           installment_plan: installment_plan)
+                         link: product,
+                         subscription: subscription,
+                         is_original_subscription_purchase: true,
+                         is_installment_payment: true,
+                         price_cents: 14700,
+                         installment_plan: installment_plan)
         purchase.save!(validate: false)
         payment_option
       end

@@ -11,9 +11,9 @@ describe "PaymentOption", :vcr do
   before do
     card_hash = { last4: "4242", brand: "visa" }
     stripe_payment_method = double("Stripe::PaymentMethod",
-                                  id: "pm_test_123",
-                                  card: card_hash,
-                                  customer: "cus_test_123")
+                                   id: "pm_test_123",
+                                   card: card_hash,
+                                   customer: "cus_test_123")
     allow(Stripe::PaymentMethod).to receive(:create).and_return(stripe_payment_method)
     allow(Stripe::PaymentMethod).to receive(:retrieve).and_return(stripe_payment_method)
 
