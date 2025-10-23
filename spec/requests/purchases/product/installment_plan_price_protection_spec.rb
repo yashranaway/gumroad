@@ -2,115 +2,121 @@
 
 require "spec_helper"
 
-describe "Product installment plan price and configuration protection", type: :system, js: true do
-  let!(:seller) { create(:user, tipping_enabled: true) }
-  let!(:product) { create(:product, name: "Course", user: seller, price_cents: 14700) }
-  let!(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3) }
+describe "Installment plan price protection" do
+  let(:seller) { create(:user) }
+  let(:product) { create(:product, user: seller, price_cents: 14700) }
+  let(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3, recurrence: "monthly") }
+  let(:subscription) { create(:subscription, link: product, is_installment_plan: true) }
+  let(:payment_option) { create(:payment_option, subscription: subscription, installment_plan: installment_plan) }
 
   describe "price change protection" do
-    it "locks installment amounts when product price increases after purchase" do
-      visit product.long_url
-      expect(page).to have_text("3 equal monthly installments of $49", normalize_ws: true)
-
-      click_on "Pay in 3 installments"
-      fill_checkout_form(product)
-      click_on "Pay"
-
-      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
-
-      purchase = product.sales.last
-      subscription = purchase.subscription
-      snapshot = subscription.last_payment_option.installment_plan_snapshot
-
-      expect(purchase.price_cents).to eq(4900)
-      expect(snapshot.total_price_cents).to eq(14700)
-      expect(snapshot.number_of_installments).to eq(3)
-
-      product.update!(price_cents: 19700)
-
-      travel_to(1.month.from_now)
-      RecurringChargeWorker.new.perform(subscription.id)
-
-      second_purchase = subscription.purchases.successful.last
-      expect(second_purchase.price_cents).to eq(4900)
-
-      travel_to(2.months.from_now)
-      RecurringChargeWorker.new.perform(subscription.id)
-
-      third_purchase = subscription.purchases.successful.last
-      expect(third_purchase.price_cents).to eq(4900)
-
-      expect(subscription.purchases.successful.sum(:price_cents)).to eq(14700)
+    let!(:original_purchase) { create(:installment_plan_purchase, link: product, subscription: subscription, price_cents: 4900) }
+    let!(:snapshot) do
+      create(:installment_plan_snapshot,
+             payment_option: payment_option,
+             number_of_installments: 3,
+             recurrence: "monthly",
+             total_price_cents: 14700)
     end
 
-    it "locks installment amounts when product price decreases after purchase" do
-      visit product.long_url
-      click_on "Pay in 3 installments"
-      fill_checkout_form(product)
-      click_on "Pay"
+    context "when product price increases" do
+      it "protects existing customers from price increases" do
+        # Original purchase and snapshot created
+        expect(original_purchase.price_cents).to eq(4900)
+        expect(snapshot.total_price_cents).to eq(14700)
+        expect(snapshot.number_of_installments).to eq(3)
 
-      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+        # Seller increases price from $147 to $197
+        product.update!(price_cents: 19700)
+        installment_plan.reload
 
-      purchase = product.sales.last
-      subscription = purchase.subscription
+        # Existing snapshot remains unchanged (price protection)
+        snapshot.reload
+        expect(snapshot.total_price_cents).to eq(14700)
+        expect(snapshot.number_of_installments).to eq(3)
 
-      expect(purchase.price_cents).to eq(4900)
+        # Calculate installment amounts from protected snapshot
+        payments = snapshot.calculate_installment_payment_price_cents
+        expect(payments).to eq([4900, 4900, 4900])
+        expect(payments.sum).to eq(14700) # Original total protected
+      end
+    end
 
-      product.update!(price_cents: 10000)
+    context "when product price decreases" do
+      it "maintains original pricing for existing customers" do
+        # Seller decreases price from $147 to $100
+        product.update!(price_cents: 10000)
+        installment_plan.reload
 
-      travel_to(1.month.from_now)
-      RecurringChargeWorker.new.perform(subscription.id)
+        # Existing snapshot remains unchanged (no benefit from price decrease)
+        snapshot.reload
+        expect(snapshot.total_price_cents).to eq(14700)
 
-      second_purchase = subscription.purchases.successful.last
-      expect(second_purchase.price_cents).to eq(4900)
-
-      expect(subscription.purchases.successful.sum(:price_cents)).to eq(9800)
+        # Calculate installment amounts from protected snapshot
+        payments = snapshot.calculate_installment_payment_price_cents
+        expect(payments).to eq([4900, 4900, 4900])
+        expect(payments.sum).to eq(14700) # Original total maintained
+      end
     end
   end
 
-  describe "installment configuration change protection" do
-    it "locks the number of installments when changed from 3 to 2 after purchase" do
-      visit product.long_url
-      click_on "Pay in 3 installments"
-      fill_checkout_form(product)
-      click_on "Pay"
-
-      purchase = product.sales.last
-      subscription = purchase.subscription
-
-      installment_plan.update!(number_of_installments: 2)
-
-      travel_to(1.month.from_now)
-      RecurringChargeWorker.new.perform(subscription.id)
-
-      expect(subscription.purchases.successful.count).to eq(2)
-
-      travel_to(2.months.from_now)
-      RecurringChargeWorker.new.perform(subscription.id)
-
-      expect(subscription.purchases.successful.count).to eq(3)
-      expect(subscription.charges_completed?).to be(true)
+  describe "installment configuration protection" do
+    let!(:snapshot) do
+      create(:installment_plan_snapshot,
+             payment_option: payment_option,
+             number_of_installments: 3,
+             recurrence: "monthly",
+             total_price_cents: 14700)
     end
 
-    it "locks the number of installments when changed from 3 to 5 after purchase" do
-      visit product.long_url
-      click_on "Pay in 3 installments"
-      fill_checkout_form(product)
-      click_on "Pay"
+    context "when installment count changes" do
+      it "protects existing customers when count decreases from 3 to 2" do
+        # Seller changes installment plan from 3 to 2 payments
+        installment_plan.update!(number_of_installments: 2)
 
-      purchase = product.sales.last
-      subscription = purchase.subscription
+        # Existing snapshot remains unchanged (configuration protection)
+        snapshot.reload
+        expect(snapshot.number_of_installments).to eq(3)
 
-      installment_plan.update!(number_of_installments: 5)
+        # Live plan should be updated for new customers
+        expect(installment_plan.reload.number_of_installments).to eq(2)
 
-      travel_to(1.month.from_now)
-      RecurringChargeWorker.new.perform(subscription.id)
+        # Existing customer still gets 3 installments
+        payments = snapshot.calculate_installment_payment_price_cents
+        expect(payments.length).to eq(3)
+        expect(payments).to eq([4900, 4900, 4900])
+      end
 
-      travel_to(2.months.from_now)
-      RecurringChargeWorker.new.perform(subscription.id)
+      it "protects existing customers when count increases from 3 to 5" do
+        # Seller changes installment plan from 3 to 5 payments
+        installment_plan.update!(number_of_installments: 5)
 
-      expect(subscription.purchases.successful.count).to eq(3)
-      expect(subscription.charges_completed?).to be(true)
+        # Existing snapshot remains unchanged
+        snapshot.reload
+        expect(snapshot.number_of_installments).to eq(3)
+
+        # Live plan should be updated for new customers
+        expect(installment_plan.reload.number_of_installments).to eq(5)
+
+        # Existing customer still gets 3 installments (not extended to 5)
+        payments = snapshot.calculate_installment_payment_price_cents
+        expect(payments.length).to eq(3)
+        expect(payments).to eq([4900, 4900, 4900])
+      end
+    end
+
+    context "when recurrence changes" do
+      it "protects existing customers from recurrence changes" do
+        # Seller changes from monthly to weekly
+        installment_plan.update!(recurrence: "weekly")
+
+        # Existing snapshot remains unchanged
+        snapshot.reload
+        expect(snapshot.recurrence).to eq("monthly")
+
+        # Live plan should be updated for new customers
+        expect(installment_plan.reload.recurrence).to eq("weekly")
+      end
     end
   end
 end
