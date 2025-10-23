@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 describe "PaymentOption installment plan snapshots" do
@@ -18,7 +20,7 @@ describe "PaymentOption installment plan snapshots" do
         recurrence: "monthly",
         total_price_cents: 14700
       )
-      
+
       expect(snapshot).to be_a(InstallmentPlanSnapshot)
       expect(snapshot.payment_option).to eq(payment_option)
       expect(snapshot.number_of_installments).to eq(3)
@@ -57,7 +59,7 @@ describe "PaymentOption installment plan snapshots" do
       it "maintains original installment amounts" do
         expect(snapshot.total_price_cents).to eq(14700)
         expect(snapshot.number_of_installments).to eq(3)
-        
+
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([4900, 4900, 4900])
       end
@@ -66,10 +68,10 @@ describe "PaymentOption installment plan snapshots" do
     context "when product price decreases" do
       it "maintains original installment amounts" do
         product.update!(price_cents: 10000)
-        
+
         snapshot.reload
         expect(snapshot.total_price_cents).to eq(14700)
-        
+
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([4900, 4900, 4900])
       end
@@ -88,23 +90,22 @@ describe "PaymentOption installment plan snapshots" do
     context "when installment count changes" do
       it "maintains original count when changed from 3 to 2" do
         installment_plan.update!(number_of_installments: 2)
-        
+
         snapshot.reload
         expect(snapshot.number_of_installments).to eq(3)
-        
+
         expect(installment_plan.reload.number_of_installments).to eq(2)
       end
 
       it "maintains original count when changed from 3 to 5" do
         installment_plan.update!(number_of_installments: 5)
-        
+
         snapshot.reload
         expect(snapshot.number_of_installments).to eq(3)
-        
+
         expect(installment_plan.reload.number_of_installments).to eq(5)
       end
     end
-
   end
 
   describe "backwards compatibility" do
@@ -129,7 +130,7 @@ describe "PaymentOption installment plan snapshots" do
       it "can access both snapshot and live plan" do
         expect(payment_option.installment_plan_snapshot.number_of_installments).to eq(5)
         expect(payment_option.installment_plan_snapshot.recurrence).to eq("weekly")
-        
+
         expect(payment_option.installment_plan.number_of_installments).to eq(3)
         expect(payment_option.installment_plan.recurrence).to eq("monthly")
       end

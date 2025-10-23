@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 describe InstallmentPlanSnapshot do
@@ -64,7 +66,7 @@ describe InstallmentPlanSnapshot do
       it "allows only one snapshot per payment_option" do
         create(:installment_plan_snapshot, payment_option: payment_option)
         duplicate = build(:installment_plan_snapshot, payment_option: payment_option)
-        
+
         expect(duplicate).not_to be_valid
         expect(duplicate.errors[:payment_option]).to include("has already been taken")
       end
@@ -81,10 +83,10 @@ describe InstallmentPlanSnapshot do
   describe "#calculate_installment_payment_price_cents" do
     context "when total divides evenly" do
       it "returns equal payments" do
-        snapshot = create(:installment_plan_snapshot, 
-                         payment_option: payment_option,
-                         number_of_installments: 3,
-                         total_price_cents: 15000)
+        snapshot = create(:installment_plan_snapshot,
+                          payment_option: payment_option,
+                          number_of_installments: 3,
+                          total_price_cents: 15000)
 
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([5000, 5000, 5000])
@@ -95,9 +97,9 @@ describe InstallmentPlanSnapshot do
     context "when total has remainder" do
       it "adds remainder to first payment" do
         snapshot = create(:installment_plan_snapshot,
-                         payment_option: payment_option, 
-                         number_of_installments: 3,
-                         total_price_cents: 10000)
+                          payment_option: payment_option,
+                          number_of_installments: 3,
+                          total_price_cents: 10000)
 
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([3334, 3333, 3333])
@@ -106,9 +108,9 @@ describe InstallmentPlanSnapshot do
 
       it "handles larger remainders correctly" do
         snapshot = create(:installment_plan_snapshot,
-                         payment_option: payment_option,
-                         number_of_installments: 3, 
-                         total_price_cents: 14700)
+                          payment_option: payment_option,
+                          number_of_installments: 3,
+                          total_price_cents: 14700)
 
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([4900, 4900, 4900])
@@ -119,9 +121,9 @@ describe InstallmentPlanSnapshot do
     context "single installment" do
       it "returns full amount" do
         snapshot = create(:installment_plan_snapshot,
-                         payment_option: payment_option,
-                         number_of_installments: 1,
-                         total_price_cents: 10000)
+                          payment_option: payment_option,
+                          number_of_installments: 1,
+                          total_price_cents: 10000)
 
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([10000])
@@ -131,9 +133,9 @@ describe InstallmentPlanSnapshot do
     context "many installments" do
       it "handles 12 installments correctly" do
         snapshot = create(:installment_plan_snapshot,
-                         payment_option: payment_option,
-                         number_of_installments: 12,
-                         total_price_cents: 12000)
+                          payment_option: payment_option,
+                          number_of_installments: 12,
+                          total_price_cents: 12000)
 
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([1000] * 12)

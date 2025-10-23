@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 
 require "spec_helper"
 
@@ -86,6 +87,5 @@ describe "Installment plan price protection" do
         expect(payments).to eq([4900, 4900, 4900])
       end
     end
-
   end
 end

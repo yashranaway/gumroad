@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 
 require "spec_helper"
 
@@ -11,8 +12,8 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
     context "when payment_option has installment plan but no snapshot" do
       it "creates snapshot with correct attributes" do
         payment_option = create(:payment_option, subscription: subscription, installment_plan: installment_plan)
-        original_purchase = build(:purchase, 
-                                  link: product, 
+        original_purchase = build(:purchase,
+                                  link: product,
                                   subscription: subscription,
                                   is_original_subscription_purchase: true,
                                   is_installment_payment: true,
@@ -64,7 +65,7 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
     context "when subscription has no original purchase" do
       it "skips creating snapshot" do
         payment_option = create(:payment_option, subscription: subscription, installment_plan: installment_plan)
-        
+
         subscription.purchases.destroy_all
 
         expect do
