@@ -1,4 +1,3 @@
-# frozen_string_literal: true
 
 require "spec_helper"
 
@@ -6,24 +5,24 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 14700) }
   let(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3, recurrence: "monthly") }
-  let(:subscription) { create(:subscription, link: product, is_installment_plan: true) }
+  let(:subscription) { create(:subscription, link: product, user: seller) }
 
   describe ".perform" do
     context "when payment_option has installment plan but no snapshot" do
       it "creates snapshot with correct attributes" do
         payment_option = create(:payment_option, subscription: subscription, installment_plan: installment_plan)
-        original_purchase = create(:installment_plan_purchase, 
+        original_purchase = build(:purchase, 
                                   link: product, 
                                   subscription: subscription,
+                                  is_original_subscription_purchase: true,
+                                  is_installment_payment: true,
                                   price_cents: 4900)
+        original_purchase.save!(validate: false)
 
-        # Ensure no snapshot exists initially
         expect(payment_option.installment_plan_snapshot).to be_nil
 
-        # Run backfill
         described_class.perform
 
-        # Verify snapshot was created
         snapshot = payment_option.reload.installment_plan_snapshot
         expect(snapshot).to be_present
         expect(snapshot.number_of_installments).to eq(3)
@@ -66,7 +65,6 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
       it "skips creating snapshot" do
         payment_option = create(:payment_option, subscription: subscription, installment_plan: installment_plan)
         
-        # Ensure no purchases exist
         subscription.purchases.destroy_all
 
         expect do
@@ -79,16 +77,16 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
 
     context "when error occurs during processing" do
       it "handles errors gracefully and continues processing" do
-        # Create two payment options
-        subscription1 = create(:subscription, link: product, is_installment_plan: true)
+        subscription1 = create(:subscription, link: product, user: seller)
         payment_option1 = create(:payment_option, subscription: subscription1, installment_plan: installment_plan)
-        create(:installment_plan_purchase, link: product, subscription: subscription1, price_cents: 4900)
+        purchase1 = build(:purchase, link: product, subscription: subscription1, is_original_subscription_purchase: true, is_installment_payment: true, price_cents: 4900)
+        purchase1.save!(validate: false)
 
-        subscription2 = create(:subscription, link: product, is_installment_plan: true)
+        subscription2 = create(:subscription, link: product, user: seller)
         payment_option2 = create(:payment_option, subscription: subscription2, installment_plan: installment_plan)
-        create(:installment_plan_purchase, link: product, subscription: subscription2, price_cents: 4900)
+        purchase2 = build(:purchase, link: product, subscription: subscription2, is_original_subscription_purchase: true, is_installment_payment: true, price_cents: 4900)
+        purchase2.save!(validate: false)
 
-        # Mock error for first payment option
         allow(InstallmentPlanSnapshot).to receive(:create!).and_call_original
         allow(InstallmentPlanSnapshot).to receive(:create!)
           .with(hash_including(payment_option: payment_option1))
@@ -98,7 +96,6 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
 
         described_class.perform
 
-        # First should fail, second should succeed
         expect(payment_option1.reload.installment_plan_snapshot).to be_nil
         expect(payment_option2.reload.installment_plan_snapshot).to be_present
       end
@@ -107,9 +104,10 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
     context "when processing multiple payment_options" do
       it "creates snapshots for all eligible payment_options" do
         payment_options = 3.times.map do |i|
-          sub = create(:subscription, link: product, is_installment_plan: true)
+          sub = create(:subscription, link: product, user: seller)
           payment_option = create(:payment_option, subscription: sub, installment_plan: installment_plan)
-          create(:installment_plan_purchase, link: product, subscription: sub, price_cents: 4900)
+          purchase = build(:purchase, link: product, subscription: sub, is_original_subscription_purchase: true, is_installment_payment: true, price_cents: 4900)
+          purchase.save!(validate: false)
           payment_option
         end
 

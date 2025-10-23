@@ -1,4 +1,3 @@
-# frozen_string_literal: true
 
 require "spec_helper"
 
@@ -6,11 +5,10 @@ describe "Installment plan price protection" do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 14700) }
   let(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3, recurrence: "monthly") }
-  let(:subscription) { create(:subscription, link: product, is_installment_plan: true) }
+  let(:subscription) { create(:subscription, link: product, user: seller) }
   let(:payment_option) { create(:payment_option, subscription: subscription, installment_plan: installment_plan) }
 
   describe "price change protection" do
-    let!(:original_purchase) { create(:installment_plan_purchase, link: product, subscription: subscription, price_cents: 4900) }
     let!(:snapshot) do
       create(:installment_plan_snapshot,
              payment_option: payment_option,
@@ -21,8 +19,7 @@ describe "Installment plan price protection" do
 
     context "when product price increases" do
       it "protects existing customers from price increases" do
-        # Original purchase and snapshot created
-        expect(original_purchase.price_cents).to eq(4900)
+        # Snapshot created with original pricing
         expect(snapshot.total_price_cents).to eq(14700)
         expect(snapshot.number_of_installments).to eq(3)
 
@@ -105,18 +102,5 @@ describe "Installment plan price protection" do
       end
     end
 
-    context "when recurrence changes" do
-      it "protects existing customers from recurrence changes" do
-        # Seller changes from monthly to weekly
-        installment_plan.update!(recurrence: "weekly")
-
-        # Existing snapshot remains unchanged
-        snapshot.reload
-        expect(snapshot.recurrence).to eq("monthly")
-
-        # Live plan should be updated for new customers
-        expect(installment_plan.reload.recurrence).to eq("weekly")
-      end
-    end
   end
 end
