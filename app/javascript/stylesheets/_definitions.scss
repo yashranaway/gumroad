@@ -1,10 +1,7 @@
 @use "sass:math";
 @use "sass:list";
 
-// split-color kept for convenience where RGB triplets are needed
-@function split-color($color) {
-  @return red($color) green($color) blue($color);
-}
+// No color helper functions remain; Tailwind consumes explicit CSS variables
 
 $unit: 1rem !default;
 $colors: (
@@ -18,18 +15,25 @@ $colors: (
 
 $brands: (
   facebook: (color: #4267b2,
+    text-color: #ffffff,
   ),
   twitter: (color: #000000,
+    text-color: #ffffff,
   ),
   paypal: (color: #00457c,
+    text-color: #ffffff,
   ),
   stripe: (color: #625bf6,
+    text-color: #ffffff,
   ),
   apple: (color: #000000,
+    text-color: #ffffff,
   ),
   android: (color: #142f40,
+    text-color: #ffffff,
   ),
   kindle: (color: #f3a642,
+    text-color: #000000,
   ),
   discord: (color: #7289da,
     text-color: #ffffff,

@@ -25,6 +25,7 @@
   }
 
   @each $name in $bg-colors {
+
     &.#{$name},
     &.outline-#{$name}:hover:not(:disabled) {
       @include bg-color($name);
@@ -60,7 +61,7 @@
     .button-#{$name} {
       $color: map-get($info, color);
       background-color: $color;
-      color: map-get($info, text-color) or fg-color($color);
+      color: map-get($info, text-color);
 
       &::before {
         @extend .brand-icon, .brand-icon-#{$name};
@@ -79,7 +80,7 @@
     font-weight: bold;
   }
 
-  & > :first-child {
+  &> :first-child {
     flex-shrink: 0;
   }
 
