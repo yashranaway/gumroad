@@ -1,54 +1,9 @@
 @use "sass:math";
 @use "sass:list";
 
-// Inlined from deprecated _colors.scss to remove cross-file dependency
+// split-color kept for convenience where RGB triplets are needed
 @function split-color($color) {
   @return red($color) green($color) blue($color);
-}
-
-@function fg-color($color) {
-  $contrast-black: contrast-ratio($color, #000000);
-  $contrast-white: contrast-ratio($color, #ffffff);
-  @return if($contrast-black > $contrast-white, #000000, #ffffff);
-}
-
-// Taken & adapted from https://github.com/twbs/bootstrap/blob/main/scss/_functions.scss
-@function contrast-ratio($background, $foreground) {
-  $l1: luminance($background);
-  $l2: luminance(opaque($background, $foreground));
-
-  @return if($l1 > $l2, math.div($l1 + 0.05, $l2 + 0.05), math.div($l2 + 0.05, $l1 + 0.05));
-}
-
-// Return WCAG2.0 relative luminance
-// See https://www.w3.org/WAI/GL/wiki/Relative_luminance
-// See https://www.w3.org/TR/WCAG20-TECHS/G17.html#G17-tests
-@function luminance($color) {
-  $rgb: (
-    "r": red($color),
-    "g": green($color),
-    "b": blue($color),
-  );
-
-  @each $name, $value in $rgb {
-    $value: if(
-      math.div($value, 255) < 0.03928,
-      math.div(math.div($value, 255), 12.92),
-      math.pow(math.div((math.div($value, 255) + 0.055), 1.055), 2.4)
-    );
-    $rgb: map-merge(
-      $rgb,
-      (
-        $name: $value,
-      )
-    );
-  }
-
-  @return (map-get($rgb, "r") * 0.2126) + (map-get($rgb, "g") * 0.7152) + (map-get($rgb, "b") * 0.0722);
-}
-
-@function opaque($background, $foreground) {
-  @return mix(rgba($foreground, 1), $background, opacity($foreground) * 100%);
 }
 
 $unit: 1rem !default;
@@ -62,42 +17,37 @@ $colors: (
 );
 
 $brands: (
-  facebook: (
-    color: #4267b2,
+  facebook: (color: #4267b2,
   ),
-  twitter: (
-    color: #000000,
+  twitter: (color: #000000,
   ),
-  paypal: (
-    color: #00457c,
+  paypal: (color: #00457c,
   ),
-  stripe: (
-    color: #625bf6,
+  stripe: (color: #625bf6,
   ),
-  apple: (
-    color: #000000,
+  apple: (color: #000000,
   ),
-  android: (
-    color: #142f40,
+  android: (color: #142f40,
   ),
-  kindle: (
-    color: #f3a642,
+  kindle: (color: #f3a642,
   ),
-  discord: (
-    color: #7289da,
+  discord: (color: #7289da,
     text-color: #ffffff,
   ),
-  zoom: (
-    color: #4087fc,
+  zoom: (color: #4087fc,
     text-color: #ffffff,
   ),
-  google: (
-    color: #5383ec,
+  google: (color: #5383ec,
     text-color: #ffffff,
   ),
 );
 
-$states: (success, danger, warning, info);
+$states: (
+  success,
+  danger,
+  warning,
+  info
+);
 $bg-colors: list.join($states, primary "black" accent filled);
 
 @function size($multiplier) {
@@ -105,23 +55,39 @@ $bg-colors: list.join($states, primary "black" accent filled);
 }
 
 @function sizes($multipliers...) {
-  $sizes: ();
-  @each $multiplier in $multipliers {
-    $sizes: list.append($sizes, size($multiplier));
-  }
-  @return $sizes;
+  $sizes: (
+  );
+
+@each $multiplier in $multipliers {
+  $sizes: list.append($sizes, size($multiplier));
+}
+
+@return $sizes;
 }
 
 $spacers: sizes(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4);
 $font-sizes: sizes(0.875, 1, 1.15, 1.25, 2.5);
-$line-heights: (1.3, 1.4, 1.4, 1.3, 1.2);
+$line-heights: (
+  1.3,
+  1.4,
+  1.4,
+  1.3,
+  1.2
+);
 $breakpoints: (
   sm: 640px,
   lg: 1024px,
 );
-$grays: (0.1, 0.2, 0.5);
+$grays: (
+  0.1,
+  0.2,
+  0.5
+);
 $border-radii: sizes(0.25, 0.5, 10);
-$box-shadows: ((size(0.25) size(0.25) size(0)), (size(0.5) size(0.5) size(0)));
+$box-shadows: (
+  (size(0.25) size(0.25) size(0)),
+  (size(0.5) size(0.5) size(0))
+);
 $z-indices: (
   base: 0,
   overlay: 1,
@@ -135,17 +101,22 @@ $z-indices: (
 @mixin breakpoint-up($name, $container: false) {
   @media (min-width: map-get($breakpoints, $name)) {
     @if $container {
+
       // This roughly emulates container queries using .squished and should be replaced once they're properly supported.
       &:not(.squished &) {
         @content;
       }
-    } @else {
+    }
+
+    @else {
       @content;
     }
   }
+
   @if $container {
     $keys: map-keys($breakpoints);
     $index: list.index($keys, $name);
+
     @if $index < list.length($keys) {
       @media (min-width: map-get($breakpoints, list.nth($keys, $index + 1))) {
         @content;
@@ -256,41 +227,51 @@ $z-indices: (
 }
 
 $light-body-bg: #f4f4f0 !default;
+
 @mixin globals {
   @for $i from 1 through length($spacers) {
     --spacer-#{$i}: #{nth($spacers, $i)};
   }
+
   @for $i from 1 through length($border-radii) {
     --border-radius-#{$i}: #{nth($border-radii, $i)};
   }
+
   @for $i from 1 through length($box-shadows) {
     --box-shadow-#{$i}: #{nth($box-shadows, $i)} var(--color);
   }
+
   @each $name, $z-index in $z-indices {
     --z-index-#{$name}: #{$z-index};
   }
+
   @each $name, $color in $colors {
     --#{$name}: #{$color};
   }
+
   @each $name, $breakpoint in $breakpoints {
     --breakpoint-#{$name}: #{$breakpoint};
   }
 
   // We specify these colors as RGB values so we can apply alpha channels to them as needed
-  $base-colors: (
-    "success": split-color(map-get($colors, "green")),
-    "warning": split-color(map-get($colors, "orange")),
-    "danger": split-color(map-get($colors, "red")),
-    "info": split-color(map-get($colors, "purple")),
-    "accent": split-color(map-get($colors, "pink")),
-    "primary": 0 0 0,
-    "black": 0 0 0,
-    "filled": 255 255 255,
-  );
-  @each $name, $color in $base-colors {
-    --#{$name}: #{$color};
-    --contrast-#{$name}: #{split-color(fg-color(rgb($color)))};
-  }
+  // Contrast values are set explicitly to avoid Sass contrast helpers
+  --success: 35 160 148; // #23a094
+  --contrast-success: 255 255 255; // white text on teal
+  --warning: 255 201 0; // #ffc900
+  --contrast-warning: 0 0 0; // black text on bright yellow
+  --danger: 220 52 30; // #dc341e
+  --contrast-danger: 255 255 255; // white text on red
+  --info: 144 168 237; // #90a8ed
+  --contrast-info: 0 0 0; // black text on light purple
+  --accent: 255 144 232; // #ff90e8
+  --contrast-accent: 0 0 0; // black text on light pink (overridden by custom styles if needed)
+  --primary: 0 0 0;
+  --contrast-primary: 255 255 255; // default; overridden in dark mode below
+  --black: 0 0 0;
+  --contrast-black: 255 255 255; // default; overridden in dark mode below
+  --filled: 255 255 255;
+  --contrast-filled: 0 0 0; // black text on white
+
   --color: 0 0 0;
   --body-bg: #{$light-body-bg};
   --border-alpha: 1;
@@ -338,8 +319,7 @@ $body-padding-mobile: spacer(4);
 $disabled-opacity: 0.3;
 $grid-wrap-breakpoint: size(31.25);
 $main-stack-width: size(28);
-$form-element-height: nth($font-sizes, $form-element-font-size) * nth($line-heights, $form-element-font-size) +
-  $form-element-padding-y * 2 + $border-width * 2;
+$form-element-height: nth($font-sizes, $form-element-font-size) * nth($line-heights, $form-element-font-size) + $form-element-padding-y * 2 + $border-width * 2;
 $body-padding-desktop-center: max((100% - #{$body-max-width}) / 2, #{$body-padding-desktop});
 $button-hover-transform-length: spacer(1);
 $header-padding-y: spacer(6);
