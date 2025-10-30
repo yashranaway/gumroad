@@ -536,6 +536,53 @@ describe "Sales page", type: :system, js: true do
     describe "receipts" do
       let!(:membership_purchase) { create(:membership_purchase, link: membership, subscription: purchase2.subscription, created_at: 1.day.ago) }
 
+      it "displays the receipt section at the top of the drawer for single purchases" do
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 1" }).click
+        within_section "Product 1", section_element: :aside do
+          sections = page.all("section.stack > header > h3").map(&:text)
+          receipt_index = sections.index("Receipt")
+          order_info_index = sections.index("Order information")
+          expect(receipt_index).to be < order_info_index
+          within_section "Receipt", section_element: :section do
+            expect(page).to have_section(text: "Delivered #{purchase1.created_at.strftime("%b %-d")}")
+            click_on "Resend receipt"
+            expect(page).to have_button("Resending receipt...", disabled: true)
+          end
+        end
+        expect(page).to have_alert(text: "Receipt resent")
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase1.id).on("critical")
+        within_section "Receipt", section_element: :section do
+          expect(page).to have_button("Receipt resent", disabled: true)
+        end
+      end
+
+      it "displays multiple receipts in the receipt section for subscriptions" do
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 2" }).click
+        within_section "Membership", section_element: :aside do
+          sections = page.all("section.stack > header > h3").map(&:text)
+          receipt_index = sections.index("Receipt")
+          order_info_index = sections.index("Order information")
+          expect(receipt_index).to be < order_info_index
+          within_section "Receipt", section_element: :section do
+            expect(page).to have_section(text: "Delivered #{purchase2.created_at.strftime("%b %-d")}")
+            expect(page).to have_section(text: "Delivered #{membership_purchase.created_at.strftime("%b %-d")}")
+            within_section text: "Delivered #{membership_purchase.created_at.strftime("%b %-d")}" do
+              click_on "Resend receipt"
+              expect(page).to have_button("Resending receipt...", disabled: true)
+            end
+          end
+        end
+        expect(page).to have_alert(text: "Receipt resent")
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(membership_purchase.id).on("critical")
+        within_section "Receipt", section_element: :section do
+          within_section text: "Delivered #{membership_purchase.created_at.strftime("%b %-d")}" do
+            expect(page).to have_button("Receipt resent", disabled: true)
+          end
+        end
+      end
+
       it "displays the receipts and allows re-sending them" do
         visit customers_path
         find(:table_row, { "Name" => "Customer 2" }).click

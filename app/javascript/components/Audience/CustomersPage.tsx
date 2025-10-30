@@ -888,6 +888,71 @@ const CustomerDrawer = ({
           }
         />
       ) : null}
+      {emails
+        ? (() => {
+            const receiptEmails = emails.filter((email) => email.type === "receipt");
+            if (receiptEmails.length === 0) return null;
+            const reversedReceipts = [...receiptEmails].reverse();
+            const mostRecentReceipt = reversedReceipts[0];
+            if (!mostRecentReceipt) return null;
+            const olderReceipts = reversedReceipts.slice(1);
+            return (
+              <section className="stack">
+                <header>
+                  <h3>Receipt</h3>
+                </header>
+                <section>
+                  <div>
+                    <h5>
+                      <a href={mostRecentReceipt.url} target="_blank" rel="noreferrer">
+                        {mostRecentReceipt.name}
+                      </a>
+                    </h5>
+                    <small>{`${mostRecentReceipt.state} ${formatDateWithoutTime(new Date(mostRecentReceipt.state_at))}`}</small>
+                  </div>
+                  <Button
+                    color="primary"
+                    onClick={() => void onSend(mostRecentReceipt.id, "receipt")}
+                    disabled={!!loadingId || sentEmailIds.current.has(mostRecentReceipt.id)}
+                  >
+                    {sentEmailIds.current.has(mostRecentReceipt.id)
+                      ? "Receipt resent"
+                      : loadingId === mostRecentReceipt.id
+                        ? "Resending receipt..."
+                        : "Resend receipt"}
+                  </Button>
+                </section>
+                {olderReceipts.length > 0 ? (
+                  <>
+                    {olderReceipts.map((receipt) => (
+                      <section key={receipt.id}>
+                        <div>
+                          <h5>
+                            <a href={receipt.url} target="_blank" rel="noreferrer">
+                              {receipt.name}
+                            </a>
+                          </h5>
+                          <small>{`${receipt.state} ${formatDateWithoutTime(new Date(receipt.state_at))}`}</small>
+                        </div>
+                        <Button
+                          color="primary"
+                          onClick={() => void onSend(receipt.id, "receipt")}
+                          disabled={!!loadingId || sentEmailIds.current.has(receipt.id)}
+                        >
+                          {sentEmailIds.current.has(receipt.id)
+                            ? "Receipt resent"
+                            : loadingId === receipt.id
+                              ? "Resending receipt..."
+                              : "Resend receipt"}
+                        </Button>
+                      </section>
+                    ))}
+                  </>
+                ) : null}
+              </section>
+            );
+          })()
+        : null}
       <section className="stack">
         <h3 className="flex gap-1">
           Order information
