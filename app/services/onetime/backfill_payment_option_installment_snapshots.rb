@@ -11,7 +11,7 @@ module Onetime
 
         subscription = payment_option.subscription
         installment_plan = payment_option.installment_plan
-
+        
         total_price = calculate_total_price_from_history(subscription, installment_plan)
 
         InstallmentPlanSnapshot.create!(
@@ -27,17 +27,17 @@ module Onetime
 
     def self.calculate_total_price_from_history(subscription, installment_plan)
       original_purchase = subscription.original_purchase
-
+      
       all_installment_purchases = subscription.purchases
         .successful
         .is_installment_payment
         .order(:created_at)
-
+      
       if all_installment_purchases.count > 1
         total_paid = all_installment_purchases.sum(:price_cents)
         completed_installments = all_installment_purchases.count
         expected_installments = installment_plan.number_of_installments
-
+        
         if completed_installments >= expected_installments
           return total_paid
         else
