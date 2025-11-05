@@ -13,6 +13,7 @@ module Onetime
         installment_plan = payment_option.installment_plan
         
         total_price = calculate_total_price_from_history(subscription, installment_plan)
+        next unless total_price
 
         InstallmentPlanSnapshot.create!(
           payment_option: payment_option,
@@ -26,31 +27,39 @@ module Onetime
     end
 
     def self.calculate_total_price_from_history(subscription, installment_plan)
-      original_purchase = subscription.original_purchase
-      
       all_installment_purchases = subscription.purchases
         .successful
         .is_installment_payment
         .order(:created_at)
       
-      if all_installment_purchases.count > 1
-        total_paid = all_installment_purchases.sum(:price_cents)
-        completed_installments = all_installment_purchases.count
-        expected_installments = installment_plan.number_of_installments
-        
-        if completed_installments >= expected_installments
-          return total_paid
-        else
-          average_per_installment = total_paid / completed_installments
-          return (average_per_installment * expected_installments).round
-        end
+      if all_installment_purchases.count <= 1
+        Rails.logger.info(
+          "Skipping subscription #{subscription.id}: insufficient payment history " \
+          "(#{all_installment_purchases.count} payment(s), need at least 2 to reliably determine total price)"
+        )
+        return nil
       end
 
-      if original_purchase.total_price_before_installments.present?
-        return original_purchase.total_price_before_installments
+      completed_installments_count = all_installment_purchases.count
+      expected_installments_count = installment_plan.number_of_installments
+
+      if completed_installments_count == expected_installments_count
+        return all_installment_purchases.sum(:price_cents)
       end
 
-      original_purchase.price_cents
+      first_payment, second_payment, *_rest = all_installment_purchases
+      remainder = first_payment.price_cents - second_payment.price_cents
+
+      if remainder >= 0 && remainder < expected_installments_count
+        return second_payment.price_cents * expected_installments_count + remainder
+      end
+
+      Rails.logger.warn(
+        "Skipping subscription #{subscription.id}: price likely changed mid-subscription. " \
+        "First payment: #{first_payment.price_cents}, second: #{second_payment.price_cents}, " \
+        "remainder: #{remainder}, expected count: #{expected_installments_count}"
+      )
+      nil
     end
   end
 end
