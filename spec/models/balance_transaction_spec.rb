@@ -1328,4 +1328,58 @@ describe BalanceTransaction, :vcr do
       end
     end
   end
+
+  describe "callbacks" do
+    describe "#check_for_balance_recovery" do
+      let(:seller) { create(:user) }
+      let(:balance_transaction) { BalanceTransaction.new(user: seller, issued_amount_net_cents: 100_00) }
+
+      context "when user is on probation and transaction is positive" do
+        before do
+          seller.update!(user_risk_state: "on_probation")
+        end
+
+        it "enqueues BalanceRecoveryFraudCheckWorker" do
+          expect(BalanceRecoveryFraudCheckWorker).to receive(:perform_in).with(5.seconds, seller.id)
+
+          balance_transaction.send(:check_for_balance_recovery)
+        end
+      end
+
+      context "when user is not on probation" do
+        it "does not enqueue BalanceRecoveryFraudCheckWorker" do
+          expect(BalanceRecoveryFraudCheckWorker).not_to receive(:perform_in)
+
+          balance_transaction.send(:check_for_balance_recovery)
+        end
+      end
+
+      context "when user is a team member" do
+        before do
+          seller.update!(user_risk_state: "on_probation")
+          allow(seller).to receive(:is_team_member?).and_return(true)
+        end
+
+        it "does not enqueue BalanceRecoveryFraudCheckWorker" do
+          expect(BalanceRecoveryFraudCheckWorker).not_to receive(:perform_in)
+
+          balance_transaction.send(:check_for_balance_recovery)
+        end
+      end
+
+      context "when transaction is negative (refund)" do
+        let(:balance_transaction) { BalanceTransaction.new(user: seller, issued_amount_net_cents: -100_00) }
+
+        before do
+          seller.update!(user_risk_state: "on_probation")
+        end
+
+        it "does not enqueue BalanceRecoveryFraudCheckWorker" do
+          expect(BalanceRecoveryFraudCheckWorker).not_to receive(:perform_in)
+
+          balance_transaction.send(:check_for_balance_recovery)
+        end
+      end
+    end
+  end
 end

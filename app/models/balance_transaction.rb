@@ -83,6 +83,8 @@ class BalanceTransaction < ApplicationRecord
 
   validate :validate_exactly_one_of_purchase_dispute_refund_credit_is_present
 
+  after_commit :check_for_balance_recovery, on: :create
+
   # Public: Creates a balance transaction for a user and mutates the User's balance and Balance objects.
   # The merchant account should be the account that the funds are being held in, and for a purchase this is simply the same merchant account as the purchase.
   #
@@ -217,6 +219,14 @@ class BalanceTransaction < ApplicationRecord
       return if exactly_one_is_present
 
       errors.add(:base, "can only have one of: purchase, dispute, refund, credit")
+    end
+
+    def check_for_balance_recovery
+      return if user&.is_team_member?
+      return unless user&.on_probation?
+      return unless issued_amount_net_cents.positive?
+
+      BalanceRecoveryFraudCheckWorker.perform_in(5.seconds, user.id)
     end
 
     class BalanceCouldNotBeFoundOrCreated < GumroadRuntimeError
