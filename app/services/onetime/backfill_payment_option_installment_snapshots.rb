@@ -11,7 +11,7 @@ module Onetime
 
         subscription = payment_option.subscription
         installment_plan = payment_option.installment_plan
-        
+
         total_price = calculate_total_price_from_history(subscription, installment_plan)
         next unless total_price
 
@@ -31,7 +31,7 @@ module Onetime
         .successful
         .is_installment_payment
         .order(:created_at)
-      
+
       if all_installment_purchases.count <= 1
         Rails.logger.info(
           "Skipping subscription #{subscription.id}: insufficient payment history " \
