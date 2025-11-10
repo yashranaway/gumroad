@@ -10,6 +10,7 @@ class CreateInstallmentPlanSnapshots < ActiveRecord::Migration[7.1]
       t.timestamps
 
       t.index :payment_option_id, unique: true
+      t.foreign_key :payment_options, column: :payment_option_id
     end
   end
 end
