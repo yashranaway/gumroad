@@ -337,6 +337,10 @@ class User < ApplicationRecord
       transition all => :compliant
     end
 
+    event :mark_not_reviewed do
+      transition all => :not_reviewed
+    end
+
     event :flag_for_tos_violation do
       transition %i[not_reviewed compliant flagged_for_fraud] => :flagged_for_tos_violation
     end

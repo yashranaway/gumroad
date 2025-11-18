@@ -37,10 +37,23 @@ module User::LowBalanceFraudCheck
     return unless probated_by_low_balance_fraud_check?
     return if unpaid_balance_cents <= BALANCE_RECOVERY_THRESHOLD
 
-    mark_compliant!(
-      author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME,
-      content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance recovered above $100"
-    )
+    probation_comment = comments.with_type_on_probation
+                               .where(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
+                               .order(created_at: :desc)
+                               .first
+
+    previous_state = probation_comment&.json_data&.dig("previous_risk_state") || "compliant"
+
+    content = "Automatically restored to #{previous_state} state on #{Time.current.to_fs(:formatted_date_full_month)} as balance recovered above $100"
+
+    case previous_state
+    when "not_reviewed"
+      mark_not_reviewed!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
+    when "compliant"
+      mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
+    else
+      mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
+    end
   end
 
   private
@@ -53,8 +66,18 @@ module User::LowBalanceFraudCheck
     def disable_refunds_and_put_on_probation!
       disable_refunds!
 
+      previous_state = user_risk_state
       content = "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity"
-      self.put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+
+      comment = comments.build(
+        content: content,
+        comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+        author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME,
+        json_data: { previous_risk_state: previous_state }
+      )
+      comment.save!
+
+      self.put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
     end
 
     def recently_probated_for_low_balance?

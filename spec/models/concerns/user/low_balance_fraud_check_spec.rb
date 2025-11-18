@@ -111,43 +111,71 @@ describe User::LowBalanceFraudCheck do
 
   describe "#check_for_balance_recovery_and_mark_compliant" do
     context "when the user is on probation" do
-      before do
-        @creator.send(:disable_refunds_and_put_on_probation!)
-      end
-
       context "when the user was probated by LowBalanceFraudCheck" do
-        before do
-          comment = @creator.comments.with_type_on_probation.order(:created_at).last
-          comment.update!(author_name: "LowBalanceFraudCheck")
+        context "when the user was previously compliant" do
+          before do
+            @creator.update!(user_risk_state: "compliant")
+            @creator.send(:disable_refunds_and_put_on_probation!)
+          end
+
+          context "when the unpaid balance is above $100" do
+            before do
+              allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
+            end
+
+            it "restores the creator to compliant state" do
+              @creator.check_for_balance_recovery_and_mark_compliant
+
+              expect(@creator.reload.compliant?).to eq(true)
+              expect(@creator.comments.last.content).to include("Automatically restored to compliant state")
+              expect(@creator.comments.last.content).to include("balance recovered above $100")
+              expect(@creator.comments.last.author_name).to eq("LowBalanceFraudCheck")
+            end
+
+            it "enables refunds for the creator" do
+              @creator.check_for_balance_recovery_and_mark_compliant
+
+              expect(@creator.reload.refunds_disabled?).to eq(false)
+            end
+          end
         end
 
-        context "when the unpaid balance is above $100" do
+        context "when the user was previously not_reviewed" do
           before do
-            allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
+            @creator.update!(user_risk_state: "not_reviewed")
+            @creator.send(:disable_refunds_and_put_on_probation!)
           end
 
-          it "marks the creator as compliant" do
-            @creator.check_for_balance_recovery_and_mark_compliant
+          context "when the unpaid balance is above $100" do
+            before do
+              allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
+            end
 
-            expect(@creator.reload.compliant?).to eq(true)
-            expect(@creator.comments.last.content).to include("Marked compliant automatically")
-            expect(@creator.comments.last.content).to include("balance recovered above $100")
-            expect(@creator.comments.last.author_name).to eq("LowBalanceFraudCheck")
-          end
+            it "restores the creator to not_reviewed state" do
+              @creator.check_for_balance_recovery_and_mark_compliant
 
-          it "enables refunds for the creator" do
-            @creator.check_for_balance_recovery_and_mark_compliant
+              expect(@creator.reload.not_reviewed?).to eq(true)
+              expect(@creator.comments.last.content).to include("Automatically restored to not_reviewed state")
+              expect(@creator.comments.last.content).to include("balance recovered above $100")
+              expect(@creator.comments.last.author_name).to eq("LowBalanceFraudCheck")
+            end
 
-            expect(@creator.reload.refunds_disabled?).to eq(false)
+            it "enables refunds for the creator" do
+              @creator.check_for_balance_recovery_and_mark_compliant
+
+              expect(@creator.reload.refunds_disabled?).to eq(false)
+            end
           end
         end
 
         context "when the unpaid balance is exactly $100" do
           before do
+            @creator.update!(user_risk_state: "compliant")
+            @creator.send(:disable_refunds_and_put_on_probation!)
             allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
           end
 
-          it "does not mark the creator as compliant" do
+          it "does not restore the creator" do
             @creator.check_for_balance_recovery_and_mark_compliant
 
             expect(@creator.reload.on_probation?).to eq(true)
@@ -156,25 +184,48 @@ describe User::LowBalanceFraudCheck do
 
         context "when the unpaid balance is below $100" do
           before do
+            @creator.update!(user_risk_state: "compliant")
+            @creator.send(:disable_refunds_and_put_on_probation!)
             allow(@creator).to receive(:unpaid_balance_cents).and_return(50_00)
           end
 
-          it "does not mark the creator as compliant" do
+          it "does not restore the creator" do
             @creator.check_for_balance_recovery_and_mark_compliant
 
             expect(@creator.reload.on_probation?).to eq(true)
+          end
+        end
+
+        context "when previous state is missing from json_data" do
+          before do
+            @creator.update!(user_risk_state: "compliant")
+            @creator.send(:disable_refunds_and_put_on_probation!)
+            comment = @creator.comments.with_type_on_probation.order(:created_at).last
+            comment.update!(json_data: {})
+            allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
+          end
+
+          it "defaults to compliant state" do
+            @creator.check_for_balance_recovery_and_mark_compliant
+
+            expect(@creator.reload.compliant?).to eq(true)
+            expect(@creator.comments.last.content).to include("Automatically restored to compliant state")
           end
         end
       end
 
       context "when the user was not probated by LowBalanceFraudCheck" do
         before do
-          comment = @creator.comments.with_type_on_probation.order(:created_at).last
-          comment.update!(author_name: "admin")
+          @creator.update!(user_risk_state: "on_probation")
+          @creator.comments.create!(
+            content: "Manual probation",
+            comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+            author_name: "admin"
+          )
           allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
         end
 
-        it "does not mark the creator as compliant" do
+        it "does not restore the creator" do
           @creator.check_for_balance_recovery_and_mark_compliant
 
           expect(@creator.reload.on_probation?).to eq(true)
@@ -191,6 +242,38 @@ describe User::LowBalanceFraudCheck do
         @creator.check_for_balance_recovery_and_mark_compliant
 
         expect(@creator.reload.compliant?).to eq(true)
+      end
+    end
+  end
+
+  describe "storing previous state in json_data" do
+    context "when probating a compliant user" do
+      before do
+        @creator.update!(user_risk_state: "compliant")
+        @creator.send(:disable_refunds_and_put_on_probation!)
+      end
+
+      it "stores the previous state in comment json_data" do
+        comment = @creator.comments.with_type_on_probation
+                          .where(author_name: "LowBalanceFraudCheck")
+                          .order(:created_at).last
+
+        expect(comment.json_data["previous_risk_state"]).to eq("compliant")
+      end
+    end
+
+    context "when probating a not_reviewed user" do
+      before do
+        @creator.update!(user_risk_state: "not_reviewed")
+        @creator.send(:disable_refunds_and_put_on_probation!)
+      end
+
+      it "stores the previous state in comment json_data" do
+        comment = @creator.comments.with_type_on_probation
+                          .where(author_name: "LowBalanceFraudCheck")
+                          .order(:created_at).last
+
+        expect(comment.json_data["previous_risk_state"]).to eq("not_reviewed")
       end
     end
   end
