@@ -12,6 +12,9 @@ module User::LowBalanceFraudCheck
   LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME = "LowBalanceFraudCheck"
   private_constant :LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME
 
+  BALANCE_RECOVERY_THRESHOLD = 100_00 # USD $100
+  private_constant :BALANCE_RECOVERY_THRESHOLD
+
   def enable_refunds!
     self.refunds_disabled = false
     save!
@@ -32,7 +35,7 @@ module User::LowBalanceFraudCheck
   def check_for_balance_recovery_and_mark_compliant
     return unless on_probation?
     return unless probated_by_low_balance_fraud_check?
-    return if unpaid_balance_cents <= 100_00
+    return if unpaid_balance_cents <= BALANCE_RECOVERY_THRESHOLD
 
     mark_compliant!(
       author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME,
