@@ -1,5 +1,5 @@
 <% content_for :meta do %>
-  <link href="<%= url_for_product_page(@product, request: request) %>" rel="canonical">
+  <link href="<%= @canonical_url %>" rel="canonical">
 
   <% if (structured_data = @product.structured_data).any? %>
     <script type="application/ld+json">
