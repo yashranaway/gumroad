@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
+ActiveRecord::Schema[7.1].define(version: 2025_11_19_051238) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -955,6 +955,11 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.integer "total_price_cents", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "original_offer_code_id"
+    t.integer "original_offer_code_amount_cents"
+    t.integer "original_offer_code_amount_percentage"
+    t.boolean "original_offer_code_is_percent"
+    t.index ["original_offer_code_id"], name: "index_installment_plan_snapshots_on_original_offer_code_id"
     t.index ["payment_option_id"], name: "index_installment_plan_snapshots_on_payment_option_id", unique: true
   end
 

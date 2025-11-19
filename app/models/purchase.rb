@@ -1668,7 +1668,7 @@ class Purchase < ApplicationRecord
           offer_code_amount: snapshot.original_offer_code_is_percent? ? snapshot.original_offer_code_amount_percentage : snapshot.original_offer_code_amount_cents,
           offer_code_is_percent: snapshot.original_offer_code_is_percent?,
           pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
-          duration_in_months: link.is_tiered_membership? ? offer_code.duration_in_months : nil
+          duration_in_months: link.is_tiered_membership? ? snapshot.original_offer_code_duration_in_months : nil
         )
       else
         self.build_purchase_offer_code_discount(offer_code:, offer_code_amount: offer_code.amount, offer_code_is_percent: offer_code.is_percent?,
