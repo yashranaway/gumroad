@@ -11,6 +11,12 @@ describe InstallmentPlanSnapshot do
       snapshot = build(:installment_plan_snapshot, payment_option: payment_option)
       expect(snapshot.payment_option).to eq(payment_option)
     end
+
+    it "belongs to original_offer_code" do
+      offer_code = create(:offer_code)
+      snapshot = build(:installment_plan_snapshot, payment_option: payment_option, original_offer_code: offer_code)
+      expect(snapshot.original_offer_code).to eq(offer_code)
+    end
   end
 
   describe "validations" do
@@ -140,6 +146,58 @@ describe InstallmentPlanSnapshot do
         payments = snapshot.calculate_installment_payment_price_cents
         expect(payments).to eq([1000] * 12)
         expect(payments.sum).to eq(12000)
+      end
+    end
+  end
+
+  describe "#has_original_offer_code?" do
+    it "returns true when original_offer_code_id is present" do
+      snapshot = build(:installment_plan_snapshot, payment_option: payment_option, original_offer_code_id: 123)
+      expect(snapshot.has_original_offer_code?).to be true
+    end
+
+    it "returns false when original_offer_code_id is nil" do
+      snapshot = build(:installment_plan_snapshot, payment_option: payment_option, original_offer_code_id: nil)
+      expect(snapshot.has_original_offer_code?).to be false
+    end
+  end
+
+  describe "#original_offer_code_amount_off" do
+    context "when no original offer code" do
+      it "returns 0" do
+        snapshot = build(:installment_plan_snapshot, payment_option: payment_option, original_offer_code_id: nil)
+        expect(snapshot.original_offer_code_amount_off(1000)).to eq(0)
+      end
+    end
+
+    context "with fixed amount offer code" do
+      it "returns the fixed amount" do
+        snapshot = build(:installment_plan_snapshot,
+                         payment_option: payment_option,
+                         original_offer_code_id: 123,
+                         original_offer_code_amount_cents: 500,
+                         original_offer_code_is_percent: false)
+        expect(snapshot.original_offer_code_amount_off(1000)).to eq(500)
+      end
+    end
+
+    context "with percentage offer code" do
+      it "calculates percentage of price" do
+        snapshot = build(:installment_plan_snapshot,
+                         payment_option: payment_option,
+                         original_offer_code_id: 123,
+                         original_offer_code_amount_percentage: 25,
+                         original_offer_code_is_percent: true)
+        expect(snapshot.original_offer_code_amount_off(1000)).to eq(250)
+      end
+
+      it "rounds percentage calculations" do
+        snapshot = build(:installment_plan_snapshot,
+                         payment_option: payment_option,
+                         original_offer_code_id: 123,
+                         original_offer_code_amount_percentage: 33,
+                         original_offer_code_is_percent: true)
+        expect(snapshot.original_offer_code_amount_off(1000)).to eq(330)
       end
     end
   end

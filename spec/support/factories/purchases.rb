@@ -257,11 +257,23 @@ FactoryBot.define do
         if purchase.is_installment_payment && purchase.installment_plan.present?
           payment_option = purchase.subscription.last_payment_option
           if payment_option && !payment_option.installment_plan_snapshot
-            create(:installment_plan_snapshot,
-                   payment_option: payment_option,
-                   number_of_installments: purchase.installment_plan.number_of_installments,
-                   recurrence: purchase.installment_plan.recurrence,
-                   total_price_cents: purchase.total_price_before_installments || purchase.price_cents)
+            snapshot_attrs = {
+              payment_option: payment_option,
+              number_of_installments: purchase.installment_plan.number_of_installments,
+              recurrence: purchase.installment_plan.recurrence,
+              total_price_cents: purchase.total_price_before_installments || purchase.price_cents
+            }
+
+            if purchase.offer_code.present?
+              snapshot_attrs.merge!(
+                original_offer_code_id: purchase.offer_code.id,
+                original_offer_code_amount_cents: purchase.offer_code.amount_cents,
+                original_offer_code_amount_percentage: purchase.offer_code.amount_percentage,
+                original_offer_code_is_percent: purchase.offer_code.is_percent?
+              )
+            end
+
+            create(:installment_plan_snapshot, snapshot_attrs)
           end
         end
       end

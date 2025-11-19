@@ -54,11 +54,22 @@ class Purchase::BaseService
       if purchase.is_installment_payment && purchase.link.installment_plan.present?
         total_price = purchase.total_price_before_installments
         if total_price.present? && total_price > 0
-          payment_option.build_installment_plan_snapshot(
+          snapshot_attrs = {
             number_of_installments: purchase.link.installment_plan.number_of_installments,
             recurrence: purchase.link.installment_plan.recurrence,
             total_price_cents: total_price
-          )
+          }
+
+          if purchase.offer_code.present?
+            snapshot_attrs.merge!(
+              original_offer_code_id: purchase.offer_code.id,
+              original_offer_code_amount_cents: purchase.offer_code.amount_cents,
+              original_offer_code_amount_percentage: purchase.offer_code.amount_percentage,
+              original_offer_code_is_percent: purchase.offer_code.is_percent?
+            )
+          end
+
+          payment_option.build_installment_plan_snapshot(snapshot_attrs)
         end
       end
 

@@ -3479,6 +3479,107 @@ describe Subscription, :vcr do
     end
   end
 
+  describe "installment plan offer code persistence" do
+    let!(:seller) { create(:user) }
+    let!(:product) { create(:product, name: "Awesome product", user: seller, price_cents: 1000) }
+    let!(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3) }
+    let!(:offer_code) { create(:offer_code, products: [product], amount_cents: 200, max_purchase_count: 1) }
+    let!(:buyer) { create(:user, credit_card: create(:credit_card)) }
+
+    context "when offer code has max usage limit" do
+      it "preserves discount for all installments even after max usage is reached" do
+        purchase = create(:installment_plan_purchase,
+                         subscription: nil,
+                         link: product,
+                         offer_code: offer_code,
+                         purchaser: buyer,
+                         displayed_price_cents: 800,
+                         price_cents: 800)
+
+        subscription = purchase.subscription
+        payment_option = subscription.last_payment_option
+
+        expect(payment_option.installment_plan_snapshot).to be_present
+        expect(payment_option.installment_plan_snapshot.has_original_offer_code?).to be true
+        expect(payment_option.installment_plan_snapshot.original_offer_code_id).to eq(offer_code.id)
+        expect(payment_option.installment_plan_snapshot.original_offer_code_amount_cents).to eq(200)
+        expect(payment_option.installment_plan_snapshot.original_offer_code_is_percent).to be false
+
+        another_buyer = create(:user, credit_card: create(:credit_card))
+        another_purchase = create(:purchase,
+                                 link: product,
+                                 offer_code: offer_code,
+                                 purchaser: another_buyer,
+                                 price_cents: 800)
+
+        expect(offer_code.reload.quantity_left).to eq(0)
+
+        next_purchase = subscription.build_purchase
+        expect(next_purchase.offer_code_id).to eq(offer_code.id)
+
+        next_purchase.set_price_and_rate
+        expect(next_purchase.purchase_offer_code_discount).to be_present
+        expect(next_purchase.purchase_offer_code_discount.offer_code_amount).to eq(200)
+        expect(next_purchase.purchase_offer_code_discount.offer_code_is_percent).to be false
+      end
+
+      it "uses snapshotted percentage discount correctly" do
+        percentage_offer_code = create(:offer_code, products: [product], amount_percentage: 25, max_purchase_count: 1)
+
+        purchase = create(:installment_plan_purchase,
+                         subscription: nil,
+                         link: product,
+                         offer_code: percentage_offer_code,
+                         purchaser: buyer,
+                         displayed_price_cents: 750,
+                         price_cents: 750)
+
+        subscription = purchase.subscription
+        payment_option = subscription.last_payment_option
+
+        expect(payment_option.installment_plan_snapshot.original_offer_code_amount_percentage).to eq(25)
+        expect(payment_option.installment_plan_snapshot.original_offer_code_is_percent).to be true
+
+        another_buyer = create(:user, credit_card: create(:credit_card))
+        create(:purchase,
+               link: product,
+               offer_code: percentage_offer_code,
+               purchaser: another_buyer,
+               price_cents: 750)
+
+        expect(percentage_offer_code.reload.quantity_left).to eq(0)
+
+        next_purchase = subscription.build_purchase
+        next_purchase.set_price_and_rate
+
+        expect(next_purchase.purchase_offer_code_discount.offer_code_amount).to eq(25)
+        expect(next_purchase.purchase_offer_code_discount.offer_code_is_percent).to be true
+      end
+    end
+
+    context "when offer code has no usage limit" do
+      let!(:unlimited_offer_code) { create(:offer_code, products: [product], amount_cents: 150, max_purchase_count: nil) }
+
+      it "uses live offer code for subsequent installments" do
+        purchase = create(:installment_plan_purchase,
+                         subscription: nil,
+                         link: product,
+                         offer_code: unlimited_offer_code,
+                         purchaser: buyer,
+                         displayed_price_cents: 850,
+                         price_cents: 850)
+
+        subscription = purchase.subscription
+        payment_option = subscription.last_payment_option
+
+        expect(payment_option.installment_plan_snapshot.has_original_offer_code?).to be true
+
+        next_purchase = subscription.build_purchase
+        expect(next_purchase.offer_code_id).to eq(unlimited_offer_code.id)
+      end
+    end
+  end
+
   describe "#cookie_key" do
     it "returns the cookie key" do
       expect(@subscription.cookie_key).to eq("subscription_#{@subscription.external_id_numeric}")
