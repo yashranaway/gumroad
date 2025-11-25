@@ -3648,8 +3648,7 @@ describe LinksController, :vcr, inertia: true do
           product = create(:product, user: @user)
 
           get :show, params: { id: product.unique_permalink }
-          expected_url = "#{@request.protocol}#{@request.host_with_port}/l/#{product.general_permalink}"
-          expect(response.body).to have_selector("link[rel='canonical'][href='#{expected_url}']", visible: false)
+          expect(response.body).to have_selector("link[rel='canonical'][href='#{product.long_url}']", visible: false)
         end
 
         it "renders the canonical meta tag on a custom domain host" do
@@ -3658,7 +3657,7 @@ describe LinksController, :vcr, inertia: true do
           @request.host = custom_domain.domain
 
           get :show, params: { id: product.unique_permalink }
-          expected_url = "#{@request.protocol}#{@request.host_with_port}/l/#{product.general_permalink}"
+          expected_url = "#{PROTOCOL}://#{custom_domain.domain}/l/#{product.general_permalink}"
           expect(response.body).to have_selector("link[rel='canonical'][href='#{expected_url}']", visible: false)
         end
       end
