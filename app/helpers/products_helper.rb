@@ -53,13 +53,11 @@ module ProductsHelper
   end
 
   def url_for_product_page(product, request:, recommended_by: nil, recommender_model_name: nil, layout: nil, affiliate_id: nil, query: nil, offer_code: nil)
-    options = {}
-    options[:code] = offer_code if offer_code.present?
-
     custom_domain_request = request.present? && CustomDomain.find_by_host(request.host)&.user == product.user
 
     if custom_domain_request
-      options.merge!(host: request.host_with_port, protocol: request.protocol)
+      options = { host: request.host_with_port, protocol: request.protocol }
+      options[:code] = offer_code if offer_code.present?
       options[:recommended_by] = recommended_by if recommended_by.present?
       options[:recommender_model_name] = recommender_model_name if recommender_model_name.present?
       options[:layout] = layout if layout.present?
@@ -67,14 +65,13 @@ module ProductsHelper
       options[:query] = query if query.present?
       short_link_url(product.general_permalink, options)
     else
-      options.merge!(
+      product.long_url(
         recommended_by:,
         recommender_model_name:,
         layout:,
         affiliate_id:,
         query:
       )
-      product.long_url(**options)
     end
   end
 
