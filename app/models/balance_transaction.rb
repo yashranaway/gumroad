@@ -224,7 +224,7 @@ class BalanceTransaction < ApplicationRecord
     def check_for_balance_recovery
       return if user&.is_team_member?
       return unless user&.on_probation?
-      return unless issued_amount_net_cents.positive?
+      return unless issued_amount_net_cents&.positive?
 
       BalanceRecoveryFraudCheckWorker.perform_in(5.seconds, user.id)
     end

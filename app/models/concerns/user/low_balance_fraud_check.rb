@@ -12,8 +12,8 @@ module User::LowBalanceFraudCheck
   LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME = "LowBalanceFraudCheck"
   private_constant :LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME
 
-  BALANCE_RECOVERY_THRESHOLD = 100_00 # USD $100
-  private_constant :BALANCE_RECOVERY_THRESHOLD
+  BALANCE_RECOVERY_THRESHOLD_IN_CENTS = 100_00 # USD $100
+  private_constant :BALANCE_RECOVERY_THRESHOLD_IN_CENTS
 
   def enable_refunds!
     self.refunds_disabled = false
@@ -35,7 +35,7 @@ module User::LowBalanceFraudCheck
   def check_for_balance_recovery_and_mark_compliant
     return unless on_probation?
     return unless probated_by_low_balance_fraud_check?
-    return if unpaid_balance_cents <= BALANCE_RECOVERY_THRESHOLD
+    return if unpaid_balance_cents.nil? || unpaid_balance_cents <= BALANCE_RECOVERY_THRESHOLD_IN_CENTS
 
     probation_comment = comments.with_type_on_probation
                                .where(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
@@ -76,7 +76,7 @@ module User::LowBalanceFraudCheck
         json_data: { previous_risk_state: previous_state }
       )
 
-      self.put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
+      put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
     end
 
     def recently_probated_for_low_balance?
