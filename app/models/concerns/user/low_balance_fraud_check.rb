@@ -69,13 +69,12 @@ module User::LowBalanceFraudCheck
       previous_state = user_risk_state
       content = "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity"
 
-      comment = comments.build(
-        content: content,
+      comments.create!(
+        content:,
         comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
         author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME,
         json_data: { previous_risk_state: previous_state }
       )
-      comment.save!
 
       self.put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
     end
