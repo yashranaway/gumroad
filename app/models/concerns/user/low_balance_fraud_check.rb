@@ -37,26 +37,44 @@ module User::LowBalanceFraudCheck
     return unless probated_by_low_balance_fraud_check?
     return if unpaid_balance_cents.nil? || unpaid_balance_cents <= BALANCE_RECOVERY_THRESHOLD_IN_CENTS
 
-    probation_comment = comments.with_type_on_probation
-                               .where(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
-                               .order(created_at: :desc)
-                               .first
-
-    previous_state = probation_comment&.json_data&.dig("previous_risk_state") || "compliant"
+    previous_state = get_previous_risk_state_before_probation || "compliant"
 
     content = "Automatically restored to #{previous_state} state on #{Time.current.to_fs(:formatted_date_full_month)} as balance recovered above $100"
 
-    case previous_state
-    when "not_reviewed"
-      mark_not_reviewed!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
-    when "compliant"
-      mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
-    else
-      mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
-    end
+    restore_to_previous_state!(previous_state, author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
   end
 
   private
+    def get_previous_risk_state_before_probation
+      probation_version = versions
+        .where("object_changes LIKE ?", "%user_risk_state%")
+        .order(created_at: :desc)
+        .find do |version|
+          changes = PaperTrail.serializer.load(version.object_changes)
+          changes["user_risk_state"]&.last == "on_probation"
+        end
+
+      return nil unless probation_version
+
+      changes = PaperTrail.serializer.load(probation_version.object_changes)
+      changes["user_risk_state"]&.first
+    end
+
+    def restore_to_previous_state!(state, author_name:, content:)
+      case state
+      when "not_reviewed"
+        mark_not_reviewed!(author_name: author_name, content: content)
+      when "compliant"
+        mark_compliant!(author_name: author_name, content: content)
+      when "flagged_for_fraud"
+        flag_for_fraud!(author_name: author_name, content: content)
+      when "flagged_for_tos_violation"
+        flag_for_tos_violation!(author_name: author_name, content: content)
+      else
+        mark_compliant!(author_name: author_name, content: content)
+      end
+    end
+
     def probated_by_low_balance_fraud_check?
       comments.with_type_on_probation
               .where(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
@@ -66,14 +84,12 @@ module User::LowBalanceFraudCheck
     def disable_refunds_and_put_on_probation!
       disable_refunds!
 
-      previous_state = user_risk_state
       content = "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity"
 
       comments.create!(
         content:,
         comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-        author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME,
-        json_data: { previous_risk_state: previous_state }
+        author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME
       )
 
       put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
