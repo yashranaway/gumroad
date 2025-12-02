@@ -37,7 +37,8 @@ module User::LowBalanceFraudCheck
     return unless probated_by_low_balance_fraud_check?
     return if unpaid_balance_cents.nil? || unpaid_balance_cents <= BALANCE_RECOVERY_THRESHOLD_IN_CENTS
 
-    previous_state = get_previous_risk_state_before_probation || "compliant"
+    previous_state = get_previous_risk_state_before_probation
+    return if previous_state.nil?
 
     content = "Automatically restored to #{previous_state} state on #{Time.current.to_fs(:formatted_date_full_month)} as balance recovered above $100"
 
@@ -46,13 +47,11 @@ module User::LowBalanceFraudCheck
 
   private
     def get_previous_risk_state_before_probation
-      probation_version = versions
-        .where("object_changes LIKE ?", "%user_risk_state%")
-        .order(created_at: :desc)
-        .find do |version|
-          changes = PaperTrail.serializer.load(version.object_changes)
-          changes["user_risk_state"]&.last == "on_probation"
-        end
+      probation_version = versions.reorder(created_at: :desc).find do |version|
+        next if version.object_changes.blank?
+        changes = PaperTrail.serializer.load(version.object_changes)
+        changes["user_risk_state"]&.last == "on_probation"
+      end
 
       return nil unless probation_version
 
@@ -64,20 +63,29 @@ module User::LowBalanceFraudCheck
       case state
       when "not_reviewed"
         mark_not_reviewed!(author_name: author_name, content: content)
+        enable_refunds!
       when "compliant"
         mark_compliant!(author_name: author_name, content: content)
-      when "flagged_for_fraud"
-        flag_for_fraud!(author_name: author_name, content: content)
-      when "flagged_for_tos_violation"
-        flag_for_tos_violation!(author_name: author_name, content: content)
+      when "flagged_for_fraud", "flagged_for_tos_violation"
+        mark_compliant!(author_name: author_name, content: content)
       else
         mark_compliant!(author_name: author_name, content: content)
       end
     end
 
     def probated_by_low_balance_fraud_check?
+      probation_version = versions.reorder(created_at: :desc).find do |version|
+        next if version.object_changes.blank?
+        changes = PaperTrail.serializer.load(version.object_changes)
+        changes["user_risk_state"]&.last == "on_probation"
+      end
+
+      return false unless probation_version
+
       comments.with_type_on_probation
               .where(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
+              .where("created_at >= ?", probation_version.created_at - 1.minute)
+              .where("created_at <= ?", probation_version.created_at + 1.minute)
               .exists?
     end
 

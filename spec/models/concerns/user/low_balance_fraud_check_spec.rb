@@ -168,6 +168,31 @@ describe User::LowBalanceFraudCheck do
           end
         end
 
+        context "when the user was previously flagged_for_fraud" do
+          before do
+            @creator.update!(user_risk_state: "flagged_for_fraud")
+            @creator.send(:disable_refunds_and_put_on_probation!)
+          end
+
+          context "when the unpaid balance is above $100" do
+            before do
+              allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
+            end
+
+            it "restores the creator to compliant state (not flagged)" do
+              @creator.check_for_balance_recovery_and_mark_compliant
+
+              expect(@creator.reload.compliant?).to eq(true)
+            end
+
+            it "enables refunds for the creator" do
+              @creator.check_for_balance_recovery_and_mark_compliant
+
+              expect(@creator.reload.refunds_disabled?).to eq(false)
+            end
+          end
+        end
+
         context "when the unpaid balance is exactly $100" do
           before do
             @creator.update!(user_risk_state: "compliant")
@@ -196,20 +221,22 @@ describe User::LowBalanceFraudCheck do
           end
         end
 
-        context "when previous state is missing from json_data" do
+        context "when previous state cannot be found in PaperTrail versions" do
           before do
-            @creator.update!(user_risk_state: "compliant")
-            @creator.send(:disable_refunds_and_put_on_probation!)
-            comment = @creator.comments.with_type_on_probation.order(:created_at).last
-            comment.update!(json_data: {})
+            @creator.update!(user_risk_state: "on_probation")
+            @creator.comments.create!(
+              content: "Manual probation",
+              comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+              author_name: "LowBalanceFraudCheck"
+            )
+            @creator.versions.destroy_all
             allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
           end
 
-          it "defaults to compliant state" do
+          it "does not restore the creator" do
             @creator.check_for_balance_recovery_and_mark_compliant
 
-            expect(@creator.reload.compliant?).to eq(true)
-            expect(@creator.comments.last.content).to include("Automatically restored to compliant state")
+            expect(@creator.reload.on_probation?).to eq(true)
           end
         end
       end
@@ -238,42 +265,36 @@ describe User::LowBalanceFraudCheck do
         allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
       end
 
-      it "does not mark the creator as compliant" do
-        @creator.check_for_balance_recovery_and_mark_compliant
-
-        expect(@creator.reload.compliant?).to eq(true)
+      it "does not change the creator state" do
+        expect { @creator.check_for_balance_recovery_and_mark_compliant }.not_to change { @creator.reload.user_risk_state }
       end
     end
   end
 
-  describe "storing previous state in json_data" do
-    context "when probating a compliant user" do
+  describe "#probated_by_low_balance_fraud_check?" do
+    context "when user was probated by LowBalanceFraudCheck" do
       before do
         @creator.update!(user_risk_state: "compliant")
         @creator.send(:disable_refunds_and_put_on_probation!)
       end
 
-      it "stores the previous state in comment json_data" do
-        comment = @creator.comments.with_type_on_probation
-                          .where(author_name: "LowBalanceFraudCheck")
-                          .order(:created_at).last
-
-        expect(comment.json_data["previous_risk_state"]).to eq("compliant")
+      it "returns true" do
+        expect(@creator.send(:probated_by_low_balance_fraud_check?)).to eq(true)
       end
     end
 
-    context "when probating a not_reviewed user" do
+    context "when user was probated by admin" do
       before do
-        @creator.update!(user_risk_state: "not_reviewed")
-        @creator.send(:disable_refunds_and_put_on_probation!)
+        @creator.update!(user_risk_state: "on_probation")
+        @creator.comments.create!(
+          content: "Manual probation",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: "admin"
+        )
       end
 
-      it "stores the previous state in comment json_data" do
-        comment = @creator.comments.with_type_on_probation
-                          .where(author_name: "LowBalanceFraudCheck")
-                          .order(:created_at).last
-
-        expect(comment.json_data["previous_risk_state"]).to eq("not_reviewed")
+      it "returns false" do
+        expect(@creator.send(:probated_by_low_balance_fraud_check?)).to eq(false)
       end
     end
   end
