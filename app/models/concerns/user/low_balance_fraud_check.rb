@@ -3,8 +3,8 @@
 module User::LowBalanceFraudCheck
   extend ActiveSupport::Concern
 
-  LOW_BALANCE_THRESHOLD = -100_00 # USD -100
-  private_constant :LOW_BALANCE_THRESHOLD
+  LOW_BALANCE_THRESHOLD_IN_CENTS = -100_00 # USD -100
+  private_constant :LOW_BALANCE_THRESHOLD_IN_CENTS
 
   LOW_BALANCE_PROBATION_WAIT_TIME = 2.months
   private_constant :LOW_BALANCE_PROBATION_WAIT_TIME
@@ -26,7 +26,7 @@ module User::LowBalanceFraudCheck
   end
 
   def check_for_low_balance_and_probate(refunded_or_disputed_purchase_id)
-    return if unpaid_balance_cents > LOW_BALANCE_THRESHOLD
+    return if unpaid_balance_cents > LOW_BALANCE_THRESHOLD_IN_CENTS
 
     AdminMailer.low_balance_notify(id, refunded_or_disputed_purchase_id).deliver_later
     disable_refunds_and_put_on_probation! unless recently_probated_for_low_balance?
@@ -74,33 +74,17 @@ module User::LowBalanceFraudCheck
     end
 
     def probated_by_low_balance_fraud_check?
-      probation_version = versions.reorder(created_at: :desc).find do |version|
-        next if version.object_changes.blank?
-        changes = PaperTrail.serializer.load(version.object_changes)
-        changes["user_risk_state"]&.last == "on_probation"
-      end
+      most_recent_probation_comment = comments.with_type_on_probation.order(created_at: :desc).first
+      return false unless most_recent_probation_comment
 
-      return false unless probation_version
-
-      comments.with_type_on_probation
-              .where(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
-              .where("created_at >= ?", probation_version.created_at - 1.minute)
-              .where("created_at <= ?", probation_version.created_at + 1.minute)
-              .exists?
+      most_recent_probation_comment.author_name == LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME
     end
 
     def disable_refunds_and_put_on_probation!
-      disable_refunds!
-
-      content = "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity"
-
-      comments.create!(
-        content:,
-        comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-        author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME
-      )
-
-      put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: content)
+      transaction do
+        disable_refunds!
+        put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
+      end
     end
 
     def recently_probated_for_low_balance?

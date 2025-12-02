@@ -5,7 +5,6 @@ require "spec_helper"
 describe User::LowBalanceFraudCheck do
   before do
     @creator = create(:user)
-    @purchase = create(:refunded_purchase, link: create(:product, user: @creator))
   end
 
   describe "#enable_refunds!" do
@@ -39,14 +38,16 @@ describe User::LowBalanceFraudCheck do
     end
   end
 
-  describe "#check_for_low_balance_and_probate" do
+  describe "#check_for_low_balance_and_probate", :vcr do
+    let(:purchase) { create(:refunded_purchase, link: create(:product, user: @creator)) }
+
     context "when the unpaid balance is above threshold" do
       before do
         allow(@creator).to receive(:unpaid_balance_cents).and_return(-40_00)
       end
 
       it "doesn't probate the creator" do
-        @creator.check_for_low_balance_and_probate(@purchase.id)
+        @creator.check_for_low_balance_and_probate(purchase.id)
 
         expect(@creator.reload.on_probation?).to eq(false)
       end
@@ -61,11 +62,11 @@ describe User::LowBalanceFraudCheck do
         context "when the creator is not recently probated for low balance" do
           it "probates the creator" do
             expect do
-              @creator.check_for_low_balance_and_probate(@purchase.id)
-            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
+              @creator.check_for_low_balance_and_probate(purchase.id)
+            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, purchase.id)
 
             expect(@creator.reload.on_probation?).to eq(true)
-            expect(@creator.comments.last.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity")
+            expect(@creator.comments.with_type_on_probation.last.author_name).to eq("LowBalanceFraudCheck")
           end
         end
 
@@ -80,11 +81,11 @@ describe User::LowBalanceFraudCheck do
 
             it "probates the creator" do
               expect do
-                @creator.check_for_low_balance_and_probate(@purchase.id)
-              end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
+                @creator.check_for_low_balance_and_probate(purchase.id)
+              end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, purchase.id)
 
               expect(@creator.reload.on_probation?).to eq(true)
-              expect(@creator.comments.last.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity")
+              expect(@creator.comments.with_type_on_probation.last.author_name).to eq("LowBalanceFraudCheck")
             end
           end
 
@@ -98,8 +99,8 @@ describe User::LowBalanceFraudCheck do
 
             it "doesn't probate the creator" do
               expect do
-                @creator.check_for_low_balance_and_probate(@purchase.id)
-              end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
+                @creator.check_for_low_balance_and_probate(purchase.id)
+              end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, purchase.id)
 
               expect(@creator.reload.on_probation?).to eq(false)
             end
