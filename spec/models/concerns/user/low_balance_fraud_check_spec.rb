@@ -111,6 +111,7 @@ describe User::LowBalanceFraudCheck do
   end
 
   describe "#check_for_balance_recovery_and_mark_compliant" do
+    with_versioning do
     context "when the user is on probation" do
       context "when the user was probated by LowBalanceFraudCheck" do
         context "when the user was previously compliant" do
@@ -171,7 +172,7 @@ describe User::LowBalanceFraudCheck do
 
         context "when the user was previously flagged_for_fraud" do
           before do
-            @creator.update!(user_risk_state: "flagged_for_fraud")
+            @creator.flag_for_fraud!(author_name: "test")
             @creator.send(:disable_refunds_and_put_on_probation!)
           end
 
@@ -180,10 +181,41 @@ describe User::LowBalanceFraudCheck do
               allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
             end
 
-            it "restores the creator to compliant state (not flagged)" do
+            it "restores the creator to flagged_for_fraud state" do
               @creator.check_for_balance_recovery_and_mark_compliant
 
-              expect(@creator.reload.compliant?).to eq(true)
+              expect(@creator.reload.flagged_for_fraud?).to eq(true)
+              expect(@creator.comments.last.content).to include("Automatically restored to flagged_for_fraud state")
+              expect(@creator.comments.last.content).to include("balance recovered above $100")
+              expect(@creator.comments.last.author_name).to eq("LowBalanceFraudCheck")
+            end
+
+            it "enables refunds for the creator" do
+              @creator.check_for_balance_recovery_and_mark_compliant
+
+              expect(@creator.reload.refunds_disabled?).to eq(false)
+            end
+          end
+        end
+
+        context "when the user was previously flagged_for_tos_violation" do
+          before do
+            @creator.flag_for_tos_violation!(author_name: "test", bulk: true)
+            @creator.send(:disable_refunds_and_put_on_probation!)
+          end
+
+          context "when the unpaid balance is above $100" do
+            before do
+              allow(@creator).to receive(:unpaid_balance_cents).and_return(150_00)
+            end
+
+            it "restores the creator to flagged_for_tos_violation state" do
+              @creator.check_for_balance_recovery_and_mark_compliant
+
+              expect(@creator.reload.flagged_for_tos_violation?).to eq(true)
+              expect(@creator.comments.last.content).to include("Automatically restored to flagged_for_tos_violation state")
+              expect(@creator.comments.last.content).to include("balance recovered above $100")
+              expect(@creator.comments.last.author_name).to eq("LowBalanceFraudCheck")
             end
 
             it "enables refunds for the creator" do
@@ -269,6 +301,7 @@ describe User::LowBalanceFraudCheck do
       it "does not change the creator state" do
         expect { @creator.check_for_balance_recovery_and_mark_compliant }.not_to change { @creator.reload.user_risk_state }
       end
+    end
     end
   end
 

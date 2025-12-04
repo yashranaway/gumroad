@@ -66,10 +66,14 @@ module User::LowBalanceFraudCheck
         enable_refunds!
       when "compliant"
         mark_compliant!(author_name: author_name, content: content)
-      when "flagged_for_fraud", "flagged_for_tos_violation"
-        mark_compliant!(author_name: author_name, content: content)
+      when "flagged_for_fraud"
+        flag_for_fraud!(author_name: author_name, content: content)
+        enable_refunds!
+      when "flagged_for_tos_violation"
+        flag_for_tos_violation!(author_name: author_name, content: content, bulk: true)
+        enable_refunds!
       else
-        mark_compliant!(author_name: author_name, content: content)
+        raise ArgumentError, "Unknown risk state: #{state}. Cannot restore to this state."
       end
     end
 
