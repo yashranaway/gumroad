@@ -60,20 +60,23 @@ module User::LowBalanceFraudCheck
     end
 
     def restore_to_previous_state!(state, author_name:, content:)
-      case state
-      when "not_reviewed"
-        mark_not_reviewed!(author_name: author_name, content: content)
-        enable_refunds!
-      when "compliant"
-        mark_compliant!(author_name: author_name, content: content)
-      when "flagged_for_fraud"
-        flag_for_fraud!(author_name: author_name, content: content)
-        enable_refunds!
-      when "flagged_for_tos_violation"
-        flag_for_tos_violation!(author_name: author_name, content: content, bulk: true)
-        enable_refunds!
-      else
-        raise ArgumentError, "Unknown risk state: #{state}. Cannot restore to this state."
+      transaction do
+        case state
+        when "not_reviewed"
+          mark_not_reviewed!(author_name: author_name, content: content)
+          enable_refunds!
+        when "compliant"
+          mark_compliant!(author_name: author_name, content: content)
+        when "flagged_for_fraud"
+          flag_for_fraud!(author_name: author_name, content: content)
+          enable_refunds!
+        when "flagged_for_tos_violation"
+          flag_for_tos_violation!(author_name: author_name, content: content, bulk: true)
+          enable_refunds!
+        else
+          Rails.logger.error("LowBalanceFraudCheck: Unable to restore user #{id} to unknown state: #{state}")
+          raise ArgumentError, "Unknown risk state: #{state}. Cannot restore to this state."
+        end
       end
     end
 
