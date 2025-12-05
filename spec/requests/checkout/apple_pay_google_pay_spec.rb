@@ -49,6 +49,7 @@ describe "Checkout with Apple Pay and Google Pay", :js, type: :system do
 
   it "shows Apple Pay button and simulates payment unavailable error" do
     visit "/l/#{product.unique_permalink}"
+    add_to_cart(product)
 
     page.execute_script(stripe_mock_script)
     page.execute_script(<<~JS)
@@ -57,8 +58,6 @@ describe "Checkout with Apple Pay and Google Pay", :js, type: :system do
         showError: 'Payment request is not available'
       });
     JS
-
-    add_to_cart(product)
 
     apple_pay_radio = find("[role=radio]", text: "Apple Pay", wait: 5)
     apple_pay_radio.click
@@ -75,6 +74,7 @@ describe "Checkout with Apple Pay and Google Pay", :js, type: :system do
 
   it "shows Google Pay button and simulates payment unavailable error" do
     visit "/l/#{product.unique_permalink}"
+    add_to_cart(product)
 
     page.execute_script(stripe_mock_script)
     page.execute_script(<<~JS)
@@ -83,8 +83,6 @@ describe "Checkout with Apple Pay and Google Pay", :js, type: :system do
         showError: 'Payment request is not available'
       });
     JS
-
-    add_to_cart(product)
 
     google_pay_radio = find("[role=radio]", text: "Google Pay", wait: 5)
     google_pay_radio.click
