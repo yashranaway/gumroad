@@ -11,12 +11,6 @@ describe InstallmentPlanSnapshot do
       snapshot = build(:installment_plan_snapshot, payment_option: payment_option)
       expect(snapshot.payment_option).to eq(payment_option)
     end
-
-    it "belongs to original_offer_code" do
-      offer_code = create(:offer_code)
-      snapshot = build(:installment_plan_snapshot, payment_option: payment_option, original_offer_code: offer_code)
-      expect(snapshot.original_offer_code).to eq(offer_code)
-    end
   end
 
   describe "validations" do
@@ -151,13 +145,35 @@ describe InstallmentPlanSnapshot do
   end
 
   describe "#has_original_offer_code?" do
-    it "returns true when original_offer_code_id is present" do
-      snapshot = build(:installment_plan_snapshot, payment_option: payment_option, original_offer_code_id: 123)
+    it "returns true when original_offer_code_id and amount_cents are present" do
+      snapshot = build(:installment_plan_snapshot,
+                       payment_option: payment_option,
+                       original_offer_code_id: 123,
+                       original_offer_code_amount_cents: 500,
+                       original_offer_code_is_percent: false)
+      expect(snapshot.has_original_offer_code?).to be true
+    end
+
+    it "returns true when original_offer_code_id and amount_percentage are present" do
+      snapshot = build(:installment_plan_snapshot,
+                       payment_option: payment_option,
+                       original_offer_code_id: 123,
+                       original_offer_code_amount_percentage: 25,
+                       original_offer_code_is_percent: true)
       expect(snapshot.has_original_offer_code?).to be true
     end
 
     it "returns false when original_offer_code_id is nil" do
       snapshot = build(:installment_plan_snapshot, payment_option: payment_option, original_offer_code_id: nil)
+      expect(snapshot.has_original_offer_code?).to be false
+    end
+
+    it "returns false when original_offer_code_id is present but no amount data" do
+      snapshot = build(:installment_plan_snapshot,
+                       payment_option: payment_option,
+                       original_offer_code_id: 123,
+                       original_offer_code_amount_cents: nil,
+                       original_offer_code_amount_percentage: nil)
       expect(snapshot.has_original_offer_code?).to be false
     end
   end
@@ -201,4 +217,61 @@ describe InstallmentPlanSnapshot do
       end
     end
   end
+
+  describe "#original_offer_code_display_code" do
+    it "returns the stored offer code string" do
+      snapshot = build(:installment_plan_snapshot,
+                       payment_option: payment_option,
+                       original_offer_code_id: 123,
+                       original_offer_code_code: "SAVE20")
+      expect(snapshot.original_offer_code_display_code).to eq("SAVE20")
+    end
+
+    it "returns nil when no code is stored" do
+      snapshot = build(:installment_plan_snapshot, payment_option: payment_option)
+      expect(snapshot.original_offer_code_display_code).to be_nil
+    end
+  end
+
+  describe "#displayed_amount_off" do
+    context "when no original offer code" do
+      it "returns nil" do
+        snapshot = build(:installment_plan_snapshot, payment_option: payment_option, original_offer_code_id: nil)
+        expect(snapshot.displayed_amount_off("usd", with_symbol: true)).to be_nil
+      end
+    end
+
+    context "with percentage offer code" do
+      let(:snapshot) do
+        build(:installment_plan_snapshot,
+              payment_option: payment_option,
+              original_offer_code_id: 123,
+              original_offer_code_amount_percentage: 25,
+              original_offer_code_is_percent: true)
+      end
+
+      it "returns percentage with symbol" do
+        expect(snapshot.displayed_amount_off("usd", with_symbol: true)).to eq("25%")
+      end
+
+      it "returns percentage without symbol" do
+        expect(snapshot.displayed_amount_off("usd", with_symbol: false)).to eq(25)
+      end
+    end
+
+    context "with fixed amount offer code" do
+      let(:snapshot) do
+        build(:installment_plan_snapshot,
+              payment_option: payment_option,
+              original_offer_code_id: 123,
+              original_offer_code_amount_cents: 500,
+              original_offer_code_is_percent: false)
+      end
+
+      it "returns formatted amount with symbol" do
+        expect(snapshot.displayed_amount_off("usd", with_symbol: true)).to eq("$5")
+      end
+    end
+  end
 end
+

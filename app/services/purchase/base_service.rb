@@ -65,7 +65,10 @@ class Purchase::BaseService
               original_offer_code_id: purchase.offer_code.id,
               original_offer_code_amount_cents: purchase.offer_code.amount_cents,
               original_offer_code_amount_percentage: purchase.offer_code.amount_percentage,
-              original_offer_code_is_percent: purchase.offer_code.is_percent?
+              original_offer_code_is_percent: purchase.offer_code.is_percent?,
+              original_offer_code_duration_in_months: purchase.offer_code.duration_in_months,
+              original_offer_code_code: purchase.offer_code.code,
+              original_offer_code_currency: purchase.offer_code.currency_type
             )
           end
 

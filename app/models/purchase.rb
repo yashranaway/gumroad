@@ -1660,17 +1660,17 @@ class Purchase < ApplicationRecord
   end
 
   def set_price_and_rate
-    if offer_code.present? && !has_cached_offer_code?
+    if !has_cached_offer_code?
       if is_installment_payment && subscription&.last_payment_option&.installment_plan_snapshot&.has_original_offer_code?
         snapshot = subscription.last_payment_option.installment_plan_snapshot
         self.build_purchase_offer_code_discount(
-          offer_code:,
+          offer_code: offer_code,
           offer_code_amount: snapshot.original_offer_code_is_percent? ? snapshot.original_offer_code_amount_percentage : snapshot.original_offer_code_amount_cents,
           offer_code_is_percent: snapshot.original_offer_code_is_percent?,
           pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
           duration_in_months: link.is_tiered_membership? ? snapshot.original_offer_code_duration_in_months : nil
         )
-      else
+      elsif offer_code.present?
         self.build_purchase_offer_code_discount(offer_code:, offer_code_amount: offer_code.amount, offer_code_is_percent: offer_code.is_percent?,
                                                 pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
                                                 duration_in_months: link.is_tiered_membership? ? offer_code.duration_in_months : nil)
@@ -2410,7 +2410,8 @@ class Purchase < ApplicationRecord
     return nil if offer_code&.deleted? && !include_deleted
 
     if has_cached_offer_code?
-      code = purchase_offer_code_discount.offer_code.code
+      code = purchase_offer_code_discount.offer_code&.code ||
+             subscription&.last_payment_option&.installment_plan_snapshot&.original_offer_code_code
       purchase_offer_code_discount.offer_code_is_percent ?
         OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code:) :
         OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code:)

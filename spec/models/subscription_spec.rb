@@ -3571,7 +3571,137 @@ describe Subscription, :vcr do
         expect(next_purchase.offer_code_id).to eq(unlimited_offer_code.id)
       end
     end
+
+    context "when offer code is deleted between installments" do
+      it "preserves discount from snapshot data even after offer code deletion" do
+        purchase = create(:installment_plan_purchase,
+                         link: product,
+                         offer_code: offer_code,
+                         purchaser: buyer)
+
+        subscription = purchase.subscription
+        payment_option = subscription.last_payment_option
+        snapshot = payment_option.installment_plan_snapshot
+
+        # Verify snapshot data is stored
+        expect(snapshot.has_original_offer_code?).to be true
+        expect(snapshot.original_offer_code_amount_cents).to eq(200)
+        expect(snapshot.original_offer_code_code).to eq("INSTALLMENT200")
+
+        # Delete the offer code
+        offer_code.destroy!
+
+        # Reload the subscription and verify discount still applies
+        subscription.reload
+        next_purchase = subscription.build_purchase
+        next_purchase.set_price_and_rate
+
+        expect(next_purchase.purchase_offer_code_discount).to be_present
+        expect(next_purchase.purchase_offer_code_discount.offer_code_amount).to eq(200)
+        expect(next_purchase.purchase_offer_code_discount.offer_code_is_percent).to be false
+        # offer_code can be nil since it was deleted
+        expect(next_purchase.purchase_offer_code_discount.offer_code).to be_nil
+      end
+    end
+
+    context "when offer code expires between installments" do
+      it "preserves discount from snapshot data even after offer code expiration" do
+        expiring_offer_code = create(:offer_code, code: "EXPIRING100", products: [product], amount_cents: 100, valid_at: 1.day.ago, expires_at: 1.hour.from_now)
+
+        purchase = create(:installment_plan_purchase,
+                         link: product,
+                         offer_code: expiring_offer_code,
+                         purchaser: buyer)
+
+        subscription = purchase.subscription
+        payment_option = subscription.last_payment_option
+        snapshot = payment_option.installment_plan_snapshot
+
+        expect(snapshot.has_original_offer_code?).to be true
+        expect(snapshot.original_offer_code_amount_cents).to eq(100)
+
+        # Simulate offer code expiration
+        expiring_offer_code.update!(expires_at: 1.hour.ago)
+        expect(expiring_offer_code.inactive?).to be true
+
+        # Verify discount still applies from snapshot
+        subscription.reload
+        next_purchase = subscription.build_purchase
+        next_purchase.set_price_and_rate
+
+        expect(next_purchase.purchase_offer_code_discount).to be_present
+        expect(next_purchase.purchase_offer_code_discount.offer_code_amount).to eq(100)
+      end
+    end
+
+    context "when offer code amount changes between installments" do
+      it "uses original snapshotted amount, not the changed amount" do
+        purchase = create(:installment_plan_purchase,
+                         link: product,
+                         offer_code: offer_code,
+                         purchaser: buyer)
+
+        subscription = purchase.subscription
+        snapshot = subscription.last_payment_option.installment_plan_snapshot
+
+        expect(snapshot.original_offer_code_amount_cents).to eq(200)
+
+        # Change the offer code amount
+        offer_code.update!(amount_cents: 50)
+
+        # Verify the snapshotted amount is used, not the new amount
+        next_purchase = subscription.build_purchase
+        next_purchase.set_price_and_rate
+
+        expect(next_purchase.purchase_offer_code_discount).to be_present
+        expect(next_purchase.purchase_offer_code_discount.offer_code_amount).to eq(200)
+      end
+    end
+
+    context "snapshot stores all required offer code fields" do
+      it "stores code string, currency, and duration for display purposes" do
+        offer_with_currency = create(:offer_code,
+                                     code: "DISCOUNT10",
+                                     products: [product],
+                                     amount_cents: 100,
+                                     currency_type: "usd",
+                                     duration_in_months: 6)
+
+        purchase = create(:installment_plan_purchase,
+                         link: product,
+                         offer_code: offer_with_currency,
+                         purchaser: buyer)
+
+        snapshot = purchase.subscription.last_payment_option.installment_plan_snapshot
+
+        expect(snapshot.original_offer_code_id).to eq(offer_with_currency.id)
+        expect(snapshot.original_offer_code_code).to eq("DISCOUNT10")
+        expect(snapshot.original_offer_code_currency).to eq("usd")
+        expect(snapshot.original_offer_code_duration_in_months).to eq(6)
+        expect(snapshot.original_offer_code_amount_cents).to eq(100)
+        expect(snapshot.original_offer_code_is_percent).to be false
+      end
+
+      it "can display the discount amount even after offer code is deleted" do
+        purchase = create(:installment_plan_purchase,
+                         link: product,
+                         offer_code: offer_code,
+                         purchaser: buyer)
+
+        snapshot = purchase.subscription.last_payment_option.installment_plan_snapshot
+        expect(snapshot.displayed_amount_off("usd", with_symbol: true)).to eq("$2")
+        expect(snapshot.original_offer_code_display_code).to eq("INSTALLMENT200")
+
+        offer_code.destroy!
+
+        # Should still be able to display the discount
+        snapshot.reload
+        expect(snapshot.displayed_amount_off("usd", with_symbol: true)).to eq("$2")
+        expect(snapshot.original_offer_code_display_code).to eq("INSTALLMENT200")
+      end
+    end
   end
+
 
   describe "#cookie_key" do
     it "returns the cookie key" do

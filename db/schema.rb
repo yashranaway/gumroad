@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
+ActiveRecord::Schema[7.1].define(version: 2025_12_05_173000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -961,6 +961,9 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.integer "original_offer_code_amount_cents"
     t.integer "original_offer_code_amount_percentage"
     t.boolean "original_offer_code_is_percent"
+    t.integer "original_offer_code_duration_in_months"
+    t.string "original_offer_code_code"
+    t.string "original_offer_code_currency"
     t.index ["original_offer_code_id"], name: "index_installment_plan_snapshots_on_original_offer_code_id"
     t.index ["payment_option_id"], name: "index_installment_plan_snapshots_on_payment_option_id", unique: true
   end
@@ -1238,9 +1241,14 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.integer "duration_in_months"
     t.integer "minimum_amount_cents"
     t.bigint "flags", default: 0, null: false
+    t.integer "required_product_id"
+    t.integer "required_product_ownership_months"
+    t.integer "fallback_discount_percentage"
+    t.integer "fallback_discount_cents"
     t.index ["code", "link_id"], name: "index_offer_codes_on_code_and_link_id"
     t.index ["link_id"], name: "index_offer_codes_on_link_id"
     t.index ["name", "link_id"], name: "index_offer_codes_on_name_and_link_id", length: { name: 191 }
+    t.index ["required_product_id"], name: "index_offer_codes_on_required_product_id"
     t.index ["universal"], name: "index_offer_codes_on_universal"
     t.index ["user_id"], name: "index_offer_codes_on_user_id"
   end

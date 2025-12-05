@@ -2,7 +2,6 @@
 
 class InstallmentPlanSnapshot < ApplicationRecord
   belongs_to :payment_option
-  belongs_to :original_offer_code, class_name: "OfferCode", optional: true
 
   validates :payment_option, uniqueness: true
   validates :number_of_installments, presence: true, numericality: { greater_than: 0, only_integer: true }
@@ -19,7 +18,7 @@ class InstallmentPlanSnapshot < ApplicationRecord
   end
 
   def has_original_offer_code?
-    original_offer_code_id.present?
+    original_offer_code_id.present? && (original_offer_code_amount_cents.present? || original_offer_code_amount_percentage.present?)
   end
 
   def original_offer_code_amount_off(price_cents)
@@ -27,5 +26,27 @@ class InstallmentPlanSnapshot < ApplicationRecord
     return original_offer_code_amount_cents if !original_offer_code_is_percent?
 
     (price_cents * (original_offer_code_amount_percentage / 100.0)).round
+  end
+
+  def original_offer_code_display_code
+    original_offer_code_code
+  end
+
+  def displayed_amount_off(currency_type, with_symbol: false)
+    return nil unless has_original_offer_code?
+
+    if with_symbol
+      if original_offer_code_is_percent?
+        "#{original_offer_code_amount_percentage}%"
+      else
+        Money.new(original_offer_code_amount_cents, currency_type).format(no_cents_if_whole: true, symbol: true)
+      end
+    else
+      if original_offer_code_is_percent?
+        original_offer_code_amount_percentage
+      else
+        Money.new(original_offer_code_amount_cents, currency_type).format(no_cents_if_whole: true, symbol: false)
+      end
+    end
   end
 end
