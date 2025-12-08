@@ -11,16 +11,32 @@ module Onetime
 
         subscription = payment_option.subscription
         installment_plan = payment_option.installment_plan
+        original_purchase = subscription.original_purchase
 
         total_price = calculate_total_price_from_history(subscription, installment_plan)
         next unless total_price
 
-        InstallmentPlanSnapshot.create!(
+        snapshot_attrs = {
           payment_option: payment_option,
           number_of_installments: installment_plan.number_of_installments,
           recurrence: installment_plan.recurrence,
           total_price_cents: total_price
-        )
+        }
+
+        if original_purchase.offer_code.present?
+          offer_code = original_purchase.offer_code
+          snapshot_attrs.merge!(
+            original_offer_code_id: offer_code.id,
+            original_offer_code_amount_cents: offer_code.amount_cents,
+            original_offer_code_amount_percentage: offer_code.amount_percentage,
+            original_offer_code_is_percent: offer_code.is_percent?,
+            original_offer_code_duration_in_months: offer_code.duration_in_months,
+            original_offer_code_code: offer_code.code,
+            original_offer_code_currency: offer_code.currency_type
+          )
+        end
+
+        InstallmentPlanSnapshot.create!(snapshot_attrs)
       rescue StandardError => e
         Rails.logger.error("Failed to backfill PaymentOption #{payment_option.id}: #{e.message}")
       end

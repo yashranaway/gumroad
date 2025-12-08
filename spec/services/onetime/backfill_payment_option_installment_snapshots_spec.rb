@@ -33,7 +33,34 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
         expect(snapshot.recurrence).to eq("monthly")
         expect(snapshot.total_price_cents).to eq(14700)
       end
+
+      it "includes offer code data when original purchase has offer code" do
+        offer_code = create(:offer_code, code: "DISCOUNT10", products: [product], amount_cents: 100, currency_type: "usd", duration_in_months: 3)
+        payment_option = create(:payment_option, subscription: subscription, installment_plan: installment_plan)
+        original_purchase = build(:purchase,
+                                  link: product,
+                                  subscription: subscription,
+                                  offer_code: offer_code,
+                                  is_original_subscription_purchase: true,
+                                  is_installment_payment: true,
+                                  price_cents: 4900)
+        original_purchase.save!(validate: false)
+
+        second_purchase = build(:purchase, link: product, subscription: subscription, is_installment_payment: true, price_cents: 4900, installment_plan: installment_plan)
+        second_purchase.save!(validate: false)
+
+        described_class.perform
+
+        snapshot = payment_option.reload.installment_plan_snapshot
+        expect(snapshot.original_offer_code_id).to eq(offer_code.id)
+        expect(snapshot.original_offer_code_amount_cents).to eq(100)
+        expect(snapshot.original_offer_code_is_percent).to be false
+        expect(snapshot.original_offer_code_code).to eq("DISCOUNT10")
+        expect(snapshot.original_offer_code_currency).to eq("usd")
+        expect(snapshot.original_offer_code_duration_in_months).to eq(3)
+      end
     end
+
 
     context "when payment_option already has snapshot" do
       it "skips creating duplicate snapshot" do
