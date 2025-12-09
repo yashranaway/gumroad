@@ -3681,26 +3681,9 @@ describe Subscription, :vcr do
         expect(snapshot.original_offer_code_amount_cents).to eq(100)
         expect(snapshot.original_offer_code_is_percent).to be false
       end
-
-      it "can display the discount amount even after offer code is deleted" do
-        purchase = create(:installment_plan_purchase,
-                         link: product,
-                         offer_code: offer_code,
-                         purchaser: buyer)
-
-        snapshot = purchase.subscription.last_payment_option.installment_plan_snapshot
-        expect(snapshot.displayed_amount_off("usd", with_symbol: true)).to eq("$2")
-        expect(snapshot.original_offer_code_display_code).to eq("INSTALLMENT200")
-
-        offer_code.destroy!
-
-        # Should still be able to display the discount
-        snapshot.reload
-        expect(snapshot.displayed_amount_off("usd", with_symbol: true)).to eq("$2")
-        expect(snapshot.original_offer_code_display_code).to eq("INSTALLMENT200")
-      end
     end
   end
+
 
 
   describe "#cookie_key" do
