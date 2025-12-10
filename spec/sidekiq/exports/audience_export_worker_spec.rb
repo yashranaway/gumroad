@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "spec_helper"
+
 describe Exports::AudienceExportWorker do
   describe "#perform" do
     let(:seller) { create(:user) }
