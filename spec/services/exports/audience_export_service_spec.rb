@@ -104,4 +104,66 @@ describe Exports::AudienceExportService do
       end
     end
   end
+
+  describe ".export" do
+    let(:seller) { create(:user) }
+    let(:recipient) { create(:user) }
+    let(:options) { { followers: true } }
+
+    context "when audience count is below threshold" do
+      before do
+        create(:active_follower, user: seller)
+      end
+
+      it "returns the service result synchronously" do
+        result = described_class.export(seller:, recipient:, options:)
+
+        expect(result).to be_a(described_class)
+        expect(result.tempfile).to be_present
+      end
+
+      it "does not create an AudienceExport record" do
+        expect { described_class.export(seller:, recipient:, options:) }
+          .not_to change(AudienceExport, :count)
+      end
+    end
+
+    context "when audience count exceeds threshold" do
+      before do
+        stub_const("#{described_class}::SYNCHRONOUS_EXPORT_THRESHOLD", 0)
+        create(:active_follower, user: seller)
+      end
+
+      it "returns false" do
+        result = described_class.export(seller:, recipient:, options:)
+        expect(result).to be false
+      end
+
+      it "creates an AudienceExport record" do
+        expect { described_class.export(seller:, recipient:, options:) }
+          .to change(AudienceExport, :count).by(1)
+      end
+
+      it "enqueues the CreateAndEnqueueChunksWorker" do
+        described_class.export(seller:, recipient:, options:)
+        expect(Exports::Audience::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(AudienceExport.last.id)
+      end
+    end
+  end
+
+  describe ".compile" do
+    it "generates a CSV tempfile from members data enumerator" do
+      data = [["user1@example.com", "2024-01-01 00:00:00"], ["user2@example.com", "2024-01-02 00:00:00"]]
+      enumerator = data.each
+
+      result = described_class.compile(enumerator)
+
+      expect(result).to be_a(Tempfile)
+      rows = CSV.parse(result.read)
+      expect(rows.size).to eq(3)
+      expect(rows[0]).to eq(described_class::FIELDS)
+      expect(rows[1]).to eq(["user1@example.com", "2024-01-01 00:00:00"])
+      expect(rows[2]).to eq(["user2@example.com", "2024-01-02 00:00:00"])
+    end
+  end
 end
