@@ -25,6 +25,7 @@
   }
 
   @each $name in $bg-colors {
+
     &.#{$name},
     &.outline-#{$name}:hover:not(:disabled) {
       @include bg-color($name);
@@ -60,7 +61,46 @@
     .button-#{$name} {
       $color: map-get($info, color);
       background-color: $color;
-      color: map-get($info, text-color) or fg-color($color);
+
+      @if $name =="facebook" {
+        color: #ffffff;
+      }
+
+      @else if $name =="twitter" {
+        color: #ffffff;
+      }
+
+      @else if $name =="paypal" {
+        color: #ffffff;
+      }
+
+      @else if $name =="stripe" {
+        color: #ffffff;
+      }
+
+      @else if $name =="apple" {
+        color: #ffffff;
+      }
+
+      @else if $name =="android" {
+        color: #ffffff;
+      }
+
+      @else if $name =="kindle" {
+        color: #000000;
+      }
+
+      @else if $name =="discord" {
+        color: map-get($info, text-color);
+      }
+
+      @else if $name =="zoom" {
+        color: map-get($info, text-color);
+      }
+
+      @else if $name =="google" {
+        color: map-get($info, text-color);
+      }
 
       &::before {
         @extend .brand-icon, .brand-icon-#{$name};
@@ -79,7 +119,7 @@
     font-weight: bold;
   }
 
-  & > :first-child {
+  &> :first-child {
     flex-shrink: 0;
   }
 

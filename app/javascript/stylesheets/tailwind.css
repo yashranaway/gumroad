@@ -48,10 +48,27 @@
   --color-success-foreground: rgb(var(--contrast-success));
   --color-danger: rgb(var(--danger));
   --color-danger-foreground: rgb(var(--contrast-danger));
-  --color-primary: rgb(var(--primary));
-  --color-primary-foreground: rgb(var(--contrast-primary));
   --color-warning: rgb(var(--warning));
   --color-warning-foreground: rgb(var(--contrast-warning));
+  --color-info: rgb(var(--info));
+  --color-info-foreground: rgb(var(--contrast-info));
+
+  --success: 35 160 148;
+  --contrast-success: 255 255 255;
+  --warning: 255 201 0;
+  --contrast-warning: 0 0 0;
+  --danger: 220 52 30;
+  --contrast-danger: 255 255 255;
+  --info: 144 168 237;
+  --contrast-info: 0 0 0;
+  --accent: 255 144 232;
+  --contrast-accent: 0 0 0;
+  --primary: 0 0 0;
+  --contrast-primary: 255 255 255;
+  --black: 0 0 0;
+  --contrast-black: 255 255 255;
+  --filled: 255 255 255;
+  --contrast-filled: 0 0 0;
 
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
