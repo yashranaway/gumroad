@@ -11,7 +11,12 @@ type Props = {
 };
 
 export const ResumeSubscriptionModal = ({ open, onClose, onStartNewSubscription, manageUrl }: Props) => (
-  <Modal open={open} onClose={onClose} title="Resume your previous subscription?">
+  <Modal
+    open={open}
+    onClose={onClose}
+    title="Resume your previous subscription?"
+    className="!shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] !border-2 !border-black"
+  >
     <div className="flex flex-col gap-6">
       <p className="text-lg">
         You've previously subscribed to this product. Would you like to <strong>pick up where you left off</strong>, or{" "}
