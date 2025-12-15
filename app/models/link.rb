@@ -841,6 +841,15 @@ class Link < ApplicationRecord
     bought_purchase&.purchase_info unless bought_purchase&.rental_expired?
   end
 
+  def restartable_subscription_for(requested_user)
+    return nil unless requested_user && is_recurring_billing?
+
+    subscriptions
+      .where(user: requested_user)
+      .not_is_test_subscription
+      .find { |subscription| subscription.deactivated? && subscription.alive_or_restartable? }
+  end
+
   def save_duration!(duration)
     self.duration_in_months = duration.present? ? duration.to_i : nil
     save!

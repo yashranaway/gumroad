@@ -4183,6 +4183,114 @@ describe Link, :vcr do
     end
   end
 
+  describe "#restartable_subscription_for" do
+    let(:buyer) { create(:user) }
+
+    context "when the product is not a recurring billing product" do
+      let(:product) { create(:product) }
+
+      it "returns nil" do
+        expect(product.restartable_subscription_for(buyer)).to be_nil
+      end
+    end
+
+    context "when the user is nil" do
+      let(:product) { create(:membership_product) }
+
+      it "returns nil" do
+        expect(product.restartable_subscription_for(nil)).to be_nil
+      end
+    end
+
+    context "when the product is a membership" do
+      let(:product) { create(:membership_product) }
+
+      context "when the user has no subscription" do
+        it "returns nil" do
+          expect(product.restartable_subscription_for(buyer)).to be_nil
+        end
+      end
+
+      context "when the user has an active subscription" do
+        let!(:purchase) { create(:membership_purchase, link: product, purchaser: buyer) }
+
+        before do
+          purchase.subscription.update!(user: buyer)
+        end
+
+        it "returns nil" do
+          expect(product.restartable_subscription_for(buyer)).to be_nil
+        end
+      end
+
+      context "when the user has a cancelled subscription that can be restarted" do
+        let!(:purchase) { create(:membership_purchase, link: product, purchaser: buyer) }
+
+        before do
+          purchase.subscription.update!(user: buyer)
+          purchase.subscription.cancel!(by_seller: false)
+          travel_to(purchase.subscription.cancelled_at + 1.day)
+          purchase.subscription.deactivate!
+        end
+
+        it "returns the subscription" do
+          expect(product.restartable_subscription_for(buyer)).to eq(purchase.subscription)
+        end
+      end
+
+      context "when the user has a failed subscription that can be restarted" do
+        let!(:purchase) { create(:membership_purchase, link: product, purchaser: buyer) }
+
+        before do
+          purchase.subscription.update!(user: buyer, failed_at: Time.current, deactivated_at: Time.current)
+        end
+
+        it "returns the subscription" do
+          expect(product.restartable_subscription_for(buyer)).to eq(purchase.subscription)
+        end
+      end
+
+      context "when the user has a subscription cancelled by seller" do
+        let!(:purchase) { create(:membership_purchase, link: product, purchaser: buyer) }
+
+        before do
+          purchase.subscription.update!(user: buyer)
+          purchase.subscription.cancel!(by_seller: true)
+          travel_to(purchase.subscription.cancelled_at + 1.day)
+          purchase.subscription.deactivate!
+        end
+
+        it "returns nil" do
+          expect(product.restartable_subscription_for(buyer)).to be_nil
+        end
+      end
+
+      context "when the user has an ended subscription" do
+        let!(:purchase) { create(:membership_purchase, link: product, purchaser: buyer) }
+
+        before do
+          purchase.subscription.update!(user: buyer, ended_at: Time.current, deactivated_at: Time.current)
+        end
+
+        it "returns nil" do
+          expect(product.restartable_subscription_for(buyer)).to be_nil
+        end
+      end
+
+      context "when the user has a test subscription" do
+        let!(:purchase) { create(:membership_purchase, link: product, purchaser: buyer) }
+
+        before do
+          purchase.subscription.update!(user: buyer, is_test_subscription: true, failed_at: Time.current, deactivated_at: Time.current)
+        end
+
+        it "returns nil" do
+          expect(product.restartable_subscription_for(buyer)).to be_nil
+        end
+      end
+    end
+  end
+
   describe "service product validation" do
     context "seller of a service product is not eligible for service products" do
       let(:commission) { build(:product, native_type: "commission") }

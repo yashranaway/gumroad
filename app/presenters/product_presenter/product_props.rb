@@ -74,6 +74,7 @@ class ProductPresenter::ProductProps
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
       ) : [],
+      restartable_subscription: restartable_subscription_props(pundit_user&.user),
     }
   end
 
@@ -171,5 +172,15 @@ class ProductPresenter::ProductProps
       else
         nil
       end
+    end
+
+    def restartable_subscription_props(user)
+      subscription = product.restartable_subscription_for(user)
+      return if subscription.nil?
+
+      {
+        id: subscription.external_id,
+        manage_url: manage_subscription_url(subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}"),
+      }
     end
 end

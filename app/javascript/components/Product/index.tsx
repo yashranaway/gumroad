@@ -179,6 +179,11 @@ export type WishlistForProduct = Wishlist & {
   selections_in_wishlist: { variant_id: string | null; recurrence: string | null; rent: boolean; quantity: number }[];
 };
 
+export type RestartableSubscription = {
+  id: string;
+  manage_url: string;
+};
+
 export const getStandalonePrice = (product: Product) =>
   product.bundle_products.reduce(
     (totalStandalonePrice, bundleProduct) => totalStandalonePrice + bundleProduct.price,
@@ -227,6 +232,7 @@ export type Props = {
   purchase: Purchase | null;
   discount_code: ProductDiscount | null;
   wishlists: WishlistForProduct[];
+  restartable_subscription?: RestartableSubscription | null;
 };
 
 export const Product = ({
@@ -239,6 +245,7 @@ export const Product = ({
   ctaButtonRef,
   configurationSelectorRef,
   wishlists = [],
+  restartableSubscription = null,
   disableAnalytics,
 }: {
   product: Product;
@@ -250,6 +257,7 @@ export const Product = ({
   ctaButtonRef?: React.MutableRefObject<HTMLAnchorElement | null>;
   configurationSelectorRef?: React.MutableRefObject<ConfigurationSelectorHandle | null>;
   wishlists?: WishlistForProduct[];
+  restartableSubscription?: RestartableSubscription | null;
   disableAnalytics?: boolean;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);
@@ -556,6 +564,7 @@ export const Product = ({
             selection={selection}
             label={ctaLabel}
             showInstallmentPlanNotes
+            restartableSubscription={restartableSubscription}
             onClick={(e) => {
               if (!validate()) e.preventDefault();
             }}

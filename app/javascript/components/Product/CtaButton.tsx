@@ -7,7 +7,8 @@ import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
 import { NavigationButton } from "$app/components/Button";
-import { getNotForSaleMessage, Product, ProductDiscount, Purchase } from "$app/components/Product";
+import { getNotForSaleMessage, Product, ProductDiscount, Purchase, RestartableSubscription } from "$app/components/Product";
+import { ResumeSubscriptionModal } from "$app/components/Product/ResumeSubscriptionModal";
 import {
   applySelection,
   hasMetDiscountConditions,
@@ -23,6 +24,7 @@ type Props = {
   selection: PriceSelection;
   label: string | undefined;
   showInstallmentPlanNotes?: boolean;
+  restartableSubscription?: RestartableSubscription | null;
   onClick?: React.MouseEventHandler<HTMLAnchorElement>;
 };
 
@@ -78,7 +80,12 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
 ]);
 
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
-  ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false }, ref) => {
+  (
+    { product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false, restartableSubscription },
+    ref,
+  ) => {
+    const [showResumeModal, setShowResumeModal] = React.useState(false);
+    const checkoutUrlRef = React.useRef<string>("");
     const { searchParams } = new URL(useOriginalLocation());
 
     const [referrer, setReferrer] = React.useState("");
@@ -127,17 +134,35 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     const urlWithInstallments = new URL(url);
     urlWithInstallments.searchParams.set("pay_in_installments", "true");
 
+    const handleClick = (evt: React.MouseEvent<HTMLAnchorElement>) => {
+      onClick?.(evt);
+      if (evt.defaultPrevented) return;
+      if (restartableSubscription && product.recurrences && !purchase) {
+        evt.preventDefault();
+        checkoutUrlRef.current = evt.currentTarget.href;
+        setShowResumeModal(true);
+        return;
+      }
+      trackCtaClick({
+        sellerId: product.seller?.id,
+        name: product.name,
+        permalink: product.permalink,
+      });
+    };
+
+    const handleStartNewSubscription = () => {
+      setShowResumeModal(false);
+      trackCtaClick({
+        sellerId: product.seller?.id,
+        name: product.name,
+        permalink: product.permalink,
+      });
+      window.open(checkoutUrlRef.current, "_top");
+    };
+
     const buttonCommonProps = {
       target: "_top",
-      onClick: (evt: React.MouseEvent<HTMLAnchorElement>) => {
-        onClick?.(evt);
-        if (evt.defaultPrevented) return;
-        trackCtaClick({
-          sellerId: product.seller?.id,
-          name: product.name,
-          permalink: product.permalink,
-        });
-      },
+      onClick: handleClick,
       // Resolves a Safari rendering bug that makes the button too tall
       style: { alignItems: "unset" },
     };
@@ -172,6 +197,14 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
               </small>
             ) : null}
           </>
+        ) : null}
+        {restartableSubscription ? (
+          <ResumeSubscriptionModal
+            open={showResumeModal}
+            onClose={() => setShowResumeModal(false)}
+            onStartNewSubscription={handleStartNewSubscription}
+            manageUrl={restartableSubscription.manage_url}
+          />
         ) : null}
       </>
     );
