@@ -12,14 +12,16 @@ type Props = {
 
 export const ResumeSubscriptionModal = ({ open, onClose, onStartNewSubscription, manageUrl }: Props) => (
   <Modal open={open} onClose={onClose} title="Resume your previous subscription?">
-    <div className="paragraphs">
-      <p>
+    <div className="flex flex-col gap-6">
+      <p className="text-lg">
         You've previously subscribed to this product. Would you like to <strong>pick up where you left off</strong>, or{" "}
         <strong>start fresh with a new subscription</strong>?
       </p>
-      <div className="button-row">
-        <Button onClick={onStartNewSubscription}>No, start a new subscription</Button>
-        <NavigationButton color="primary" href={manageUrl}>
+      <div className="flex flex-col gap-3 sm:flex-row w-full">
+        <Button className="flex-1 justify-center" onClick={onStartNewSubscription} color="black" outline>
+          No, start a new subscription
+        </Button>
+        <NavigationButton className="flex-1 justify-center" color="primary" href={manageUrl}>
           Yes, resume subscription
         </NavigationButton>
       </div>
