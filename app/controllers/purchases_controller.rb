@@ -404,8 +404,10 @@ class PurchasesController < ApplicationController
   def export
     authorize [:audience, Purchase], :index?
 
+    effective_seller = impersonating? ? logged_in_user : current_seller
+
     tempfile = Exports::PurchaseExportService.export(
-      seller: current_seller,
+      seller: effective_seller,
       recipient: impersonating_user || logged_in_user,
       filters: params.slice(:start_time, :end_time, :product_ids, :variant_ids),
     )

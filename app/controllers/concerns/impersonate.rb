@@ -31,8 +31,11 @@ module Impersonate
   end
 
   def find_impersonated_user_from_redis
-    impersonated_user_id = $redis.get(RedisKey.impersonated_user(current_user_from_api_or_web.id))
+    key = RedisKey.impersonated_user(current_user_from_api_or_web.id)
+    impersonated_user_id = $redis.get(key)
     return if impersonated_user_id.nil?
+
+    $redis.expire(key, 7.days.to_i)
 
     user = User.alive.find(impersonated_user_id)
     user if user.account_active?

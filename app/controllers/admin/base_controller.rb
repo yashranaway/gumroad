@@ -33,6 +33,7 @@ class Admin::BaseController < ApplicationController
 
     if user
       impersonate_user(user)
+      LargeSeller.create_if_warranted(user)
       redirect_to dashboard_path
     else
       flash[:alert] = "User not found"

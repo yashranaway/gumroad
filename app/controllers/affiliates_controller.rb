@@ -30,9 +30,11 @@ class AffiliatesController < ApplicationController
   def export
     authorize DirectAffiliate, :index?
 
+    effective_seller = impersonating? ? logged_in_user : current_seller
+
     result = Exports::AffiliateExportService.export(
-      seller: current_seller,
-      recipient: impersonating_user || current_seller,
+      seller: effective_seller,
+      recipient: impersonating_user || effective_seller,
     )
 
     if result
