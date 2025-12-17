@@ -2,7 +2,7 @@
 
 class Admin::MerchantAccountsController < Admin::BaseController
   def show
-    if merchant_account = MerchantAccount.find_by(id: params[:external_id])
+    if !MerchantAccount.external_id?(params[:external_id]) && merchant_account = MerchantAccount.find_by(id: params[:external_id])
       return redirect_to admin_merchant_account_path(merchant_account.external_id)
     end
 
