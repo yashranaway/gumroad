@@ -54,22 +54,9 @@ export const ProductAttributesAndInfo = ({ productData }: Props) => {
           </div>
         </Alert>
       ) : null}
-      {preorder != null ? (
-        <>
-          <Alert variant="info">Available on {preorder.release_date_fmt}</Alert>
-          <h5 className="product-info-preorder-indicator legacy-only">Available on {preorder.release_date_fmt}</h5>
-        </>
-      ) : null}
+      {preorder != null ? <Alert variant="info">Available on {preorder.release_date_fmt}</Alert> : null}
 
-      {has_stream_only_files ? (
-        <>
-          <Alert variant="info">Watch link provided after purchase</Alert>
-          <div className="product-info-stream-only-indicator legacy-only">
-            <h5>Available to stream instantly</h5>
-            <small>Watch link provided after purchase</small>
-          </div>
-        </>
-      ) : null}
+      {has_stream_only_files ? <Alert variant="info">Watch link provided after purchase</Alert> : null}
       {hasNoAttributes ? null : (
         <div className="stack">
           {custom_summary ? (

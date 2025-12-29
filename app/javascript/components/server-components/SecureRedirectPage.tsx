@@ -85,7 +85,6 @@ const SecureRedirectPage = ({
         <h2>Confirm access</h2>
         <p>{message}</p>
       </header>
-      <div className="mini-rule legacy-only"></div>
       <form
         onSubmit={(e) => {
           void handleSubmit(e);

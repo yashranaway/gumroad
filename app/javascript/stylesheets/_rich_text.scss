@@ -1,7 +1,8 @@
 .rich-text {
+
   &,
   .ProseMirror {
-    > * {
+    >* {
       margin-bottom: spacer(4);
     }
   }
@@ -75,6 +76,7 @@
     }
 
     .hljs {
+
       &-comment,
       &-quote {
         @include text-muted;
@@ -158,9 +160,9 @@
       inset: 0 100% 0 #{-(spacer(7))};
     }
 
-    &:hover:not(:has(.react-renderer:hover)) > .actions-menu,
-    &.selected > .actions-menu,
-    > .menu[open] {
+    &:hover:not(:has(.react-renderer:hover))>.actions-menu,
+    &.selected>.actions-menu,
+    >.menu[open] {
       display: unset;
       grid-column: unset;
     }
@@ -186,7 +188,7 @@
     border-radius: border-radius(1);
     @include bg-color(filled);
 
-    > .preview {
+    >.preview {
       background-color: var(--body-bg);
       border-radius: border-radius(1) border-radius(1) 0 0;
       grid-template-columns: 1fr;
@@ -214,7 +216,7 @@
       word-break: keep-all;
     }
 
-    .content > .thumbnail {
+    .content>.thumbnail {
       position: relative;
       width: size(4);
       height: size(3);
@@ -239,7 +241,7 @@
         color: full-color(accent);
       }
 
-      &:not(:hover) img + .placeholder {
+      &:not(:hover) img+.placeholder {
         opacity: 0;
       }
     }
@@ -307,7 +309,7 @@
   }
 
   figure {
-    & > img {
+    &>img {
       cursor: pointer;
     }
 
@@ -323,6 +325,11 @@
     &[data-has-focus] img {
       outline: $outline;
     }
+  }
+
+  // Firefox-specific fix to avoid showing node content as selected text
+  .selected *::selection {
+    background: none;
   }
 }
 
