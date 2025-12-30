@@ -536,21 +536,21 @@ heroku config:set RAILS_MAX_THREADS=3
 
 ## Cost Estimation
 
-Estimated monthly costs for a production Gumroad deployment on Heroku:
+Estimated monthly costs for a production Gumroad deployment on Heroku (2025 Pricing):
 
 | Resource | Plan | Monthly Cost |
 |----------|------|--------------|
 | Web Dynos (2x Performance-M) | performance-m | $500 |
 | Worker Dynos (2x Performance-M) | performance-m | $500 |
-| JawsDB MySQL | Leopard | $100 |
+| JawsDB MySQL | Thresher (2GB RAM, 50GB storage) | $110 |
 | Heroku Redis | Premium-0 | $15 |
-| Bonsai Elasticsearch | Sandbox-6 | $10 |
+| Bonsai Elasticsearch | Standard Fir | $30 |
 | MemCachier | 100MB | $15 |
-| MongoDB Atlas | M10 | $57 |
+| MongoDB Atlas | M10 (Dedicated) | $57 |
 | Papertrail | Choklad | $7 |
-| **Total** | | **~$1,200/month** |
+| **Total** | | **~$1,234/month** |
 
-**Note**: Costs can vary significantly based on traffic and usage. Start small and scale as needed.
+**Note**: Costs can vary significantly based on traffic and usage. Start small and scale as needed. Heroku bills by the second, so costs are prorated for dynos that don't run 24/7.
 
 ---
 

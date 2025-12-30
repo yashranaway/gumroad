@@ -656,24 +656,24 @@ DevTools.delete_all_indices_and_reindex_all
 
 ## Cost Estimation
 
-Railway uses usage-based pricing. Estimated monthly costs:
+Railway uses a usage-based pricing model (2025 rates: **$20/vCPU-month** and **$10/GB-RAM-month** for continuous usage). Estimated monthly costs for a typical Gumroad setup:
 
-| Resource | Configuration | Estimated Cost |
-|----------|--------------|----------------|
-| Web Service | 2GB RAM, 2 vCPU | ~$20-40 |
-| Sidekiq Worker | 2GB RAM, 2 vCPU | ~$20-40 |
-| MySQL | 1GB RAM | ~$10-20 |
-| Redis | 256MB RAM | ~$5-10 |
-| MongoDB | 512MB RAM | ~$10-15 |
-| Elasticsearch | 1GB RAM | ~$15-25 |
-| Network Egress | Variable | ~$0.10/GB |
-| **Total** | | **~$80-150/month** |
+| Resource | Configuration (Average Usage) | Estimated Cost |
+|----------|-------------------------------|----------------|
+| Web Service | 2 Replicas (Active usage) | ~$30-60 |
+| Sidekiq Worker | 2 Replicas (Active usage) | ~$30-60 |
+| MySQL | Dedicated Resource (1GB RAM) | ~$10-15 |
+| Redis | Shared/Small usage | ~$5-10 |
+| MongoDB | Shared/Small usage | ~$5-10 |
+| Elasticsearch | Custom Container (1GB RAM) | ~$15-20 |
+| Network Egress | $0.05 per GB | Variable |
+| **Total** | | **~$95-175/month** |
 
 **Notes**:
-- Railway charges based on actual usage
-- Costs scale with traffic
-- The Pro plan ($20/month) removes usage limits
-- Free tier available for testing (500 hours/month)
+- Railway charges by the second for actual CPU/RAM consumption.
+- The **Pro Plan ($20/month)** includes $20 of monthly usage credits.
+- Costs are significantly lower if resources are idle.
+- Egress cost is $0.05/GB.
 
 Railway's pricing can be significantly cheaper than Heroku for similar workloads.
 
