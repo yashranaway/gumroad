@@ -149,11 +149,11 @@ This sets `MONGO_URL` automatically.
 
 #### Elasticsearch (via Docker Template)
 
-Railway doesn't have built-in Elasticsearch, but you can deploy it:
+Railway doesn't have built-in Elasticsearch, but you can deploy it using the official Docker image. Gumroad uses version **7.11.x**.
 
 1. New → Empty Service
 2. Settings → Deploy → Docker Image
-3. Enter: `elasticsearch:7.9.3`
+3. Enter: `elasticsearch:7.11.2`
 4. Add environment variables:
    ```
    discovery.type=single-node
@@ -263,13 +263,14 @@ RESEND_CUSTOMERS_LEVEL_2_API_KEY=re_your-level2-key
 RESEND_FOLLOWERS_API_KEY=re_your-followers-key
 ```
 
-#### Security & Encryption
+#### Security & encryption
 
 ```bash
 STRONGBOX_GENERAL=your-strongbox-public-and-private-key
 STRONGBOX_GENERAL_PASSWORD=your-password
 OBFUSCATE_IDS_CIPHER_KEY=your-cipher-key
 OBFUSCATE_IDS_NUMERIC_CIPHER_KEY=your-numeric-key
+MAILER_HEADERS_ENCRYPTION_KEY_V1=your-mailer-key
 ```
 
 #### Other Required Variables
@@ -294,12 +295,12 @@ VATSTACK_API_KEY=your-vatstack-key
 
 #### Configure `railway.toml`
 
-Create a `railway.toml` file in your project root:
+Create a `railway.toml` file in your project root to handle builds and deployments:
 
 ```toml
 [build]
 builder = "nixpacks"
-buildCommand = "npm install && bundle install"
+buildCommand = "npm install && npm run build && bundle install"
 
 [deploy]
 startCommand = "bundle exec rails db:migrate && bundle exec puma -C config/puma.rb"
@@ -308,6 +309,8 @@ healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 5
 ```
+
+**Note**: Ensure `USE_DB_WORKER_REPLICAS=false` is set in your variables unless you have provisioned separate read replicas for workers.
 
 #### Database Initialization
 

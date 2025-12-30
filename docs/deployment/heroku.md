@@ -141,7 +141,7 @@ heroku addons:create heroku-redis:premium-0
 heroku addons:create heroku-redis:mini
 ```
 
-Configure Redis hosts:
+Configure Redis hosts (Gumroad uses separate DB indexes for different services):
 
 ```bash
 REDIS_URL=$(heroku config:get REDIS_URL)
@@ -152,6 +152,8 @@ heroku config:set RACK_ATTACK_REDIS_HOST=$REDIS_URL/3
 ```
 
 #### Elasticsearch
+
+Gumroad uses Elasticsearch for search functionality. The project currently uses `elasticsearch` gem version **7.11.x**.
 
 ```bash
 # Bonsai Elasticsearch (recommended)
@@ -264,25 +266,28 @@ heroku config:set RESEND_CUSTOMERS_API_KEY=re_your-customers-key
 heroku config:set SENDGRID_GUMROAD_TRANSACTIONS_API_KEY=SG.your-key
 ```
 
-#### Other Required Variables
+#### Other required variables
 
 ```bash
-# Security
+# Security & Encryption
 heroku config:set STRONGBOX_GENERAL="your-strongbox-key"
-heroku config:set STRONGBOX_GENERAL_PASSWORD="your-password"
+heroku config:set STRONGBOX_GENERAL_PASSWORD="your-strongbox-password"
 heroku config:set OBFUSCATE_IDS_CIPHER_KEY="your-cipher-key"
 heroku config:set OBFUSCATE_IDS_NUMERIC_CIPHER_KEY="your-numeric-key"
+heroku config:set MAILER_HEADERS_ENCRYPTION_KEY_V1="your-mailer-key"
 
 # Google (for OAuth and reCAPTCHA)
 heroku config:set GOOGLE_CLIENT_ID=your-client-id
 heroku config:set GOOGLE_CLIENT_SECRET=your-secret
 heroku config:set RECAPTCHA_LOGIN_SITE_KEY=your-site-key
+heroku config:set RECAPTCHA_SIGNUP_SITE_KEY=your-site-key
 
 # Bugsnag (error tracking)
 heroku config:set BUGSNAG_API_KEY=your-bugsnag-key
 
 # Tax Services
 heroku config:set TAXJAR_API_KEY=your-taxjar-key
+heroku config:set VATSTACK_API_KEY=your-vatstack-key
 ```
 
 ### 4. Deploy the Application
@@ -365,7 +370,7 @@ heroku domains:add yourdomain.com
 heroku certs:auto:enable
 ```
 
-### Database Configuration
+### Database configuration
 
 For JawsDB, upgrade to a larger plan for production:
 
@@ -373,13 +378,13 @@ For JawsDB, upgrade to a larger plan for production:
 heroku addons:upgrade jawsdb:leopard
 ```
 
-Configure read replicas if available:
+**Critical**: Gumroad uses the `mysql2_makara` adapter which supports read/write splitting. By default, ensure `USE_DB_WORKER_REPLICAS` is set to `false` unless you have explicitly provisioned and configured read replicas:
 
 ```bash
 heroku config:set USE_DB_WORKER_REPLICAS=false
 ```
 
-### Asset Compilation
+### Asset compilation
 
 Ensure assets compile correctly during deploy:
 
