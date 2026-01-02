@@ -25,6 +25,8 @@ class FightDisputeJob
 
   private
     def rejected?(message)
-      message.include?("This dispute is already closed")
+      message.include?("This dispute is already closed") ||
+        message.include?("DISPUTE_NOT_ELIGIBLE_FOR_EVIDENCE") ||
+        message.include?("DISPUTE_ALREADY_RESOLVED")
     end
 end

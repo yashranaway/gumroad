@@ -16,6 +16,16 @@ class PaypalChargeProcessor
   DISPUTE_OUTCOME_SELLER_FAVOUR = %w[RESOLVED_SELLER_FAVOUR CANCELED_BY_BUYER DENIED].freeze
   private_constant :DISPUTE_OUTCOME_SELLER_FAVOUR
 
+  PAYPAL_CARRIER_MAP = {
+    "USPS" => "USPS",
+    "UPS" => "UPS",
+    "FedEx" => "FEDEX",
+    "DHL" => "DHL",
+    "DHL Global Mail" => "DHL_GLOBAL_MAIL",
+    "OnTrac" => "ONTRAC",
+    "Canada Post" => "CANADA_POST"
+  }.freeze
+
   # https://developer.paypal.com/docs/api/orders/v1/
   VALID_TRANSACTION_STATUSES = %w(created approved completed)
 
@@ -582,6 +592,32 @@ class PaypalChargeProcessor
     "https://#{sub_domain}.paypal.com/us/cgi-bin/webscr?cmd=_history-details-from-hub&id=#{charge_id}"
   end
 
+  def fight_chargeback(paypal_transaction_id, dispute_evidence, merchant_account: nil)
+    dispute = dispute_evidence.dispute
+    dispute_id = dispute.charge_processor_dispute_id
+
+    merchant_account ||= find_merchant_account_for_transaction(paypal_transaction_id)
+    return unless merchant_account&.charge_processor_merchant_id.present?
+
+    tracking_info = build_tracking_info(dispute_evidence)
+    notes = build_evidence_notes(dispute_evidence)
+
+    api = PaypalDisputesApi.new
+    api_response = api.provide_evidence(
+      dispute_id:,
+      merchant_account:,
+      tracking_info:,
+      notes:
+    )
+
+    unless api.successful_response?(api_response)
+      error_message = build_dispute_error_message(api_response)
+      raise ChargeProcessorInvalidRequestError, error_message
+    end
+
+    api_response
+  end
+
   private_class_method
   def self.determine_paypal_event_type(paypal_event)
     case paypal_event["payment_status"]
@@ -612,6 +648,61 @@ class PaypalChargeProcessor
   private
     def paypal_api
       PaypalChargeProcessor.paypal_api
+    end
+
+    def find_merchant_account_for_transaction(paypal_transaction_id)
+      purchase = Purchase.find_by(stripe_transaction_id: paypal_transaction_id)
+      purchase&.merchant_account
+    end
+
+    def build_tracking_info(dispute_evidence)
+      return nil unless dispute_evidence.shipping_carrier.present? && dispute_evidence.shipping_tracking_number.present?
+
+      {
+        carrier_name: map_carrier_name(dispute_evidence.shipping_carrier),
+        carrier_name_other: carrier_name_other(dispute_evidence.shipping_carrier),
+        tracking_number: dispute_evidence.shipping_tracking_number,
+        ship_date: dispute_evidence.shipped_at&.strftime("%Y-%m-%d")
+      }.compact
+    end
+
+    def map_carrier_name(carrier)
+      PAYPAL_CARRIER_MAP[carrier] || "OTHER"
+    end
+
+    def carrier_name_other(carrier)
+      return carrier unless PAYPAL_CARRIER_MAP.key?(carrier)
+      nil
+    end
+
+    def build_evidence_notes(dispute_evidence)
+      parts = []
+      parts << "Reason merchant should win: #{dispute_evidence.reason_for_winning}" if dispute_evidence.reason_for_winning.present?
+      parts << "Product: #{dispute_evidence.product_description}" if dispute_evidence.product_description.present?
+      parts << "Customer email: #{dispute_evidence.customer_email}" if dispute_evidence.customer_email.present?
+      parts << "Customer IP: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
+      parts << "Billing address: #{dispute_evidence.billing_address}" if dispute_evidence.billing_address.present?
+      parts.concat(build_license_evidence(dispute_evidence))
+      parts << dispute_evidence.uncategorized_text if dispute_evidence.uncategorized_text.present?
+      parts << "Access activity: #{dispute_evidence.access_activity_log}" if dispute_evidence.access_activity_log.present?
+      parts.join("\n\n")[0...2000]
+    end
+
+    def build_license_evidence(dispute_evidence)
+      parts = []
+      purchase = dispute_evidence.dispute.disputable.purchase_for_dispute_evidence
+      return parts unless purchase&.license.present?
+
+      license = purchase.license
+      parts << "License key: #{license.serial}"
+      parts << "License activation count: #{license.uses} (proof of product activation)" if license.uses.positive?
+      parts
+    end
+
+    def build_dispute_error_message(api_response)
+      error_name = api_response.result.try(:name) || "UNKNOWN_ERROR"
+      error_details = api_response.result.try(:details)&.first&.try(:description) || api_response.result.inspect
+      "PayPal Disputes API Error: #{error_name} - #{error_details}"
     end
 
     def get_charge_for_express_checkout_api(charge_id)

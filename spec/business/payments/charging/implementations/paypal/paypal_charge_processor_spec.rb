@@ -1532,4 +1532,210 @@ describe PaypalChargeProcessor, :vcr do
       expect(PaypalChargeProcessor.formatted_amount_for_paypal(1644, "jpy").class).to eq(Integer)
     end
   end
+
+  describe "#fight_chargeback" do
+    let(:processor) { PaypalChargeProcessor.new }
+    let(:merchant_account) { create(:merchant_account_paypal, charge_processor_merchant_id: "TEST_MERCHANT_ID") }
+    let(:purchase) { create(:purchase, stripe_transaction_id: "PAYPAL_CAPTURE_123", merchant_account:) }
+    let(:dispute) { create(:dispute, purchase:, charge_processor_dispute_id: "PP-D-12345") }
+    let(:dispute_evidence) do
+      create(:dispute_evidence,
+             dispute:,
+             product_description: "Digital Product",
+             customer_email: "buyer@example.com",
+             customer_purchase_ip: "192.168.1.1",
+             reason_for_winning: "Product was delivered successfully",
+             billing_address: "123 Main St")
+    end
+
+    let(:successful_response) do
+      OpenStruct.new(
+        status_code: 200,
+        result: OpenStruct.new(links: [{ rel: "self" }])
+      )
+    end
+
+    before do
+      allow_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).and_return(successful_response)
+      allow_any_instance_of(PaypalDisputesApi).to receive(:successful_response?).and_return(true)
+    end
+
+    context "with digital product (no tracking info)" do
+      it "submits evidence with notes only" do
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          dispute_id: "PP-D-12345",
+          merchant_account:,
+          tracking_info: nil,
+          notes: a_string_including("Reason merchant should win")
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
+      end
+
+      it "includes product description in notes" do
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          dispute_id: "PP-D-12345",
+          merchant_account:,
+          tracking_info: nil,
+          notes: a_string_including("Product: Digital Product")
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
+      end
+
+      it "includes customer email in notes" do
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          dispute_id: "PP-D-12345",
+          merchant_account:,
+          tracking_info: nil,
+          notes: a_string_including("Customer email: buyer@example.com")
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
+      end
+    end
+
+    context "with licensed product" do
+      let(:licensed_product) { create(:product, is_licensed: true) }
+      let(:licensed_purchase) do
+        create(:purchase, stripe_transaction_id: "PAYPAL_CAPTURE_123", merchant_account:, link: licensed_product)
+      end
+      let(:license) do
+        create(:license, link: licensed_product, purchase: licensed_purchase, uses: 3)
+      end
+      let(:licensed_dispute) { create(:dispute, purchase: licensed_purchase, charge_processor_dispute_id: "PP-D-12345") }
+      let(:licensed_dispute_evidence) do
+        create(:dispute_evidence,
+               dispute: licensed_dispute,
+               product_description: "Licensed Digital Product",
+               reason_for_winning: "License was activated by customer")
+      end
+
+      it "includes license key in notes" do
+        license # ensure license is created
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(notes: a_string_including("License key: #{license.serial}"))
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", licensed_dispute_evidence, merchant_account:)
+      end
+
+      it "includes license activation count in notes" do
+        license # ensure license is created
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(notes: a_string_including("License activation count: 3 (proof of product activation)"))
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", licensed_dispute_evidence, merchant_account:)
+      end
+    end
+
+    context "with physical product (tracking info)" do
+      let(:dispute_evidence_with_tracking) do
+        create(:dispute_evidence,
+               dispute:,
+               product_description: "Physical Product",
+               customer_email: "buyer@example.com",
+               shipping_carrier: "USPS",
+               shipping_tracking_number: "9400111899223456789012",
+               shipped_at: Date.new(2024, 1, 15),
+               reason_for_winning: "Product was shipped and delivered")
+      end
+
+      it "submits evidence with tracking info" do
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          dispute_id: "PP-D-12345",
+          merchant_account:,
+          tracking_info: {
+            carrier_name: "USPS",
+            tracking_number: "9400111899223456789012",
+            ship_date: "2024-01-15"
+          },
+          notes: a_string_including("Reason merchant should win")
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence_with_tracking, merchant_account:)
+      end
+    end
+
+    context "carrier name mapping" do
+      let(:dispute_evidence_with_carrier) do
+        build(:dispute_evidence,
+              dispute:,
+              shipping_tracking_number: "123456789",
+              shipped_at: Date.new(2024, 1, 15))
+      end
+
+      it "maps FedEx to FEDEX" do
+        dispute_evidence_with_carrier.shipping_carrier = "FedEx"
+        dispute_evidence_with_carrier.save!
+
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(tracking_info: hash_including(carrier_name: "FEDEX"))
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence_with_carrier, merchant_account:)
+      end
+
+      it "maps DHL Global Mail to DHL_GLOBAL_MAIL" do
+        dispute_evidence_with_carrier.shipping_carrier = "DHL Global Mail"
+        dispute_evidence_with_carrier.save!
+
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(tracking_info: hash_including(carrier_name: "DHL_GLOBAL_MAIL"))
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence_with_carrier, merchant_account:)
+      end
+
+      it "maps unknown carrier to OTHER with carrier_name_other" do
+        dispute_evidence_with_carrier.shipping_carrier = "Custom Carrier"
+        dispute_evidence_with_carrier.save!
+
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(tracking_info: hash_including(carrier_name: "OTHER", carrier_name_other: "Custom Carrier"))
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence_with_carrier, merchant_account:)
+      end
+    end
+
+    context "when merchant_account is not provided" do
+      it "finds merchant account from purchase" do
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(merchant_account:)
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence)
+      end
+
+      it "returns nil if no purchase found for transaction" do
+        result = processor.fight_chargeback("UNKNOWN_TRANSACTION", dispute_evidence)
+        expect(result).to be_nil
+      end
+    end
+
+    context "when API returns error" do
+      let(:error_response) do
+        OpenStruct.new(
+          status_code: 422,
+          result: OpenStruct.new(
+            name: "DISPUTE_NOT_ELIGIBLE_FOR_EVIDENCE",
+            details: [OpenStruct.new(description: "The dispute is already closed")]
+          )
+        )
+      end
+
+      before do
+        allow_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).and_return(error_response)
+        allow_any_instance_of(PaypalDisputesApi).to receive(:successful_response?).and_return(false)
+      end
+
+      it "raises ChargeProcessorInvalidRequestError with error message" do
+        expect do
+          processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
+        end.to raise_error(ChargeProcessorInvalidRequestError, /DISPUTE_NOT_ELIGIBLE_FOR_EVIDENCE/)
+      end
+    end
+  end
 end

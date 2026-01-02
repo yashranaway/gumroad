@@ -1137,8 +1137,8 @@ describe Charge::Disputable, :vcr do
     context "when processor is PayPal" do
       before { purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
 
-      it "returns false" do
-        expect(purchase.eligible_for_dispute_evidence?).to be(false)
+      it "returns true" do
+        expect(purchase.eligible_for_dispute_evidence?).to be(true)
       end
     end
 
@@ -1152,7 +1152,7 @@ describe Charge::Disputable, :vcr do
 
     context "when the purchase is made via a Stripe Connect account" do
       before do
-        expect_any_instance_of(MerchantAccount).to receive(:is_a_stripe_connect_account?).twice.and_return(true)
+        expect_any_instance_of(MerchantAccount).to receive(:is_a_stripe_connect_account?).and_return(true)
       end
 
       it "returns false" do
@@ -1160,7 +1160,7 @@ describe Charge::Disputable, :vcr do
       end
     end
 
-    it "returns true" do
+    it "returns true for Stripe" do
       expect(purchase.eligible_for_dispute_evidence?).to be(true)
     end
   end
