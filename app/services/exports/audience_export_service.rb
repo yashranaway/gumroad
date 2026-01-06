@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "csv"
-
 class Exports::AudienceExportService
   FIELDS = ["Subscriber Email", "Subscribed Time"].freeze
   SYNCHRONOUS_EXPORT_THRESHOLD = 10_000
@@ -33,7 +31,7 @@ class Exports::AudienceExportService
   def self.compile(members_data_enumerator)
     tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
 
-    CSV.open(tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
+    CsvSafe.open(tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
       members_data_enumerator.each do |email, timestamp|
         csv << [email, timestamp]
       end
@@ -46,7 +44,7 @@ class Exports::AudienceExportService
   def perform
     @tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
 
-    CSV.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
+    CsvSafe.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
       query = self.class.build_query(@user, @options)
 
       query.order(:min_created_at).find_each do |member|
