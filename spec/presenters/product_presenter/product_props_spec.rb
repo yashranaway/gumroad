@@ -536,6 +536,39 @@ describe ProductPresenter::ProductProps do
       end
     end
 
+    context "with restartable subscription" do
+      let(:product) { create(:membership_product, user: seller) }
+      let(:pundit_user) { SellerContext.new(user: buyer, seller: buyer) }
+      let!(:purchase) { create(:membership_purchase, link: product, purchaser: buyer) }
+
+      before do
+        purchase.subscription.update!(user: buyer, failed_at: Time.current, deactivated_at: Time.current)
+      end
+
+      it "includes restartable_subscription in props" do
+        presenter = described_class.new(product:)
+        props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:)
+
+        expect(props[:restartable_subscription]).to eq({
+          id: purchase.subscription.external_id,
+          manage_url: manage_subscription_url(purchase.subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}")
+        })
+      end
+
+      context "when subscription is active" do
+        before do
+          purchase.subscription.update!(failed_at: nil, deactivated_at: nil)
+        end
+
+        it "returns nil for restartable_subscription" do
+          presenter = described_class.new(product:)
+          props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:)
+
+          expect(props[:restartable_subscription]).to be_nil
+        end
+      end
+    end
+
     context "when custom domain is specified" do
       let(:product) { create(:product) }
 
