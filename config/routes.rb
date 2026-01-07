@@ -614,7 +614,6 @@ Rails.application.routes.draw do
       end
 
       collection do
-        get :products
         get :create_from_email
       end
     end

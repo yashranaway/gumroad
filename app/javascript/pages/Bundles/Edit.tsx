@@ -9,4 +9,3 @@ export default function BundlesEdit() {
 
   return <BundleEditPage {...props} />;
 }
-

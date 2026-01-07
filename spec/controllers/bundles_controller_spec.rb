@@ -3,21 +3,21 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe BundlesController do
+describe BundlesController, inertia: true do
   let(:seller) { create(:named_seller, :eligible_for_service_products) }
   let(:bundle) { create(:product, :bundle, user: seller, price_cents: 2000) }
 
   include_context "with user signed in as admin for seller"
 
   describe "GET show" do
-    render_views
-
-    it "initializes the presenter with the correct arguments and sets the title to the bundle's name" do
-      expect(BundlePresenter).to receive(:new).with(bundle:).and_call_original
+    it "renders the Inertia component with bundle props and sets the title" do
       get :show, params: { id: bundle.external_id }
-      expect(response.body).to have_selector("title:contains('#{bundle.name}')", visible: false)
       expect(response).to be_successful
+      expect(inertia.component).to eq("Bundles/Edit")
+      expect(inertia.props).to have_key(:bundle)
+      expect(assigns(:title)).to eq(bundle.name)
     end
 
     context "when the bundle doesn't exist" do
@@ -75,35 +75,23 @@ describe BundlesController do
     end
   end
 
-  describe "GET products" do
-    let!(:product) { create(:product, user: seller, name: "Product") }
-    let!(:versioned_product) { create(:product_with_digital_versions, name: "Versioned product", user: seller) }
-    let!(:bundle_product) { create(:product, :bundle, user: seller, name: "Bundle product") }
-    let!(:membership_product) { create(:membership_product_with_preset_tiered_pricing, user: seller, name: "Membership product") }
-    let!(:call_product) { create(:call_product, user: seller, name: "Call product") }
-    let!(:archived_product) { create(:product, user: seller, name: "Archived product", archived: true) }
-
-    before do
-      index_model_records(Link)
-      stub_const("BundlesController::PER_PAGE", 1)
-    end
-
-    it_behaves_like "authorize called for action", :get, :products do
-      let(:policy_klass) { LinkPolicy }
-      let(:record) { Link }
-      let(:policy_method) { :index? }
-    end
-
-    it "returns products that can be added to a bundle" do
-      get :products, params: { all: true, product_id: bundle_product.bundle_products.first.product.external_id }
-      ids = response.parsed_body["products"].map { _1["id"] }
-      expect(ids).to match_array([product, versioned_product, archived_product, bundle_product.bundle_products.second.product].map(&:external_id))
-    end
-  end
-
   describe "PUT update" do
     let(:product) { create(:product, user: seller) }
-    let(:asset_previews) { create_list(:asset_preview, 2, link: bundle) }
+    let(:asset_previews) do
+      previews = create_list(:asset_preview, 2, link: bundle)
+      # Ensure metadata is set to avoid validation errors when reorder_previews calls save!
+      previews.each do |preview|
+        if preview.file.attached?
+          # Ensure file is analyzed and has metadata
+          preview.file.analyze unless preview.file.analyzed?
+          metadata = preview.file.blob.metadata || {}
+          unless metadata["height"] && metadata["width"]
+            preview.file.blob.update_column(:metadata, metadata.merge("height" => 100, "width" => 100))
+          end
+        end
+      end
+      previews
+    end
     let(:versioned_product) { create(:product_with_digital_versions, user: seller) }
     let(:profile_section1) { create(:seller_profile_products_section, seller:, shown_products: [bundle.id]) }
     let(:profile_section2) { create(:seller_profile_products_section, seller:) }
@@ -163,9 +151,9 @@ describe BundlesController do
 
     before { index_model_records(Purchase) }
 
-    it "updates the bundle" do
+    it "updates the bundle and redirects" do
       expect do
-        put :update, params: bundle_params, as: :json
+        put :update, params: bundle_params
         bundle.reload
       end.to change { bundle.name }.from("Bundle").to("New name")
       .and change { bundle.description }.from("This is a bundle of products").to("New description")
@@ -193,7 +181,8 @@ describe BundlesController do
       .and change { profile_section1.reload.shown_products }.from([bundle.id]).to([])
       .and change { profile_section2.reload.shown_products }.from([]).to([bundle.id])
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(bundle_path(bundle.external_id))
+      expect(flash[:notice]).to eq("Changes saved!")
 
       deleted_bundle_products = bundle.bundle_products.deleted
       expect(deleted_bundle_products.first.deleted_at).to be_present
@@ -230,13 +219,14 @@ describe BundlesController do
           it "creates a new installment plan" do
             params = bundle_params.merge(installment_plan: { number_of_installments: 3 })
 
-            expect { put :update, params: params, as: :json }
+            expect { put :update, params: params }
               .to change { ProductInstallmentPlan.alive.count }.by(1)
 
             plan = bundle.reload.installment_plan
             expect(plan.number_of_installments).to eq(3)
             expect(plan.recurrence).to eq("monthly")
-            expect(response.status).to eq(204)
+            expect(response).to redirect_to(bundle_path(bundle.external_id))
+            expect(flash[:notice]).to eq("Changes saved!")
           end
         end
 
@@ -260,11 +250,11 @@ describe BundlesController do
               ]
             )
 
-            expect { put :update, params: params, as: :json }
+            expect { put :update, params: params }
               .not_to change { bundle.bundle_products.count }
 
-            expect(response.status).to eq(422)
-            expect(response.parsed_body["error_message"]).to include("Installment plan is not available for the bundled product")
+            expect(response).to redirect_to(bundle_path(bundle.external_id))
+            expect(flash[:alert]).to include("Installment plan is not available for the bundled product")
             expect(bundle.reload.bundle_products.map(&:product)).not_to include(commission_product)
           end
 
@@ -272,7 +262,7 @@ describe BundlesController do
             it "destroys the existing plan and creates a new plan" do
               params = bundle_params.merge(installment_plan: { number_of_installments: 4 })
 
-              expect { put :update, params: params, as: :json }
+              expect { put :update, params: params }
                 .not_to change { ProductInstallmentPlan.count }
 
               expect { existing_plan.reload }.to raise_error(ActiveRecord::RecordNotFound)
@@ -282,7 +272,8 @@ describe BundlesController do
                 number_of_installments: 4,
                 recurrence: "monthly"
               )
-              expect(response.status).to eq(204)
+              expect(response).to redirect_to(bundle_path(bundle.external_id))
+              expect(flash[:notice]).to eq("Changes saved!")
             end
           end
 
@@ -295,7 +286,7 @@ describe BundlesController do
             it "soft deletes the existing plan and creates a new plan" do
               params = bundle_params.merge(installment_plan: { number_of_installments: 4 })
 
-              expect { put :update, params: params, as: :json }
+              expect { put :update, params: params }
                 .to change { existing_plan.reload.deleted_at }.from(nil)
 
               new_plan = bundle.reload.installment_plan
@@ -304,7 +295,8 @@ describe BundlesController do
                 recurrence: "monthly"
               )
               expect(new_plan).not_to eq(existing_plan)
-              expect(response.status).to eq(204)
+              expect(response).to redirect_to(bundle_path(bundle.external_id))
+              expect(flash[:notice]).to eq("Changes saved!")
             end
           end
         end
@@ -323,12 +315,13 @@ describe BundlesController do
             it "destroys the existing plan" do
               params = bundle_params.merge(installment_plan: nil)
 
-              expect { put :update, params: params, as: :json }
+              expect { put :update, params: params }
                 .to change { ProductInstallmentPlan.count }.by(-1)
 
               expect { existing_plan.reload }.to raise_error(ActiveRecord::RecordNotFound)
               expect(bundle.reload.installment_plan).to be_nil
-              expect(response.status).to eq(204)
+              expect(response).to redirect_to(bundle_path(bundle.external_id))
+              expect(flash[:notice]).to eq("Changes saved!")
             end
           end
 
@@ -341,11 +334,12 @@ describe BundlesController do
             it "soft deletes the existing plan" do
               params = bundle_params.merge(installment_plan: nil)
 
-              expect { put :update, params: params, as: :json }
+              expect { put :update, params: params }
                 .to change { existing_plan.reload.deleted_at }.from(nil)
 
               expect(bundle.reload.installment_plan).to be_nil
-              expect(response.status).to eq(204)
+              expect(response).to redirect_to(bundle_path(bundle.external_id))
+              expect(flash[:notice]).to eq("Changes saved!")
             end
           end
         end
@@ -357,12 +351,12 @@ describe BundlesController do
         it "does not create an installment plan" do
           params = bundle_params.merge(installment_plan: { number_of_installments: 3 })
 
-          expect { put :update, params: params, as: :json }
+          expect { put :update, params: params }
             .not_to change { ProductInstallmentPlan.count }
 
           expect(bundle.reload.installment_plan).to be_nil
-          expect(response.status).to eq(422)
-          expect(response.parsed_body["error_message"]).to include("Installment plan is not available for the bundled product")
+          expect(response).to redirect_to(bundle_path(bundle.external_id))
+          expect(flash[:alert]).to include("Installment plan is not available for the bundled product")
         end
       end
 
@@ -375,12 +369,12 @@ describe BundlesController do
             installment_plan: { number_of_installments: 3 }
           )
 
-          expect { put :update, params: params, as: :json }
+          expect { put :update, params: params }
             .not_to change { ProductInstallmentPlan.count }
 
           expect(bundle.reload.installment_plan).to be_nil
-          expect(response.status).to eq(422)
-          expect(response.parsed_body["error_message"]).to include("Installment plans are not available for \"pay what you want\" pricing")
+          expect(response).to redirect_to(bundle_path(bundle.external_id))
+          expect(flash[:alert]).to include("Installment plans are not available for \"pay what you want\" pricing")
         end
       end
     end
@@ -391,11 +385,13 @@ describe BundlesController do
       end
 
       it "updates the bundle refund policy" do
-        put :update, params: bundle_params, as: :json
+        put :update, params: bundle_params
         bundle.reload
         expect(bundle.product_refund_policy_enabled).to be(true)
         expect(bundle.product_refund_policy.title).to eq("30-day money back guarantee")
         expect(bundle.product_refund_policy.fine_print).to eq("I really hate being small")
+        expect(response).to redirect_to(bundle_path(bundle.external_id))
+        expect(flash[:notice]).to eq("Changes saved!")
       end
     end
 
@@ -405,11 +401,13 @@ describe BundlesController do
       end
 
       it "updates the bundle refund policy" do
-        put :update, params: bundle_params, as: :json
+        put :update, params: bundle_params
         bundle.reload
         expect(bundle.product_refund_policy_enabled).to be(true)
         expect(bundle.product_refund_policy.title).to eq("30-day money back guarantee")
         expect(bundle.product_refund_policy.fine_print).to eq("I really hate being small")
+        expect(response).to redirect_to(bundle_path(bundle.external_id))
+        expect(flash[:notice]).to eq("Changes saved!")
       end
 
       context "with bundle refund policy enabled" do
@@ -419,10 +417,12 @@ describe BundlesController do
 
         it "disables the product refund policy" do
           bundle_params[:product_refund_policy_enabled] = false
-          put :update, params: bundle_params, as: :json
+          put :update, params: bundle_params
           bundle.reload
           expect(bundle.product_refund_policy_enabled).to be(false)
           expect(bundle.product_refund_policy).to be_nil
+          expect(response).to redirect_to(bundle_path(bundle.external_id))
+          expect(flash[:notice]).to eq("Changes saved!")
         end
       end
     end
@@ -446,8 +446,8 @@ describe BundlesController do
           bundle.reload
         end.to_not change { bundle.bundle_products.count }
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body["error_message"]).to eq("Validation failed: A call product cannot be added to a bundle")
+        expect(response).to redirect_to(bundle_path(bundle.external_id))
+        expect(flash[:alert]).to eq("Validation failed: A call product cannot be added to a bundle")
       end
     end
 
@@ -474,6 +474,8 @@ describe BundlesController do
         expect(product.bundle_products.first.product).to eq(versioned_product)
         expect(product.bundle_products.first.variant).to eq(versioned_product.alive_variants.first)
         expect(product.bundle_products.first.quantity).to eq(1)
+        expect(response).to redirect_to(bundle_path(product.external_id))
+        expect(flash[:notice]).to eq("Changes saved!")
       end
     end
 
@@ -484,11 +486,11 @@ describe BundlesController do
             id: bundle.external_id,
             custom_permalink: "*",
             bundle_products: [],
-          }, as: :json
+          }
         end.to change { bundle.bundle_products.count }.by(0)
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body["error_message"]).to eq("Custom permalink is invalid")
+        expect(response).to redirect_to(bundle_path(bundle.external_id))
+        expect(flash[:alert]).to eq("Custom permalink is invalid")
       end
     end
 

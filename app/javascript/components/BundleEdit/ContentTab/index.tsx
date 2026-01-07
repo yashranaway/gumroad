@@ -1,7 +1,6 @@
+import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
-
-import { searchProducts } from "$app/data/bundle";
-import { AbortError, assertResponseError } from "$app/utils/request";
+import { cast } from "ts-safe-cast";
 
 import { BundleContentUpdatedStatus } from "$app/components/BundleEdit/ContentTab/BundleContentUpdatedStatus";
 import { BundleProductItem } from "$app/components/BundleEdit/ContentTab/BundleProductItem";
@@ -13,55 +12,119 @@ import { CartItemList } from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
-import { useRunOnce } from "$app/components/useRunOnce";
 
 const RESULTS_PER_PAGE = 10;
+
+type PageProps = {
+  search_products?: BundleProduct[];
+  search_has_more?: boolean;
+};
+
 export const ContentTab = () => {
-  const { bundle, updateBundle, id, productsCount, hasOutdatedPurchases } = useBundleEditContext();
-  const [results, setResults] = React.useState<BundleProduct[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [hasMoreResults, setHasMoreResults] = React.useState(true);
+  const {
+    bundle,
+    updateBundle,
+    productsCount,
+    hasOutdatedPurchases,
+    searchProducts: initialSearchProducts,
+    searchHasMore: initialSearchHasMore,
+  } = useBundleEditContext();
+  const pageProps = cast<PageProps>(usePage().props);
+
+  const [results, setResults] = React.useState<BundleProduct[]>(
+    pageProps.search_products || initialSearchProducts || [],
+  );
+  const [hasMoreResults, setHasMoreResults] = React.useState(pageProps.search_has_more ?? initialSearchHasMore ?? true);
+  const [isLoading, setIsLoading] = React.useState(false);
   const [query, setQuery] = React.useState("");
 
-  const activeRequest = React.useRef<{ cancel: () => void } | null>();
-  const loadSearchResults = async ({ query = "", loadMore = false, all = false } = {}) => {
-    if (!hasMoreResults && loadMore) return results;
-    setIsLoading(true);
-    let newResults = results;
-    try {
-      activeRequest.current?.cancel();
-      const request = searchProducts({ product_id: id, query, from: loadMore ? results.length + 1 : 0, all });
-      activeRequest.current = request;
-      newResults = loadMore ? [...results, ...(await request.response)] : await request.response;
-      setResults(newResults);
-      setHasMoreResults(!(all || newResults.length < RESULTS_PER_PAGE));
-      activeRequest.current = null;
-    } catch (e) {
-      if (e instanceof AbortError) return newResults;
-      assertResponseError(e);
-      showAlert(e.message, "error");
+  React.useEffect(() => {
+    if (pageProps.search_products !== undefined) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const pageParam = urlParams.get("page");
+      if (!pageParam || parseInt(pageParam, 10) === 1) {
+        setResults(pageProps.search_products);
+        setHasMoreResults(pageProps.search_has_more ?? false);
+      }
     }
-    setIsLoading(false);
-    return newResults;
+  }, [pageProps.search_products, pageProps.search_has_more]);
+
+  const lastProcessedResultsRef = React.useRef<string>("");
+  React.useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("all") === "true" && results.length > 0) {
+      const resultsKey = results
+        .map((p) => p.id)
+        .sort()
+        .join(",");
+      if (lastProcessedResultsRef.current !== resultsKey) {
+        lastProcessedResultsRef.current = resultsKey;
+        const currentProductIds = new Set(bundle.products.map((p) => p.id));
+        const newProductIds = new Set(results.map((p) => p.id));
+        const areEqual =
+          currentProductIds.size === newProductIds.size && [...currentProductIds].every((id) => newProductIds.has(id));
+        if (!areEqual) {
+          updateBundle({ products: results });
+        }
+      }
+    } else if (urlParams.get("all") !== "true") {
+      lastProcessedResultsRef.current = "";
+    }
+  }, [results, updateBundle, bundle.products]);
+
+  const debouncedSearch = useDebouncedCallback((searchQuery: string) => {
+    router.reload({
+      data: { query: searchQuery || undefined, page: undefined, all: undefined },
+      only: ["search_products", "search_has_more"],
+      reset: ["search_products"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => setIsLoading(false),
+    });
+  }, 300);
+
+  useOnChange(() => debouncedSearch(query), [query]);
+
+  const handleLoadMore = () => {
+    if (!hasMoreResults || isLoading) return;
+    const currentPage = Math.floor(results.length / RESULTS_PER_PAGE);
+    router.reload({
+      data: { query: query || undefined, page: currentPage + 1 },
+      only: ["search_products", "search_has_more"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => setIsLoading(false),
+      onSuccess: (page) => {
+        const props = cast<PageProps>(page.props);
+        const searchProducts = props.search_products;
+        if (searchProducts && Array.isArray(searchProducts)) {
+          setResults((prev) => [...prev, ...searchProducts]);
+        }
+        if (typeof props.search_has_more === "boolean") {
+          setHasMoreResults(props.search_has_more);
+        }
+      },
+    });
   };
 
-  useRunOnce(() => void loadSearchResults());
-  useOnChange(
-    useDebouncedCallback(() => void loadSearchResults({ query }), 300),
-    [query],
-  );
+  const handleLoadAll = () => {
+    router.reload({
+      data: { query: query || undefined, all: true, page: undefined },
+      only: ["search_products", "search_has_more"],
+      reset: ["search_products"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => setIsLoading(false),
+    });
+  };
 
   const formRef = React.useRef<HTMLFormElement>(null);
   useOnScrollToBottom(
     formRef,
     () => {
-      if (!activeRequest.current) void loadSearchResults({ query, loadMore: true });
+      if (!isLoading) handleLoadMore();
     },
     30,
   );
@@ -103,13 +166,13 @@ export const ContentTab = () => {
                     type="checkbox"
                     checked={bundle.products.length === productsCount}
                     disabled={isLoading}
-                    onChange={(evt) =>
-                      evt.target.checked
-                        ? void loadSearchResults({ query, loadMore: true, all: true }).then((results) =>
-                            updateBundle({ products: results }),
-                          )
-                        : updateBundle({ products: [] })
-                    }
+                    onChange={(evt) => {
+                      if (evt.target.checked) {
+                        handleLoadAll();
+                      } else {
+                        updateBundle({ products: [] });
+                      }
+                    }}
                   />
                   All products
                 </label>

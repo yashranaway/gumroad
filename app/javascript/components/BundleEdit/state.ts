@@ -28,6 +28,8 @@ export const BundleEditContext = React.createContext<{
   hasOutdatedPurchases: boolean;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
+  searchProducts?: BundleProduct[];
+  searchHasMore?: boolean;
 } | null>(null);
 export const useBundleEditContext = () => assertDefined(React.useContext(BundleEditContext));
 

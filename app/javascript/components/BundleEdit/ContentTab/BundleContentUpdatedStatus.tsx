@@ -1,12 +1,25 @@
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
-import { updatePurchasesContent } from "$app/data/bundle";
-import { assertResponseError } from "$app/utils/request";
+import { ResponseError, request, assertResponseError } from "$app/utils/request";
 
 import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+
+const updatePurchasesContent = async (id: string) => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.update_purchases_content_bundle_path(id),
+  });
+
+  if (!response.ok)
+    await response.json().then((json) => {
+      throw new ResponseError(cast<{ error: string }>(json).error);
+    });
+};
 
 export const BundleContentUpdatedStatus = () => {
   const { id } = useBundleEditContext();

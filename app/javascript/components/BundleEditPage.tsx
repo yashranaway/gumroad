@@ -74,13 +74,14 @@ export const BundleEditPage = ({
   search_has_more: initialSearchHasMore,
 }: BundleEditPageProps) => {
   const [bundle, setBundle] = React.useState(initialBundle);
-  const updateBundle = (update: Partial<Bundle> | ((bundle: Bundle) => void)) =>
+  const updateBundle = React.useCallback((update: Partial<Bundle> | ((bundle: Bundle) => void)) => {
     setBundle((prevBundle) => {
       const updated = { ...prevBundle };
       if (typeof update === "function") update(updated);
       else Object.assign(updated, update);
       return updated;
     });
+  }, []);
 
   useRunOnce(() => {
     if (!is_bundle)
@@ -118,4 +119,3 @@ export const BundleEditPage = ({
     </BundleEditContext.Provider>
   );
 };
-
