@@ -1,5 +1,4 @@
 import * as React from "react";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
@@ -16,23 +15,7 @@ import { ProfileSection } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-const routes = [
-  {
-    path: "/bundles/:id",
-    element: <ProductTab />,
-    handle: "product",
-  },
-  {
-    path: "/bundles/:id/content",
-    element: <ContentTab />,
-    handle: "content",
-  },
-  {
-    path: "/bundles/:id/share",
-    element: <ShareTab />,
-    handle: "share",
-  },
-];
+type Tab = "product" | "content" | "share";
 
 export type BundleEditPageProps = {
   bundle: Bundle;
@@ -74,6 +57,8 @@ export const BundleEditPage = ({
   search_has_more: initialSearchHasMore,
 }: BundleEditPageProps) => {
   const [bundle, setBundle] = React.useState(initialBundle);
+  const [activeTab, setActiveTab] = React.useState<Tab>("product");
+
   const updateBundle = React.useCallback((update: Partial<Bundle> | ((bundle: Bundle) => void)) => {
     setBundle((prevBundle) => {
       const updated = { ...prevBundle };
@@ -87,8 +72,6 @@ export const BundleEditPage = ({
     if (!is_bundle)
       showAlert("Select products and save your changes to finish converting this product to a bundle.", "warning");
   });
-
-  const router = createBrowserRouter(routes);
 
   const contextValue = React.useMemo(
     () => ({
@@ -107,15 +90,30 @@ export const BundleEditPage = ({
       hasOutdatedPurchases: has_outdated_purchases,
       seller_refund_policy_enabled,
       seller_refund_policy,
+      activeTab,
+      setActiveTab,
       ...(initialSearchProducts !== undefined ? { searchProducts: initialSearchProducts } : {}),
       ...(initialSearchHasMore !== undefined ? { searchHasMore: initialSearchHasMore } : {}),
     }),
-    [bundle, initialSearchProducts, initialSearchHasMore],
+    [bundle, initialSearchProducts, initialSearchHasMore, activeTab],
   );
+
+  const renderTab = () => {
+    switch (activeTab) {
+      case "product":
+        return <ProductTab />;
+      case "content":
+        return <ContentTab />;
+      case "share":
+        return <ShareTab />;
+      default:
+        return <ProductTab />;
+    }
+  };
 
   return (
     <BundleEditContext.Provider value={contextValue}>
-      <RouterProvider router={router} />
+      {renderTab()}
     </BundleEditContext.Provider>
   );
 };
