@@ -7,13 +7,19 @@ import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
 import { NavigationButton } from "$app/components/Button";
-import { getNotForSaleMessage, Product, ProductDiscount, Purchase, RestartableSubscription } from "$app/components/Product";
-import { ResumeSubscriptionModal } from "$app/components/Product/ResumeSubscriptionModal";
+import {
+  getNotForSaleMessage,
+  Product,
+  ProductDiscount,
+  Purchase,
+  RestartableSubscription,
+} from "$app/components/Product";
 import {
   applySelection,
   hasMetDiscountConditions,
   PriceSelection,
 } from "$app/components/Product/ConfigurationSelector";
+import { ResumeSubscriptionModal } from "$app/components/Product/ResumeSubscriptionModal";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -81,7 +87,16 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
 
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
   (
-    { product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false, restartableSubscription },
+    {
+      product,
+      purchase,
+      discountCode,
+      selection,
+      label,
+      onClick,
+      showInstallmentPlanNotes = false,
+      restartableSubscription,
+    },
     ref,
   ) => {
     const [showResumeModal, setShowResumeModal] = React.useState(false);

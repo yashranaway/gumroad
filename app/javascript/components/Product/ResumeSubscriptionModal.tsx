@@ -15,7 +15,7 @@ export const ResumeSubscriptionModal = ({ open, onClose, onStartNewSubscription,
     open={open}
     onClose={onClose}
     title="Resume your previous subscription?"
-    className="!border-2 !border-black !shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+    className="!border-2 !border-black !shadow-[4px_4px_black] dark:!border-white dark:!shadow-[4px_4px_white]"
   >
     <div className="flex flex-col gap-6">
       <p className="text-lg">
