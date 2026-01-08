@@ -18,11 +18,10 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
 
-const RESULTS_PER_PAGE = 10;
-
 type PageProps = {
   search_products?: BundleProduct[];
   search_has_more?: boolean;
+  search_page?: number;
 };
 
 export const ContentTab = () => {
@@ -36,23 +35,11 @@ export const ContentTab = () => {
   } = useBundleEditContext();
   const pageProps = cast<PageProps>(usePage().props);
 
-  const [results, setResults] = React.useState<BundleProduct[]>(
-    pageProps.search_products || initialSearchProducts || [],
-  );
-  const [hasMoreResults, setHasMoreResults] = React.useState(pageProps.search_has_more ?? initialSearchHasMore ?? true);
+  const results = pageProps.search_products || initialSearchProducts || [];
+  const hasMoreResults = pageProps.search_has_more ?? initialSearchHasMore ?? false;
+  const currentPage = pageProps.search_page ?? 1;
   const [isLoading, setIsLoading] = React.useState(false);
   const [query, setQuery] = React.useState("");
-
-  React.useEffect(() => {
-    if (pageProps.search_products !== undefined) {
-      const urlParams = new URLSearchParams(window.location.search);
-      const pageParam = urlParams.get("page");
-      if (!pageParam || parseInt(pageParam, 10) === 1) {
-        setResults(pageProps.search_products);
-        setHasMoreResults(pageProps.search_has_more ?? false);
-      }
-    }
-  }, [pageProps.search_products, pageProps.search_has_more]);
 
   const lastProcessedResultsRef = React.useRef<string>("");
   React.useEffect(() => {
@@ -91,22 +78,12 @@ export const ContentTab = () => {
 
   const handleLoadMore = () => {
     if (!hasMoreResults || isLoading) return;
-    const currentPage = Math.floor(results.length / RESULTS_PER_PAGE);
     router.reload({
       data: { query: query || undefined, page: currentPage + 1 },
-      only: ["search_products", "search_has_more"],
+      only: ["search_products", "search_has_more", "search_page"],
+      preserveUrl: true,
       onStart: () => setIsLoading(true),
       onFinish: () => setIsLoading(false),
-      onSuccess: (page) => {
-        const props = cast<PageProps>(page.props);
-        const searchProducts = props.search_products;
-        if (searchProducts && Array.isArray(searchProducts)) {
-          setResults((prev) => [...prev, ...searchProducts]);
-        }
-        if (typeof props.search_has_more === "boolean") {
-          setHasMoreResults(props.search_has_more);
-        }
-      },
     });
   };
 

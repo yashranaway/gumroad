@@ -2,6 +2,7 @@ import { useForm } from "@inertiajs/react";
 import * as React from "react";
 
 import { setProductPublished } from "$app/data/publish_product";
+import { assertResponseError } from "$app/utils/request";
 
 import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
@@ -81,11 +82,16 @@ export const Layout = ({
 
   const setPublished = (published: boolean) => {
     saveBundle(async () => {
-      await setProductPublished(uniquePermalink, published);
-      updateBundle({ is_published: published });
-      showAlert(published ? "Published!" : "Unpublished!", "success");
-      if (activeTab === "share") setActiveTab("content");
-      else if (published) setActiveTab("share");
+      try {
+        await setProductPublished(uniquePermalink, published);
+        updateBundle({ is_published: published });
+        showAlert(published ? "Published!" : "Unpublished!", "success");
+        if (activeTab === "share") setActiveTab("content");
+        else if (published) setActiveTab("share");
+      } catch (e) {
+        assertResponseError(e);
+        showAlert(e.message, "error");
+      }
     });
   };
 
@@ -99,8 +105,8 @@ export const Layout = ({
     : isUploadingFilesOrImages
       ? "Images are still uploading..."
       : isBusy
-      ? "Please wait..."
-      : undefined;
+        ? "Please wait..."
+        : undefined;
 
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
@@ -119,6 +125,14 @@ export const Layout = ({
 
     if (message) {
       showAlert(message, "warning");
+      return;
+    }
+
+    if (tab === "share" && !bundle.is_published) {
+      showAlert(
+        "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
+        "warning",
+      );
       return;
     }
 
@@ -149,11 +163,7 @@ export const Layout = ({
               </CopyToClipboard>
             </>
           ) : activeTab === "product" ? (
-            <Button
-              color="primary"
-              disabled={isBusy}
-              onClick={() => saveBundle(() => setActiveTab("content"))}
-            >
+            <Button color="primary" disabled={isBusy} onClick={() => saveBundle(() => setActiveTab("content"))}>
               {form.processing ? "Saving changes..." : "Save and continue"}
             </Button>
           ) : (
@@ -193,14 +203,7 @@ export const Layout = ({
             isSelected={activeTab === "share"}
             onClick={(e) => {
               e.preventDefault();
-              onTabClick("share", () => {
-                if (!bundle.is_published) {
-                  showAlert(
-                    "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-                    "warning",
-                  );
-                }
-              });
+              onTabClick("share");
             }}
             href="#"
           >

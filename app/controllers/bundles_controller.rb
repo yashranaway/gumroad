@@ -1,11 +1,9 @@
 # frozen_string_literal: true
 
 class BundlesController < Sellers::BaseController
-  include SearchProducts, Product::BundlesMarketing
+  include Product::BundlesMarketing
 
   layout "inertia"
-
-  PER_PAGE = 10
 
   def show
     bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
@@ -16,12 +14,26 @@ class BundlesController < Sellers::BaseController
 
     props = BundlePresenter.new(bundle:).bundle_props
 
-    if params[:query].present? || params[:page].present? || params[:all] == "true"
-      page = params[:page]&.to_i || 1
-      from = (page - 1) * PER_PAGE
-      search_products = fetch_search_products(bundle, params[:query], from, params[:all] == "true")
-      props[:search_products] = search_products[:products]
-      props[:search_has_more] = search_products[:has_more]
+    search_results_proc = -> do
+      BundleSearchProductsService.new(
+        bundle:,
+        seller: current_seller,
+        query: params[:query].presence,
+        page: params[:page].presence || 1,
+        all: params[:all] == "true"
+      ).call
+    end
+
+    props[:search_products] = InertiaRails.defer(merge: true) do
+      search_results_proc.call[:products]
+    end
+
+    props[:search_has_more] = InertiaRails.defer do
+      search_results_proc.call[:has_more]
+    end
+
+    props[:search_page] = InertiaRails.defer do
+      search_results_proc.call[:page]
     end
 
     render inertia: "Bundles/Edit", props:
@@ -78,11 +90,10 @@ class BundlesController < Sellers::BaseController
       @bundle.save_tags!(bundle_permitted_params[:tags]) unless bundle_permitted_params[:tags].nil?
       @bundle.reorder_previews(bundle_permitted_params[:covers].map.with_index.to_h) if bundle_permitted_params[:covers].present?
       if !current_seller.account_level_refund_policy_enabled?
-        product_refund_enabled = ActiveModel::Type::Boolean.new.cast(bundle_permitted_params[:product_refund_policy_enabled])
-        @bundle.product_refund_policy_enabled = product_refund_enabled
-        if bundle_permitted_params[:refund_policy].present? && product_refund_enabled
+        @bundle.product_refund_policy_enabled = bundle_permitted_params[:product_refund_policy_enabled]
+        if bundle_permitted_params[:refund_policy].present? && @bundle.product_refund_policy_enabled
           @bundle.find_or_initialize_product_refund_policy.update!(bundle_permitted_params[:refund_policy])
-        elsif product_refund_enabled == false && @bundle.product_refund_policy.present?
+        elsif @bundle.product_refund_policy_enabled == false && @bundle.product_refund_policy.present?
           @bundle.product_refund_policy.destroy
         end
       end
@@ -93,7 +104,7 @@ class BundlesController < Sellers::BaseController
       @bundle.save!
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       error_message = @bundle.errors.full_messages.first || e.message
-      return redirect_to bundle_path(@bundle.external_id), alert: error_message, status: :see_other
+      return redirect_to bundle_path(@bundle.external_id), alert: error_message
     end
 
     redirect_to bundle_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
@@ -106,27 +117,6 @@ class BundlesController < Sellers::BaseController
 
     def create_from_email_permitted_params
       params.permit(:type, :price, products: [])
-    end
-
-    def fetch_search_products(bundle, query = nil, from = 0, all = false)
-      options = {
-        query:,
-        from:,
-        sort: ProductSortKey::FEATURED,
-        user_id: current_seller.id,
-        is_subscription: false,
-        is_bundle: false,
-        is_alive: true,
-        is_call: false,
-        exclude_ids: [ObfuscateIds.decrypt(bundle.external_id)],
-      }
-      options[:size] = PER_PAGE unless all
-
-      search_result = search_products(options)
-      products = search_result[:products].map { BundlePresenter.bundle_product(product: _1) }
-      has_more = !all && products.length >= PER_PAGE
-
-      { products:, has_more: }
     end
 
     def update_bundle_products(new_bundle_products)

@@ -35,6 +35,7 @@ class Api::Internal::ReceiptPreviewsController < Api::Internal::BaseController
   private
     def build_purchase_preview
       price_cents = @product.price_cents || 0
+      currency_type = @product.price_currency_type.presence || "usd"
 
       purchase_preview = PurchasePreview.new(
         link: @product,
@@ -42,9 +43,9 @@ class Api::Internal::ReceiptPreviewsController < Api::Internal::BaseController
         created_at: Time.current,
         quantity: 1,
         custom_fields: [],
-        formatted_total_display_price_per_unit: MoneyFormatter.format(price_cents, @product.price_currency_type.to_sym, no_cents_if_whole: true, symbol: true),
+        formatted_total_display_price_per_unit: MoneyFormatter.format(price_cents, currency_type.to_sym, no_cents_if_whole: true, symbol: true),
         shipping_cents: 0,
-        displayed_price_currency_type: @product.price_currency_type,
+        displayed_price_currency_type: currency_type,
         url_redirect: OpenStruct.new(
           token: "preview_token"
         ),
