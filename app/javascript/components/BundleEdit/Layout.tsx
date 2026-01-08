@@ -45,7 +45,6 @@ export const Layout = ({
 
   const form = useForm({});
 
-  // Helper to transform bundle data for form submission
   const transformBundleData = () => {
     form.transform(() => ({
       ...bundle,
@@ -60,7 +59,6 @@ export const Layout = ({
     }));
   };
 
-  // Helper to save bundle with custom success callback
   const saveBundle = (onSuccess?: () => void | Promise<void>) => {
     transformBundleData();
     form.put(Routes.bundle_path(id), {
