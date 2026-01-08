@@ -79,10 +79,8 @@ describe BundlesController, inertia: true do
     let(:product) { create(:product, user: seller) }
     let(:asset_previews) do
       previews = create_list(:asset_preview, 2, link: bundle)
-      # Ensure metadata is set to avoid validation errors when reorder_previews calls save!
       previews.each do |preview|
         if preview.file.attached?
-          # Ensure file is analyzed and has metadata
           preview.file.analyze unless preview.file.analyzed?
           metadata = preview.file.blob.metadata || {}
           unless metadata["height"] && metadata["width"]
