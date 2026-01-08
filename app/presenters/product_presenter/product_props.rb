@@ -180,7 +180,7 @@ class ProductPresenter::ProductProps
 
       {
         id: subscription.external_id,
-        manage_url: manage_subscription_url(subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}"),
+        manage_url: manage_subscription_url(subscription.external_id, token: subscription.token, host: "#{PROTOCOL}://#{DOMAIN}"),
       }
     end
 end

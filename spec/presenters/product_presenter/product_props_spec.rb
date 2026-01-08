@@ -551,7 +551,7 @@ describe ProductPresenter::ProductProps do
 
         expect(props[:restartable_subscription]).to eq({
           id: purchase.subscription.external_id,
-          manage_url: manage_subscription_url(purchase.subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}")
+          manage_url: manage_subscription_url(purchase.subscription.external_id, token: purchase.subscription.token, host: "#{PROTOCOL}://#{DOMAIN}")
         })
       end
 

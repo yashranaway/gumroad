@@ -846,11 +846,16 @@ class Link < ApplicationRecord
 
   def restartable_subscription_for(requested_user)
     return nil unless requested_user && is_recurring_billing?
+    return nil if requested_user.id == user_id
 
     subscriptions
       .where(user: requested_user)
       .not_is_test_subscription
-      .find { |subscription| subscription.deactivated? && subscription.alive_or_restartable? }
+      .where.not(deactivated_at: nil)
+      .where(ended_at: nil)
+      .where("(subscriptions.flags & ?) = 0", Subscription.flag_mapping["flags"][:cancelled_by_admin])
+      .order(deactivated_at: :desc)
+      .find { |subscription| subscription.alive_or_restartable? }
   end
 
   def save_duration!(duration)

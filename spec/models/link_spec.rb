@@ -4289,6 +4289,33 @@ describe Link, :vcr do
           expect(product.restartable_subscription_for(buyer)).to be_nil
         end
       end
+
+      context "when the seller views their own product with a cancelled subscription" do
+        let(:seller) { product.user }
+        let!(:purchase) { create(:membership_purchase, link: product, purchaser: seller) }
+
+        before do
+          purchase.subscription.update!(user: seller, failed_at: Time.current, deactivated_at: Time.current)
+        end
+
+        it "returns nil" do
+          expect(product.restartable_subscription_for(seller)).to be_nil
+        end
+      end
+
+      context "when the user has multiple cancelled subscriptions" do
+        let!(:old_purchase) { create(:membership_purchase, link: product, purchaser: buyer) }
+        let!(:recent_purchase) { create(:membership_purchase, link: product, purchaser: buyer) }
+
+        before do
+          old_purchase.subscription.update!(user: buyer, failed_at: 1.week.ago, deactivated_at: 1.week.ago)
+          recent_purchase.subscription.update!(user: buyer, failed_at: 1.day.ago, deactivated_at: 1.day.ago)
+        end
+
+        it "returns the most recently deactivated subscription" do
+          expect(product.restartable_subscription_for(buyer)).to eq(recent_purchase.subscription)
+        end
+      end
     end
   end
 
