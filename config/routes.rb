@@ -607,7 +607,9 @@ Rails.application.routes.draw do
 
     resources :bundles, only: [:show, :update] do
       member do
-        get "*other", to: "bundles#show"
+        get :edit, to: "bundles#show", defaults: { tab: "product" }
+        get "edit/content", to: "bundles#show", defaults: { tab: "content" }
+        get "edit/share", to: "bundles#show", defaults: { tab: "share" }
         post :update_purchases_content
       end
 

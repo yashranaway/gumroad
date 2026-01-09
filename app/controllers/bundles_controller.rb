@@ -6,37 +6,35 @@ class BundlesController < Sellers::BaseController
   layout "inertia"
 
   def show
-    bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
+    @bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
 
-    authorize bundle
+    authorize @bundle
 
-    @title = bundle.name
+    @title = @bundle.name
 
-    props = BundlePresenter.new(bundle:).bundle_props
+    tab = params[:tab] || "product"
+    props = BundlePresenter.new(bundle: @bundle).bundle_props
+    props[:tab] = tab
 
-    search_results_proc = -> do
-      BundleSearchProductsService.new(
-        bundle:,
-        seller: current_seller,
-        query: params[:query].presence,
-        page: params[:page].presence || 1,
-        all: params[:all] == "true"
-      ).call
+    if tab == "content"
+      props[:search_products] = InertiaRails.defer(merge: true) do
+        search_results[:products]
+      end
+
+      props[:search_has_more] = InertiaRails.defer do
+        search_results[:has_more]
+      end
+
+      props[:search_page] = InertiaRails.defer do
+        search_results[:page]
+      end
+
+      render inertia: "Bundles/ContentTab", props:
+    elsif tab == "share"
+      render inertia: "Bundles/ShareTab", props:
+    else
+      render inertia: "Bundles/ProductTab", props:
     end
-
-    props[:search_products] = InertiaRails.defer(merge: true) do
-      search_results_proc.call[:products]
-    end
-
-    props[:search_has_more] = InertiaRails.defer do
-      search_results_proc.call[:has_more]
-    end
-
-    props[:search_page] = InertiaRails.defer do
-      search_results_proc.call[:page]
-    end
-
-    render inertia: "Bundles/Edit", props:
   end
 
   def create_from_email
@@ -163,5 +161,15 @@ class BundlesController < Sellers::BaseController
       if bundle_permitted_params[:installment_plan].present?
         @bundle.create_installment_plan!(bundle_permitted_params[:installment_plan])
       end
+    end
+
+    def search_results
+      @search_results ||= BundleSearchProductsService.new(
+        bundle: @bundle,
+        seller: current_seller,
+        query: params[:query].presence,
+        page: params[:page].presence || 1,
+        all: params[:all] == "true"
+      ).call
     end
 end

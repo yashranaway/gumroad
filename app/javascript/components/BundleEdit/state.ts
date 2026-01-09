@@ -30,8 +30,6 @@ export const BundleEditContext = React.createContext<{
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   searchProducts?: BundleProduct[];
   searchHasMore?: boolean;
-  activeTab: "product" | "content" | "share";
-  setActiveTab: (tab: "product" | "content" | "share") => void;
 } | null>(null);
 export const useBundleEditContext = () => assertDefined(React.useContext(BundleEditContext));
 

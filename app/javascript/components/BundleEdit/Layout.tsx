@@ -1,5 +1,6 @@
-import { useForm } from "@inertiajs/react";
+import { Link, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
 import { setProductPublished } from "$app/data/publish_product";
 import { assertResponseError } from "$app/utils/request";
@@ -37,9 +38,11 @@ export const Layout = ({
   preview: React.ReactNode;
   isLoading?: boolean;
 }) => {
-  const { bundle, updateBundle, id, uniquePermalink, activeTab, setActiveTab } = useBundleEditContext();
+  const { bundle, updateBundle, id, uniquePermalink } = useBundleEditContext();
+  const { tab } = cast<{ tab: "product" | "content" | "share" }>(usePage().props);
 
   const url = useProductUrl();
+  const rootPath = Routes.edit_bundle_path(id);
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
@@ -84,8 +87,11 @@ export const Layout = ({
         await setProductPublished(uniquePermalink, published);
         updateBundle({ is_published: published });
         showAlert(published ? "Published!" : "Unpublished!", "success");
-        if (activeTab === "share") setActiveTab("content");
-        else if (published) setActiveTab("share");
+        if (tab === "share") {
+          router.visit(Routes.edit_content_bundle_path(id));
+        } else if (published) {
+          router.visit(Routes.edit_share_bundle_path(id));
+        }
       } catch (e) {
         assertResponseError(e);
         showAlert(e.message, "error");
@@ -114,7 +120,7 @@ export const Layout = ({
     </WithTooltip>
   );
 
-  const onTabClick = (tab: "product" | "content" | "share", callback?: () => void) => {
+  const handleTabClick = (e: React.MouseEvent, targetTab: "product" | "content" | "share") => {
     const message = isUploadingFiles
       ? "Some files are still uploading, please wait..."
       : isUploadingFilesOrImages
@@ -122,20 +128,18 @@ export const Layout = ({
         : undefined;
 
     if (message) {
+      e.preventDefault();
       showAlert(message, "warning");
       return;
     }
 
-    if (tab === "share" && !bundle.is_published) {
+    if (targetTab === "share" && !bundle.is_published) {
+      e.preventDefault();
       showAlert(
         "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
         "warning",
       );
-      return;
     }
-
-    setActiveTab(tab);
-    callback?.();
   };
 
   return (
@@ -160,8 +164,12 @@ export const Layout = ({
                 </Button>
               </CopyToClipboard>
             </>
-          ) : activeTab === "product" ? (
-            <Button color="primary" disabled={isBusy} onClick={() => saveBundle(() => setActiveTab("content"))}>
+          ) : tab === "product" ? (
+            <Button
+              color="primary"
+              disabled={isBusy}
+              onClick={() => saveBundle(() => router.visit(Routes.edit_content_bundle_path(id)))}
+            >
               {form.processing ? "Saving changes..." : "Save and continue"}
             </Button>
           ) : (
@@ -177,35 +185,20 @@ export const Layout = ({
         }
       >
         <Tabs style={{ gridColumn: 1 }}>
-          <Tab
-            isSelected={activeTab === "product"}
-            onClick={(e) => {
-              e.preventDefault();
-              onTabClick("product");
-            }}
-            href="#"
-          >
-            Product
+          <Tab asChild isSelected={tab === "product"}>
+            <Link href={rootPath} onClick={(e) => handleTabClick(e, "product")}>
+              Product
+            </Link>
           </Tab>
-          <Tab
-            isSelected={activeTab === "content"}
-            onClick={(e) => {
-              e.preventDefault();
-              onTabClick("content");
-            }}
-            href="#"
-          >
-            Content
+          <Tab asChild isSelected={tab === "content"}>
+            <Link href={Routes.edit_content_bundle_path(id)} onClick={(e) => handleTabClick(e, "content")}>
+              Content
+            </Link>
           </Tab>
-          <Tab
-            isSelected={activeTab === "share"}
-            onClick={(e) => {
-              e.preventDefault();
-              onTabClick("share");
-            }}
-            href="#"
-          >
-            Share
+          <Tab asChild isSelected={tab === "share"}>
+            <Link href={Routes.edit_share_bundle_path(id)} onClick={(e) => handleTabClick(e, "share")}>
+              Share
+            </Link>
           </Tab>
         </Tabs>
       </PageHeader>

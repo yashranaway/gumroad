@@ -12,11 +12,33 @@ describe BundlesController, inertia: true do
   include_context "with user signed in as admin for seller"
 
   describe "GET show" do
-    it "renders the Inertia component with bundle props and sets the title" do
+    it "renders the ProductTab Inertia component with bundle props and sets the title" do
       get :show, params: { id: bundle.external_id }
       expect(response).to be_successful
-      expect(inertia.component).to eq("Bundles/Edit")
+      expect(inertia.component).to eq("Bundles/ProductTab")
       expect(inertia.props).to have_key(:bundle)
+      expect(inertia.props).to have_key(:tab)
+      expect(inertia.props[:tab]).to eq("product")
+      expect(assigns(:title)).to eq(bundle.name)
+    end
+
+    it "renders the ContentTab Inertia component when tab is content" do
+      get :show, params: { id: bundle.external_id, tab: "content" }
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Bundles/ContentTab")
+      expect(inertia.props).to have_key(:bundle)
+      expect(inertia.props).to have_key(:tab)
+      expect(inertia.props[:tab]).to eq("content")
+      expect(assigns(:title)).to eq(bundle.name)
+    end
+
+    it "renders the ShareTab Inertia component when tab is share" do
+      get :show, params: { id: bundle.external_id, tab: "share" }
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Bundles/ShareTab")
+      expect(inertia.props).to have_key(:bundle)
+      expect(inertia.props).to have_key(:tab)
+      expect(inertia.props[:tab]).to eq("share")
       expect(assigns(:title)).to eq(bundle.name)
     end
 

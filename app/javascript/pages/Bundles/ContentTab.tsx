@@ -9,15 +9,11 @@ import { CurrencyCode } from "$app/utils/currency";
 import { Taxonomy } from "$app/utils/discover";
 
 import { ContentTab } from "$app/components/BundleEdit/ContentTab";
-import { ProductTab } from "$app/components/BundleEdit/ProductTab";
-import { ShareTab } from "$app/components/BundleEdit/ShareTab";
 import { Bundle, BundleEditContext, BundleProduct } from "$app/components/BundleEdit/state";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ProfileSection } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
-
-type Tab = "product" | "content" | "share";
 
 type BundleEditPageProps = {
   bundle: Bundle;
@@ -39,7 +35,7 @@ type BundleEditPageProps = {
   search_has_more?: boolean;
 };
 
-export default function BundlesEdit() {
+export default function BundlesContentTab() {
   const {
     bundle: initialBundle,
     id,
@@ -61,7 +57,6 @@ export default function BundlesEdit() {
   } = cast<BundleEditPageProps>(usePage().props);
 
   const [bundle, setBundle] = React.useState(initialBundle);
-  const [activeTab, setActiveTab] = React.useState<Tab>("product");
 
   const updateBundle = React.useCallback((update: Partial<Bundle> | ((bundle: Bundle) => void)) => {
     setBundle((prevBundle) => {
@@ -94,30 +89,15 @@ export default function BundlesEdit() {
       hasOutdatedPurchases: has_outdated_purchases,
       seller_refund_policy_enabled,
       seller_refund_policy,
-      activeTab,
-      setActiveTab,
       ...(initialSearchProducts !== undefined ? { searchProducts: initialSearchProducts } : {}),
       ...(initialSearchHasMore !== undefined ? { searchHasMore: initialSearchHasMore } : {}),
     }),
-    [bundle, initialSearchProducts, initialSearchHasMore, activeTab],
+    [bundle, initialSearchProducts, initialSearchHasMore],
   );
-
-  const renderTab = () => {
-    switch (activeTab) {
-      case "product":
-        return <ProductTab />;
-      case "content":
-        return <ContentTab />;
-      case "share":
-        return <ShareTab />;
-      default:
-        return <ProductTab />;
-    }
-  };
 
   return (
     <BundleEditContext.Provider value={contextValue}>
-      {renderTab()}
+      <ContentTab />
     </BundleEditContext.Provider>
   );
 }
