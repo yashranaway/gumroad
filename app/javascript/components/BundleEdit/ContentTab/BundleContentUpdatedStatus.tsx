@@ -12,7 +12,7 @@ const updatePurchasesContent = async (id: string) => {
   const response = await request({
     method: "POST",
     accept: "json",
-    url: Routes.update_purchases_content_bundle_path(id),
+    url: Routes.bundles_update_purchases_content_content_path(id),
   });
 
   if (!response.ok)

@@ -605,17 +605,25 @@ Rails.application.routes.draw do
       get :compute_discount
     end
 
-    resources :bundles, only: [:show, :update] do
-      member do
-        get :edit, to: "bundles#show", defaults: { tab: "product" }
-        get "edit/content", to: "bundles#show", defaults: { tab: "content" }
-        get "edit/share", to: "bundles#show", defaults: { tab: "share" }
-        post :update_purchases_content
-      end
-
+    resources :bundles, only: [:show] do
       collection do
         get :create_from_email
       end
+    end
+
+    namespace :bundles do
+      get ":id/edit", to: "product#edit", as: :edit_product
+      patch ":id/edit", to: "product#update"
+      put ":id/edit", to: "product#update"
+
+      get ":id/edit/content", to: "content#edit", as: :edit_content
+      patch ":id/edit/content", to: "content#update"
+      put ":id/edit/content", to: "content#update"
+      post ":id/edit/content/update_purchases_content", to: "content#update_purchases_content", as: :update_purchases_content_content
+
+      get ":id/edit/share", to: "share#edit", as: :edit_share
+      patch ":id/edit/share", to: "share#update"
+      put ":id/edit/share", to: "share#update"
     end
 
     resources :links, except: [:edit, :show, :update, :new] do
