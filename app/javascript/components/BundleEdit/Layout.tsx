@@ -178,9 +178,7 @@ export const Layout = ({
       {preview ? (
         <WithPreviewSidebar className="flex-1">
           {children}
-          <PreviewSidebar
-            previewLink={(props) => <Button {...props} onClick={handlePreviewClick} disabled={isBusy} />}
-          >
+          <PreviewSidebar previewLink={(props) => <Button {...props} onClick={handlePreviewClick} disabled={isBusy} />}>
             <Preview
               scaleFactor={0.4}
               style={{

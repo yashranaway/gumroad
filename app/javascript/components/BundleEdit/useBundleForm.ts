@@ -50,7 +50,7 @@ export const useBundleForm = ({ initialBundle, id, uniquePermalink, currentTab }
     setIsSaving(true);
     saveBundle()
       .then(() => showAlert("Changes saved!", "success"))
-      .catch((e: Error) => showAlert(e.message, "error"))
+      .catch((e: unknown) => showAlert(e instanceof Error ? e.message : "An error occurred", "error"))
       .finally(() => setIsSaving(false));
   }, [saveBundle]);
 
