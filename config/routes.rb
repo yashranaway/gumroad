@@ -606,20 +606,16 @@ Rails.application.routes.draw do
     end
 
     resources :bundles, only: [:update] do
+      collection do
+        get :products
+        get :create_from_email
+      end
+
       member do
         get :edit, action: :edit
         get "edit/content", action: :edit_content, as: :edit_content
         get "edit/share", action: :edit_share, as: :edit_share
         post :update_purchases_content
-        # Redirect old paths to new Inertia paths
-        get "/", to: redirect { |params, _request| "/bundles/#{params[:id]}/edit" }
-        get "/content", to: redirect { |params, _request| "/bundles/#{params[:id]}/edit/content" }
-        get "/share", to: redirect { |params, _request| "/bundles/#{params[:id]}/edit/share" }
-      end
-
-      collection do
-        get :products
-        get :create_from_email
       end
     end
 

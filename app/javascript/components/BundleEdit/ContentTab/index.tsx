@@ -28,6 +28,7 @@ export const ContentTab = () => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [hasMoreResults, setHasMoreResults] = React.useState(true);
   const [query, setQuery] = React.useState("");
+  const [totalResultsCount, setTotalResultsCount] = React.useState<number | null>(null);
 
   const activeRequest = React.useRef<{ cancel: () => void } | null>();
   const loadSearchResults = async ({ query = "", loadMore = false, all = false } = {}) => {
@@ -40,7 +41,9 @@ export const ContentTab = () => {
       activeRequest.current = request;
       newResults = loadMore ? [...results, ...(await request.response)] : await request.response;
       setResults(newResults);
-      setHasMoreResults(!(all || newResults.length < RESULTS_PER_PAGE));
+      const allLoaded = all || newResults.length < RESULTS_PER_PAGE;
+      setHasMoreResults(!allLoaded);
+      if (allLoaded) setTotalResultsCount(newResults.length);
       activeRequest.current = null;
     } catch (e) {
       if (e instanceof AbortError) return newResults;
@@ -101,11 +104,11 @@ export const ContentTab = () => {
                 <label>
                   <input
                     type="checkbox"
-                    checked={bundle.products.length === productsCount}
+                    checked={bundle.products.length === (totalResultsCount ?? productsCount)}
                     disabled={isLoading}
                     onChange={(evt) =>
                       evt.target.checked
-                        ? void loadSearchResults({ query, loadMore: true, all: true }).then((results) =>
+                        ? void loadSearchResults({ query, all: true }).then((results) =>
                             updateBundle({ products: results }),
                           )
                         : updateBundle({ products: [] })
