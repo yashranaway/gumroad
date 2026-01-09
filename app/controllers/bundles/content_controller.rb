@@ -39,7 +39,7 @@ class Bundles::ContentController < Bundles::BaseController
   end
 
   def update_purchases_content
-    authorize @bundle, :update?
+
 
     return render json: { error: "This bundle has no purchases with outdated content." }, status: :forbidden unless @bundle.has_outdated_purchases?
 

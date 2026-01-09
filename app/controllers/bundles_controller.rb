@@ -28,7 +28,7 @@ class BundlesController < Sellers::BaseController
     end
     bundle.save!
 
-    redirect_to bundle_path(bundle.external_id)
+    redirect_to bundles_edit_product_path(bundle.external_id)
   end
 
   private

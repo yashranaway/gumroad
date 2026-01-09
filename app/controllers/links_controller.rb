@@ -325,7 +325,7 @@ class LinksController < ApplicationController
     fetch_product_by_unique_permalink
     authorize @product
 
-    redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+    redirect_to bundles_edit_product_path(@product.external_id) if @product.is_bundle?
 
     @title = @product.name
 
