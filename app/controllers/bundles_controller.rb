@@ -5,14 +5,31 @@ class BundlesController < Sellers::BaseController
 
   PER_PAGE = 10
 
-  def show
-    bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
+  before_action :set_bundle, only: %i[edit edit_content edit_share update update_purchases_content]
+  before_action :set_title, only: %i[edit edit_content edit_share]
 
-    authorize bundle
+  layout "inertia", only: [:edit, :edit_content, :edit_share]
 
-    @title = bundle.name
+  def edit
+    render inertia: "Bundles/ProductTab", props: presenter.product_tab_props
+  end
 
-    @props = BundlePresenter.new(bundle:).bundle_props
+  def edit_content
+    props = presenter.content_tab_props
+
+    props[:search_products] = InertiaRails.defer(merge: true) { search_results[:products] }
+    props[:search_has_more] = InertiaRails.defer { search_results[:has_more] }
+
+    render inertia: "Bundles/ContentTab", props: props
+  end
+
+  def edit_share
+    unless @bundle.published?
+      return redirect_to edit_content_bundle_path(@bundle.external_id),
+                         alert: "Not yet! You've got to publish your awesome product before you can share it with your audience and the world."
+    end
+
+    render inertia: "Bundles/ShareTab", props: presenter.share_tab_props
   end
 
   def create_from_email
@@ -33,7 +50,7 @@ class BundlesController < Sellers::BaseController
     end
     bundle.save!
 
-    redirect_to bundle_path(bundle.external_id)
+    redirect_to edit_bundle_path(bundle.external_id)
   end
 
   def products
@@ -58,10 +75,6 @@ class BundlesController < Sellers::BaseController
   end
 
   def update_purchases_content
-    @bundle = Link.is_bundle.find_by_external_id!(params[:id])
-
-    authorize @bundle, :update?
-
     return render json: { error: "This bundle has no purchases with outdated content." }, status: :forbidden unless @bundle.has_outdated_purchases?
 
     UpdateBundlePurchasesContentJob.perform_async(@bundle.id)
@@ -70,10 +83,6 @@ class BundlesController < Sellers::BaseController
   end
 
   def update
-    @bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
-
-    authorize @bundle
-
     begin
       @bundle.is_bundle = true
       @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
@@ -90,6 +99,8 @@ class BundlesController < Sellers::BaseController
         @bundle.product_refund_policy_enabled = bundle_permitted_params[:product_refund_policy_enabled]
         if bundle_permitted_params[:refund_policy].present? && bundle_permitted_params[:product_refund_policy_enabled]
           @bundle.find_or_initialize_product_refund_policy.update!(bundle_permitted_params[:refund_policy])
+        elsif @bundle.product_refund_policy_enabled == false && @bundle.product_refund_policy.present?
+          @bundle.product_refund_policy.destroy
         end
       end
       @bundle.show_in_sections!(bundle_permitted_params[:section_ids]) if bundle_permitted_params[:section_ids]
@@ -99,13 +110,43 @@ class BundlesController < Sellers::BaseController
       @bundle.save!
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       error_message = @bundle.errors.full_messages.first || e.message
-      return render json: { error_message: }, status: :unprocessable_entity
+      respond_to do |format|
+        format.json { render json: { error_message: }, status: :unprocessable_content }
+        format.html { redirect_back fallback_location: edit_bundle_path(@bundle.external_id), alert: error_message }
+      end
+      return
     end
 
-    head :no_content
+    respond_to do |format|
+      format.json { head :no_content }
+      format.html { redirect_back fallback_location: edit_bundle_path(@bundle.external_id), notice: "Changes saved!", status: :see_other }
+    end
   end
 
   private
+    def set_bundle
+      @bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
+      authorize @bundle
+    end
+
+    def set_title
+      @title = @bundle.name
+    end
+
+    def presenter
+      @presenter ||= BundlePresenter.new(bundle: @bundle)
+    end
+
+    def search_results
+      @search_results ||= BundleSearchProductsService.new(
+        bundle: @bundle,
+        seller: current_seller,
+        query: params[:query],
+        page: params[:page] || 1,
+        all: params[:all] == "true"
+      ).call
+    end
+
     def bundle_permitted_params
       params.permit(policy(@bundle).bundle_permitted_attributes)
     end

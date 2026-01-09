@@ -10,19 +10,19 @@ describe BundlesController do
 
   include_context "with user signed in as admin for seller"
 
-  describe "GET show" do
+  describe "GET edit" do
     render_views
 
     it "initializes the presenter with the correct arguments and sets the title to the bundle's name" do
       expect(BundlePresenter).to receive(:new).with(bundle:).and_call_original
-      get :show, params: { id: bundle.external_id }
+      get :edit, params: { id: bundle.external_id }
       expect(response.body).to have_selector("title:contains('#{bundle.name}')", visible: false)
       expect(response).to be_successful
     end
 
     context "when the bundle doesn't exist" do
       it "returns 404" do
-        expect { get :show, params: { id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
+        expect { get :edit, params: { id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
 
@@ -30,7 +30,7 @@ describe BundlesController do
       let(:product) { create(:membership_product) }
 
       it "returns 404" do
-        expect { get :show, params: { id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
+        expect { get :edit, params: { id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
 
@@ -38,7 +38,53 @@ describe BundlesController do
       let(:product) { create(:product_with_digital_versions) }
 
       it "returns 404" do
-        expect { get :show, params: { id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
+        expect { get :edit, params: { id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+  end
+
+  describe "GET edit_content" do
+    render_views
+
+    it "renders the ContentTab Inertia page" do
+      get :edit_content, params: { id: bundle.external_id }
+      expect(response).to be_successful
+      expect(response.body).to have_selector("title:contains('#{bundle.name}')", visible: false)
+    end
+
+    context "when the bundle doesn't exist" do
+      it "returns 404" do
+        expect { get :edit_content, params: { id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+  end
+
+  describe "GET edit_share" do
+    render_views
+
+    context "when the bundle is published" do
+      let(:bundle) { create(:product, :bundle, user: seller, price_cents: 2000, purchase_disabled_at: nil) }
+
+      it "renders the ShareTab Inertia page" do
+        get :edit_share, params: { id: bundle.external_id }
+        expect(response).to be_successful
+        expect(response.body).to have_selector("title:contains('#{bundle.name}')", visible: false)
+      end
+    end
+
+    context "when the bundle is not published" do
+      let(:bundle) { create(:product, :bundle, user: seller, price_cents: 2000, purchase_disabled_at: Time.current) }
+
+      it "redirects to edit_content with alert" do
+        get :edit_share, params: { id: bundle.external_id }
+        expect(response).to redirect_to(edit_content_bundle_path(bundle.external_id))
+        expect(flash[:alert]).to include("publish")
+      end
+    end
+
+    context "when the bundle doesn't exist" do
+      it "returns 404" do
+        expect { get :edit_share, params: { id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
   end
@@ -57,7 +103,7 @@ describe BundlesController do
       get :create_from_email, params: { type: Product::BundlesMarketing::BEST_SELLING_BUNDLE, price: 100, products: [product.external_id, versioned_product.external_id] }
 
       bundle = Link.last
-      expect(response).to redirect_to bundle_path(bundle.external_id)
+      expect(response).to redirect_to edit_bundle_path(bundle.external_id)
       expect(bundle.name).to eq("Best Selling Bundle")
       expect(bundle.price_cents).to eq(100)
       expect(bundle.is_bundle).to eq(true)

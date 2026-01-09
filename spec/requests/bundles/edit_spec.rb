@@ -13,13 +13,13 @@ describe("Bundle edit page", type: :system, js: true) do
   include_context "with switching account to user as admin for seller"
 
   it_behaves_like "creator dashboard page", "Products" do
-    let(:path) { bundle_path(bundle.external_id) }
+    let(:path) { edit_bundle_path(bundle.external_id) }
   end
 
   it "updates the bundle" do
     Feature.activate_user(:audio_previews, seller)
 
-    visit bundle_path(bundle.external_id)
+    visit edit_bundle_path(bundle.external_id)
 
     in_preview { expect(page).to have_section("Bundle") }
     find_field("Name", with: "Bundle").fill_in with: "New bundle"
@@ -127,7 +127,7 @@ describe("Bundle edit page", type: :system, js: true) do
     end
 
     it "allows updating the bundle refund policy" do
-      visit bundle_path(bundle.external_id)
+      visit edit_bundle_path(bundle.external_id)
 
       find_field("Specify a refund policy for this product", unchecked: true).check
       select_disclosure "Copy from other products" do
@@ -156,7 +156,7 @@ describe("Bundle edit page", type: :system, js: true) do
   end
 
   it "updates the covers" do
-    visit bundle_path(bundle.external_id)
+    visit edit_bundle_path(bundle.external_id)
 
     within_section "Cover", section_element: :section do
       first("[role='tab']").hover
@@ -207,7 +207,7 @@ describe("Bundle edit page", type: :system, js: true) do
     end
 
     it "updates the bundle products" do
-      visit "#{bundle_path(bundle.external_id)}/content"
+      visit edit_content_bundle_path(bundle.external_id)
 
       within "[aria-label='Product selector']" do
         check("Product 1", unchecked: true)
@@ -268,7 +268,7 @@ describe("Bundle edit page", type: :system, js: true) do
     end
 
     it "loads more products when scrolled to the bottom" do
-      visit "#{bundle_path(bundle.external_id)}/content"
+      visit edit_content_bundle_path(bundle.external_id)
       wait_for_ajax
       expect(page).to_not have_selector("[role='progressbar']")
       expect(page).to_not have_field("Product 8")
@@ -277,7 +277,7 @@ describe("Bundle edit page", type: :system, js: true) do
     end
 
     it "allows selecting and unselecting all products" do
-      visit "#{bundle_path(bundle.external_id)}/content"
+      visit edit_content_bundle_path(bundle.external_id)
       check "All products", unchecked: true
       expect(page).to have_field("All products", disabled: true)
       wait_for_ajax
@@ -308,7 +308,7 @@ describe("Bundle edit page", type: :system, js: true) do
       let(:empty_bundle) { create(:product, :unpublished, user: seller, is_bundle: true) }
 
       it "displays a placeholder" do
-        visit "#{bundle_path(empty_bundle.external_id)}/content"
+        visit edit_content_bundle_path(empty_bundle.external_id)
         expect(page).to_not have_selector("[aria-label='Product selector']")
         within_section "Select products", section_element: :section, match: :first do
           expect(page).to have_text("Choose the products you want to include in your bundle")
@@ -326,7 +326,7 @@ describe("Bundle edit page", type: :system, js: true) do
 
   describe "share tab" do
     it "updates the bundle share settings" do
-      visit "#{bundle_path(bundle.external_id)}/share"
+      visit edit_share_bundle_path(bundle.external_id)
 
       encoded_url = CGI.escape(bundle.long_url)
       expect(page).to have_link("Share on X", href: "https://twitter.com/intent/tweet?url=#{encoded_url}&text=Buy%20Bundle%20on%20%40Gumroad")
@@ -367,7 +367,7 @@ describe("Bundle edit page", type: :system, js: true) do
       expect(bundle.discover_fee_per_thousand).to eq(100)
 
       section = create(:seller_profile_products_section, seller:)
-      visit "#{bundle_path(bundle.external_id)}/share"
+      visit edit_share_bundle_path(bundle.external_id)
 
       within_fieldset "Category" do
         click_on "Clear value"
@@ -394,7 +394,7 @@ describe("Bundle edit page", type: :system, js: true) do
       expect(bundle.discover_fee_per_thousand).to eq(100)
       expect(section.reload.shown_products).to include bundle.id
 
-      visit "#{bundle_path(bundle.external_id)}/share"
+      visit edit_share_bundle_path(bundle.external_id)
       uncheck("Unnamed section", checked: true)
       click_on "Save changes"
       expect(page).to have_alert(text: "Changes saved!")
@@ -404,14 +404,14 @@ describe("Bundle edit page", type: :system, js: true) do
 
   it "allows unpublishing and publishing the bundle" do
     bundle.publish!
-    visit "#{bundle_path(bundle.external_id)}"
+    visit edit_bundle_path(bundle.external_id)
     click_on "Unpublish"
     expect(page).to have_alert(text: "Unpublished!")
     expect(bundle.reload.purchase_disabled_at).to_not be_nil
 
     click_on "Save and continue"
     wait_for_ajax
-    expect(page.current_path).to eq("#{bundle_path(bundle.external_id)}/content")
+    expect(page.current_path).to eq(edit_content_bundle_path(bundle.external_id))
 
     select_tab "Share"
     expect(page).to have_alert(text: "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.")
@@ -425,19 +425,19 @@ describe("Bundle edit page", type: :system, js: true) do
     bundle.reload
     expect(bundle.purchase_disabled_at).to be_nil
     expect(bundle.name).to eq("New bundle")
-    expect(page.current_path).to eq("#{bundle_path(bundle.external_id)}/share")
+    expect(page.current_path).to eq(edit_share_bundle_path(bundle.external_id))
 
     click_on "Unpublish"
     expect(page).to have_alert(text: "Unpublished!")
     expect(bundle.reload.purchase_disabled_at).to_not be_nil
-    expect(page.current_path).to eq("#{bundle_path(bundle.external_id)}/content")
+    expect(page.current_path).to eq(edit_content_bundle_path(bundle.external_id))
   end
 
   context "product is not a bundle" do
     let(:product) { create(:product, user: seller) }
 
     it "converts the product to a bundle on save" do
-      visit bundle_path(product.external_id)
+      visit edit_bundle_path(product.external_id)
 
       expect(page).to have_alert(text: "Select products and save your changes to finish converting this product to a bundle.")
 
@@ -460,7 +460,7 @@ describe("Bundle edit page", type: :system, js: true) do
     before { bundle.update!(has_outdated_purchases: true) }
 
     it "shows a notice from which the seller can update the purchases" do
-      visit "#{bundle_path(bundle.external_id)}/content"
+      visit edit_content_bundle_path(bundle.external_id)
       expect(page).to have_text("Some of your customers don't have access to the latest content in your bundle.")
       expect(page).to have_text("Would you like to give them access and send them an email notification?")
 
@@ -476,7 +476,7 @@ describe("Bundle edit page", type: :system, js: true) do
   it "shows marketing status" do
     bundle.update!(price_cents: 100)
     create(:audience_member, seller:, purchases: [{}])
-    visit "#{bundle_path(bundle.external_id)}/share"
+    visit edit_share_bundle_path(bundle.external_id)
     original_window = page.current_window
 
     expect(page).to have_text("Your product bundle is ready. Would you like to send an email about this offer to existing customers?")

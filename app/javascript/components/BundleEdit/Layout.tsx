@@ -1,12 +1,11 @@
+import { Link, router } from "@inertiajs/react";
 import * as React from "react";
-import { Link, useMatches, useNavigate } from "react-router-dom";
 
-import { saveBundle } from "$app/data/bundle";
 import { setProductPublished } from "$app/data/publish_product";
 import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
+import { assertResponseError, request } from "$app/utils/request";
 
-import { useBundleEditContext } from "$app/components/BundleEdit/state";
+import { Bundle, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -30,6 +29,56 @@ export const useProductUrl = (params = {}) => {
   });
 };
 
+const useCurrentTab = () => {
+  const [tab, setTab] = React.useState<"product" | "content" | "share">("product");
+
+  React.useEffect(() => {
+    const path = window.location.pathname;
+    if (path.includes("/edit/share")) {
+      setTab("share");
+    } else if (path.includes("/edit/content")) {
+      setTab("content");
+    } else {
+      setTab("product");
+    }
+  }, []);
+
+  return tab;
+};
+
+const transformBundleForSubmission = (bundle: Bundle) => ({
+  name: bundle.name,
+  description: bundle.description,
+  custom_permalink: bundle.custom_permalink,
+  price_cents: bundle.price_cents,
+  customizable_price: bundle.customizable_price,
+  suggested_price_cents: bundle.suggested_price_cents,
+  custom_button_text_option: bundle.custom_button_text_option,
+  custom_summary: bundle.custom_summary,
+  custom_attributes: bundle.custom_attributes,
+  max_purchase_count: bundle.max_purchase_count,
+  quantity_enabled: bundle.quantity_enabled,
+  should_show_sales_count: bundle.should_show_sales_count,
+  is_epublication: bundle.is_epublication,
+  product_refund_policy_enabled: bundle.product_refund_policy_enabled,
+  refund_policy: bundle.refund_policy,
+  taxonomy_id: bundle.taxonomy_id,
+  tags: bundle.tags,
+  display_product_reviews: bundle.display_product_reviews,
+  is_adult: bundle.is_adult,
+  discover_fee_per_thousand: bundle.discover_fee_per_thousand,
+  section_ids: bundle.section_ids,
+  covers: bundle.covers.map(({ id }) => id),
+  allow_installment_plan: bundle.allow_installment_plan,
+  installment_plan: bundle.installment_plan,
+  products: bundle.products.map((p, idx) => ({
+    product_id: p.id,
+    variant_id: p.variants?.selected_id,
+    quantity: p.quantity,
+    position: idx,
+  })),
+});
+
 export const Layout = ({
   children,
   preview,
@@ -42,9 +91,7 @@ export const Layout = ({
   const { bundle, updateBundle, id, uniquePermalink } = useBundleEditContext();
 
   const url = useProductUrl();
-
-  const [match] = useMatches();
-  const tab = match?.handle ?? "product";
+  const tab = useCurrentTab();
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
@@ -52,7 +99,12 @@ export const Layout = ({
   const handleSave = async () => {
     try {
       setIsSaving(true);
-      await saveBundle(id, bundle);
+      await request({
+        method: "PATCH",
+        url: Routes.bundle_path(id),
+        data: transformBundleForSubmission(bundle),
+        accept: "json",
+      });
       showAlert("Changes saved!", "success");
     } catch (e) {
       assertResponseError(e);
@@ -65,12 +117,17 @@ export const Layout = ({
   const setPublished = async (published: boolean) => {
     try {
       setIsPublishing(true);
-      await saveBundle(id, bundle);
+      await request({
+        method: "PATCH",
+        url: Routes.bundle_path(id),
+        data: transformBundleForSubmission(bundle),
+        accept: "json",
+      });
       await setProductPublished(uniquePermalink, published);
       updateBundle({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
-      if (tab === "share") navigate(`/bundles/${id}/content`);
-      else if (published) navigate(`/bundles/${id}/share`);
+      if (tab === "share") router.visit(Routes.edit_content_bundle_path(id));
+      else if (published) router.visit(Routes.edit_share_bundle_path(id));
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -91,8 +148,6 @@ export const Layout = ({
         ? "Please wait..."
         : undefined;
 
-  const navigate = useNavigate();
-
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
       <Button color="primary" disabled={isBusy} onClick={asyncVoid(handleSave)}>
@@ -101,7 +156,7 @@ export const Layout = ({
     </WithTooltip>
   );
 
-  const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
+  const onTabClick = (e: React.MouseEvent, callback?: () => void) => {
     const message = isUploadingFiles
       ? "Some files are still uploading, please wait..."
       : isUploadingFilesOrImages
@@ -143,7 +198,7 @@ export const Layout = ({
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => void handleSave().then(() => navigate(`/bundles/${id}/content`))}
+              onClick={() => void handleSave().then(() => router.visit(Routes.edit_content_bundle_path(id)))}
             >
               {isSaving ? "Saving changes..." : "Save and continue"}
             </Button>
@@ -161,19 +216,19 @@ export const Layout = ({
       >
         <Tabs style={{ gridColumn: 1 }}>
           <Tab asChild isSelected={tab === "product"}>
-            <Link to={`/bundles/${id}`} onClick={onTabClick}>
+            <Link href={Routes.edit_bundle_path(id)} onClick={onTabClick}>
               Product
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "content"}>
-            <Link to={`/bundles/${id}/content`} onClick={onTabClick}>
+            <Link href={Routes.edit_content_bundle_path(id)} onClick={onTabClick}>
               Content
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "share"}>
             <Link
-              to={`/bundles/${id}/share`}
-              onClick={(evt: React.MouseEvent<HTMLAnchorElement>) => {
+              href={Routes.edit_share_bundle_path(id)}
+              onClick={(evt: React.MouseEvent) => {
                 onTabClick(evt, () => {
                   if (!bundle.is_published) {
                     evt.preventDefault();

@@ -39,7 +39,7 @@ export const BundleConversionNotice = () => {
         footer={
           <>
             <Button onClick={() => setIsModalOpen(false)}>No, cancel</Button>
-            <NavigationButton href={`${Routes.bundle_path(id)}/content`}>
+            <NavigationButton href={Routes.edit_content_bundle_path(id)}>
               Yes, let's select the products
             </NavigationButton>
           </>
