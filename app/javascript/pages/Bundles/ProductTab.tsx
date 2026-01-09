@@ -9,6 +9,7 @@ import { Taxonomy } from "$app/utils/discover";
 
 import { ProductTab as ProductTabContent } from "$app/components/BundleEdit/ProductTab";
 import { Bundle, BundleEditContext } from "$app/components/BundleEdit/state";
+import { useBundleForm } from "$app/components/BundleEdit/useBundleForm";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -42,17 +43,12 @@ export default function ProductTab() {
     seller_refund_policy,
   } = usePage<Props>().props;
 
-  const [bundle, setBundle] = React.useState(initialBundle);
-  const updateBundle = React.useCallback(
-    (update: Partial<Bundle> | ((bundle: Bundle) => void)) =>
-      setBundle((prevBundle) => {
-        const updated = { ...prevBundle };
-        if (typeof update === "function") update(updated);
-        else Object.assign(updated, update);
-        return updated;
-      }),
-    [],
-  );
+  const { bundle, updateBundle, formMethods } = useBundleForm({
+    initialBundle,
+    id,
+    uniquePermalink: unique_permalink,
+    currentTab: "product",
+  });
 
   useRunOnce(() => {
     if (!is_bundle)
@@ -76,6 +72,7 @@ export default function ProductTab() {
       hasOutdatedPurchases: false,
       seller_refund_policy_enabled,
       seller_refund_policy,
+      formMethods,
     }),
     [
       bundle,
@@ -88,6 +85,7 @@ export default function ProductTab() {
       refund_policies,
       seller_refund_policy_enabled,
       seller_refund_policy,
+      formMethods,
     ],
   );
 

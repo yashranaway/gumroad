@@ -8,6 +8,7 @@ import { Taxonomy } from "$app/utils/discover";
 
 import { ShareTab as ShareTabContent } from "$app/components/BundleEdit/ShareTab";
 import { Bundle, BundleEditContext } from "$app/components/BundleEdit/state";
+import { useBundleForm } from "$app/components/BundleEdit/useBundleForm";
 import { ProfileSection } from "$app/components/ProductEdit/state";
 
 type Props = {
@@ -36,17 +37,12 @@ export default function ShareTab() {
     profile_sections,
   } = usePage<Props>().props;
 
-  const [bundle, setBundle] = React.useState(initialBundle);
-  const updateBundle = React.useCallback(
-    (update: Partial<Bundle> | ((bundle: Bundle) => void)) =>
-      setBundle((prevBundle) => {
-        const updated = { ...prevBundle };
-        if (typeof update === "function") update(updated);
-        else Object.assign(updated, update);
-        return updated;
-      }),
-    [],
-  );
+  const { bundle, updateBundle, formMethods } = useBundleForm({
+    initialBundle,
+    id,
+    uniquePermalink: unique_permalink,
+    currentTab: "share",
+  });
 
   const contextValue = React.useMemo(
     () => ({
@@ -65,6 +61,7 @@ export default function ShareTab() {
       hasOutdatedPurchases: false,
       seller_refund_policy_enabled: false,
       seller_refund_policy: { title: "", fine_print: "" },
+      formMethods,
     }),
     [
       bundle,
@@ -77,6 +74,7 @@ export default function ShareTab() {
       ratings,
       taxonomies,
       profile_sections,
+      formMethods,
     ],
   );
 

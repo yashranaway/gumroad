@@ -1,11 +1,7 @@
 import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
-import { setProductPublished } from "$app/data/publish_product";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError, request } from "$app/utils/request";
-
-import { Bundle, useBundleEditContext } from "$app/components/BundleEdit/state";
+import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -46,39 +42,6 @@ const useCurrentTab = () => {
   return tab;
 };
 
-const transformBundleForSubmission = (bundle: Bundle) => ({
-  name: bundle.name,
-  description: bundle.description,
-  custom_permalink: bundle.custom_permalink,
-  price_cents: bundle.price_cents,
-  customizable_price: bundle.customizable_price,
-  suggested_price_cents: bundle.suggested_price_cents,
-  custom_button_text_option: bundle.custom_button_text_option,
-  custom_summary: bundle.custom_summary,
-  custom_attributes: bundle.custom_attributes,
-  max_purchase_count: bundle.max_purchase_count,
-  quantity_enabled: bundle.quantity_enabled,
-  should_show_sales_count: bundle.should_show_sales_count,
-  is_epublication: bundle.is_epublication,
-  product_refund_policy_enabled: bundle.product_refund_policy_enabled,
-  refund_policy: bundle.refund_policy,
-  taxonomy_id: bundle.taxonomy_id,
-  tags: bundle.tags,
-  display_product_reviews: bundle.display_product_reviews,
-  is_adult: bundle.is_adult,
-  discover_fee_per_thousand: bundle.discover_fee_per_thousand,
-  section_ids: bundle.section_ids,
-  covers: bundle.covers.map(({ id }) => id),
-  allow_installment_plan: bundle.allow_installment_plan,
-  installment_plan: bundle.installment_plan,
-  products: bundle.products.map((p, idx) => ({
-    product_id: p.id,
-    variant_id: p.variants?.selected_id,
-    quantity: p.quantity,
-    position: idx,
-  })),
-});
-
 export const Layout = ({
   children,
   preview,
@@ -88,52 +51,13 @@ export const Layout = ({
   preview: React.ReactNode;
   isLoading?: boolean;
 }) => {
-  const { bundle, updateBundle, id, uniquePermalink } = useBundleEditContext();
+  const { bundle, id, formMethods } = useBundleEditContext();
+  const { save, publish, unpublish, isSaving, isPublishing } = formMethods;
 
   const url = useProductUrl();
   const tab = useCurrentTab();
 
   const isDesktop = useIsAboveBreakpoint("lg");
-
-  const [isSaving, setIsSaving] = React.useState(false);
-  const handleSave = async () => {
-    try {
-      setIsSaving(true);
-      await request({
-        method: "PATCH",
-        url: Routes.bundle_path(id),
-        data: transformBundleForSubmission(bundle),
-        accept: "json",
-      });
-      showAlert("Changes saved!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsSaving(false);
-  };
-
-  const [isPublishing, setIsPublishing] = React.useState(false);
-  const setPublished = async (published: boolean) => {
-    try {
-      setIsPublishing(true);
-      await request({
-        method: "PATCH",
-        url: Routes.bundle_path(id),
-        data: transformBundleForSubmission(bundle),
-        accept: "json",
-      });
-      await setProductPublished(uniquePermalink, published);
-      updateBundle({ is_published: published });
-      showAlert(published ? "Published!" : "Unpublished!", "success");
-      if (tab === "share") router.visit(Routes.edit_content_bundle_path(id));
-      else if (published) router.visit(Routes.edit_share_bundle_path(id));
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsPublishing(false);
-  };
 
   const isUploadingFiles = bundle.public_files.some(
     (f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading",
@@ -150,7 +74,7 @@ export const Layout = ({
 
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
-      <Button color="primary" disabled={isBusy} onClick={asyncVoid(handleSave)}>
+      <Button color="primary" disabled={isBusy} onClick={save}>
         {isSaving ? "Saving changes..." : "Save changes"}
       </Button>
     </WithTooltip>
@@ -172,6 +96,16 @@ export const Layout = ({
     callback?.();
   };
 
+  const handleSaveAndContinue = () => {
+    save();
+    router.visit(Routes.edit_content_bundle_path(id));
+  };
+
+  const handlePreviewClick = () => {
+    save();
+    window.open(url);
+  };
+
   return (
     <>
       <PageHeader
@@ -180,7 +114,7 @@ export const Layout = ({
         actions={
           bundle.is_published ? (
             <>
-              <Button disabled={isBusy} onClick={() => void setPublished(false)}>
+              <Button disabled={isBusy} onClick={unpublish}>
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
               {saveButton}
@@ -195,18 +129,14 @@ export const Layout = ({
               </CopyToClipboard>
             </>
           ) : tab === "product" ? (
-            <Button
-              color="primary"
-              disabled={isBusy}
-              onClick={() => void handleSave().then(() => router.visit(Routes.edit_content_bundle_path(id)))}
-            >
+            <Button color="primary" disabled={isBusy} onClick={handleSaveAndContinue}>
               {isSaving ? "Saving changes..." : "Save and continue"}
             </Button>
           ) : (
             <>
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
-                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
+                <Button color="accent" disabled={isBusy} onClick={publish}>
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
               </WithTooltip>
@@ -249,9 +179,7 @@ export const Layout = ({
         <WithPreviewSidebar className="flex-1">
           {children}
           <PreviewSidebar
-            previewLink={(props) => (
-              <Button {...props} onClick={() => void handleSave().then(() => window.open(url))} disabled={isBusy} />
-            )}
+            previewLink={(props) => <Button {...props} onClick={handlePreviewClick} disabled={isBusy} />}
           >
             <Preview
               scaleFactor={0.4}

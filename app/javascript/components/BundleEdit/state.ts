@@ -12,6 +12,14 @@ import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEdit
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ProfileSection, PublicFileWithStatus } from "$app/components/ProductEdit/state";
 
+export type BundleFormMethods = {
+  save: () => void;
+  publish: () => void;
+  unpublish: () => void;
+  isSaving: boolean;
+  isPublishing: boolean;
+};
+
 export const BundleEditContext = React.createContext<{
   bundle: Bundle;
   updateBundle: (update: Partial<Bundle> | ((bundle: Bundle) => void)) => void;
@@ -28,6 +36,7 @@ export const BundleEditContext = React.createContext<{
   hasOutdatedPurchases: boolean;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
+  formMethods: BundleFormMethods;
 } | null>(null);
 export const useBundleEditContext = () => assertDefined(React.useContext(BundleEditContext));
 
@@ -83,3 +92,36 @@ export const computeStandalonePrice = (bundleProduct: BundleProduct) =>
     (bundleProduct.variants?.list.find(({ id }) => id === bundleProduct.variants?.selected_id)?.price_difference ??
       0)) *
   bundleProduct.quantity;
+
+export const transformBundleForSubmission = (bundle: Bundle) => ({
+  name: bundle.name,
+  description: bundle.description,
+  custom_permalink: bundle.custom_permalink,
+  price_cents: bundle.price_cents,
+  customizable_price: bundle.customizable_price,
+  suggested_price_cents: bundle.suggested_price_cents,
+  custom_button_text_option: bundle.custom_button_text_option,
+  custom_summary: bundle.custom_summary,
+  custom_attributes: bundle.custom_attributes,
+  max_purchase_count: bundle.max_purchase_count,
+  quantity_enabled: bundle.quantity_enabled,
+  should_show_sales_count: bundle.should_show_sales_count,
+  is_epublication: bundle.is_epublication,
+  product_refund_policy_enabled: bundle.product_refund_policy_enabled,
+  refund_policy: bundle.refund_policy,
+  taxonomy_id: bundle.taxonomy_id,
+  tags: bundle.tags,
+  display_product_reviews: bundle.display_product_reviews,
+  is_adult: bundle.is_adult,
+  discover_fee_per_thousand: bundle.discover_fee_per_thousand,
+  section_ids: bundle.section_ids,
+  covers: bundle.covers.map(({ id }) => id),
+  allow_installment_plan: bundle.allow_installment_plan,
+  installment_plan: bundle.installment_plan,
+  products: bundle.products.map((p, idx) => ({
+    product_id: p.id,
+    variant_id: p.variants?.selected_id,
+    quantity: p.quantity,
+    position: idx,
+  })),
+});

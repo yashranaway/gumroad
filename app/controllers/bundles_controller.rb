@@ -110,17 +110,13 @@ class BundlesController < Sellers::BaseController
       @bundle.save!
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       error_message = @bundle.errors.full_messages.first || e.message
-      respond_to do |format|
-        format.json { render json: { error_message: }, status: :unprocessable_content }
-        format.html { redirect_back fallback_location: edit_bundle_path(@bundle.external_id), alert: error_message }
-      end
+      redirect_back fallback_location: edit_bundle_path(@bundle.external_id),
+                    inertia: { errors: { error_message: } },
+                    alert: error_message
       return
     end
 
-    respond_to do |format|
-      format.json { head :no_content }
-      format.html { redirect_back fallback_location: edit_bundle_path(@bundle.external_id), notice: "Changes saved!", status: :see_other }
-    end
+    redirect_back fallback_location: edit_bundle_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
   end
 
   private

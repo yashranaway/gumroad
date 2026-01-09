@@ -6,6 +6,7 @@ import { CurrencyCode } from "$app/utils/currency";
 
 import { ContentTab as ContentTabContent } from "$app/components/BundleEdit/ContentTab";
 import { Bundle, BundleEditContext, BundleProduct } from "$app/components/BundleEdit/state";
+import { useBundleForm } from "$app/components/BundleEdit/useBundleForm";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -34,17 +35,12 @@ export default function ContentTab() {
     is_bundle,
   } = usePage<Props>().props;
 
-  const [bundle, setBundle] = React.useState(initialBundle);
-  const updateBundle = React.useCallback(
-    (update: Partial<Bundle> | ((bundle: Bundle) => void)) =>
-      setBundle((prevBundle) => {
-        const updated = { ...prevBundle };
-        if (typeof update === "function") update(updated);
-        else Object.assign(updated, update);
-        return updated;
-      }),
-    [],
-  );
+  const { bundle, updateBundle, formMethods } = useBundleForm({
+    initialBundle,
+    id,
+    uniquePermalink: unique_permalink,
+    currentTab: "content",
+  });
 
   useRunOnce(() => {
     if (!is_bundle)
@@ -68,8 +64,9 @@ export default function ContentTab() {
       hasOutdatedPurchases: has_outdated_purchases,
       seller_refund_policy_enabled: false,
       seller_refund_policy: { title: "", fine_print: "" },
+      formMethods,
     }),
-    [bundle, updateBundle, id, unique_permalink, currency_type, products_count, has_outdated_purchases],
+    [bundle, updateBundle, id, unique_permalink, currency_type, products_count, has_outdated_purchases, formMethods],
   );
 
   return (
