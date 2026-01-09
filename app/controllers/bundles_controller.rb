@@ -67,7 +67,7 @@ class BundlesController < Sellers::BaseController
       is_call: false,
       exclude_ids: [ObfuscateIds.decrypt(products_permitted_params[:product_id])],
     }
-    options[:size] = PER_PAGE unless products_permitted_params[:all] == "true"
+    options[:size] = products_permitted_params[:all] == "true" ? 1000 : PER_PAGE
 
     products = search_products(options)[:products].map { BundlePresenter.bundle_product(product: _1) }
 

@@ -32,6 +32,10 @@ class LinkPolicy < ApplicationPolicy
     edit?
   end
 
+  def update_purchases_content?
+    edit?
+  end
+
   def show?
     new?
   end
