@@ -14,6 +14,12 @@ export type UseBundleFormOptions = {
   currentTab: "product" | "content" | "share";
 };
 
+const getErrorMessage = (errors: Record<string, string | string[]>): string => {
+  const message = errors.error_message ?? errors.base ?? Object.values(errors)[0];
+  const errorString = Array.isArray(message) ? message[0] : message;
+  return errorString ?? "An error occurred";
+};
+
 export const useBundleForm = ({ initialBundle, id, uniquePermalink, currentTab }: UseBundleFormOptions) => {
   const [bundle, setBundle] = React.useState<Bundle>(initialBundle);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -28,43 +34,30 @@ export const useBundleForm = ({ initialBundle, id, uniquePermalink, currentTab }
     });
   }, []);
 
+  const saveBundle = React.useCallback(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        router.patch(Routes.bundle_path(id), transformBundleForSubmission(bundle), {
+          preserveScroll: true,
+          onSuccess: () => resolve(),
+          onError: (errors: Record<string, string | string[]>) => reject(new Error(getErrorMessage(errors))),
+        });
+      }),
+    [id, bundle],
+  );
+
   const save = React.useCallback(() => {
     setIsSaving(true);
-    router.patch(Routes.bundle_path(id), transformBundleForSubmission(bundle), {
-      preserveScroll: true,
-      onSuccess: () => {
-        showAlert("Changes saved!", "success");
-        setIsSaving(false);
-      },
-      onError: (errors: Record<string, string | string[]>) => {
-        const message = errors.error_message ?? errors.base ?? Object.values(errors)[0];
-        const errorMessage = Array.isArray(message) ? message[0] : message;
-        if (errorMessage) showAlert(errorMessage, "error");
-        setIsSaving(false);
-      },
-      onFinish: () => {
-        setIsSaving(false);
-      },
-    });
-  }, [id, bundle]);
+    saveBundle()
+      .then(() => showAlert("Changes saved!", "success"))
+      .catch((e: Error) => showAlert(e.message, "error"))
+      .finally(() => setIsSaving(false));
+  }, [saveBundle]);
 
   const publish = React.useCallback(async () => {
     setIsPublishing(true);
     try {
-      // First save the bundle
-      await new Promise<void>((resolve, reject) => {
-        router.patch(Routes.bundle_path(id), transformBundleForSubmission(bundle), {
-          preserveScroll: true,
-          onSuccess: () => resolve(),
-          onError: (errors: Record<string, string | string[]>) => {
-            const message = errors.error_message ?? errors.base ?? Object.values(errors)[0];
-            const errorMessage = Array.isArray(message) ? message[0] : message;
-            reject(new Error(errorMessage ?? "Failed to save"));
-          },
-        });
-      });
-
-      // Then publish
+      await saveBundle();
       await setProductPublished(uniquePermalink, true);
       updateBundle({ is_published: true });
       showAlert("Published!", "success");
@@ -73,25 +66,12 @@ export const useBundleForm = ({ initialBundle, id, uniquePermalink, currentTab }
       showAlert(e instanceof Error ? e.message : "Failed to publish", "error");
     }
     setIsPublishing(false);
-  }, [id, bundle, uniquePermalink, updateBundle]);
+  }, [saveBundle, id, uniquePermalink, updateBundle]);
 
   const unpublish = React.useCallback(async () => {
     setIsPublishing(true);
     try {
-      // First save the bundle
-      await new Promise<void>((resolve, reject) => {
-        router.patch(Routes.bundle_path(id), transformBundleForSubmission(bundle), {
-          preserveScroll: true,
-          onSuccess: () => resolve(),
-          onError: (errors: Record<string, string | string[]>) => {
-            const message = errors.error_message ?? errors.base ?? Object.values(errors)[0];
-            const errorMessage = Array.isArray(message) ? message[0] : message;
-            reject(new Error(errorMessage ?? "Failed to save"));
-          },
-        });
-      });
-
-      // Then unpublish
+      await saveBundle();
       await setProductPublished(uniquePermalink, false);
       updateBundle({ is_published: false });
       showAlert("Unpublished!", "success");
@@ -102,7 +82,7 @@ export const useBundleForm = ({ initialBundle, id, uniquePermalink, currentTab }
       showAlert(e instanceof Error ? e.message : "Failed to unpublish", "error");
     }
     setIsPublishing(false);
-  }, [id, bundle, uniquePermalink, updateBundle, currentTab]);
+  }, [saveBundle, id, uniquePermalink, updateBundle, currentTab]);
 
   const formMethods: BundleFormMethods = React.useMemo(
     () => ({
