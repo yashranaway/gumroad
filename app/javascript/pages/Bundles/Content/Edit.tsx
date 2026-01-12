@@ -4,15 +4,16 @@ import * as React from "react";
 import { RatingsWithPercentages } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
 
-import { ContentTab as ContentTabContent, ContentTabPreview } from "$app/components/BundleEdit/ContentTab";
+import { ContentTab as ContentTabContent, ContentTabPreview, SearchData } from "$app/components/BundleEdit/ContentTab";
 import { Layout } from "$app/components/BundleEdit/Layout";
-import { Bundle, BundleEditContext, BundleProduct } from "$app/components/BundleEdit/state";
+import { Bundle, BundleEditContext } from "$app/components/BundleEdit/state";
 import { useBundleForm } from "$app/components/BundleEdit/useBundleForm";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const defaultRatings: RatingsWithPercentages = { average: 0, count: 0, percentages: [0, 0, 0, 0, 0] };
+const defaultSearchData: SearchData = { products: [], has_more: true, query: "", page: 1 };
 
 type Props = {
   tab: "product" | "content" | "share";
@@ -23,10 +24,12 @@ type Props = {
   products_count: number;
   has_outdated_purchases: boolean;
   is_bundle: boolean;
-  search_products?: BundleProduct[];
-  search_has_more?: boolean;
-  search_query: string;
-  search_page: number;
+  search_data?: SearchData;
+};
+
+const DeferredContentTab = () => {
+  const { search_data } = usePage<Props>().props;
+  return <ContentTabContent searchData={search_data ?? defaultSearchData} />;
 };
 
 export default function ContentEdit() {
@@ -39,10 +42,6 @@ export default function ContentEdit() {
     products_count,
     has_outdated_purchases,
     is_bundle,
-    search_products,
-    search_has_more,
-    search_query,
-    search_page,
   } = usePage<Props>().props;
 
   const { bundle, updateBundle, form, isPublishing, handleSave, handlePublish, handleUnpublish } = useBundleForm({
@@ -90,19 +89,14 @@ export default function ContentEdit() {
         isPublishing={isPublishing}
       >
         <Deferred
-          data={["search_products", "search_has_more"]}
+          data="search_data"
           fallback={
             <div className="flex justify-center p-8">
               <LoadingSpinner />
             </div>
           }
         >
-          <ContentTabContent
-            searchProducts={search_products ?? []}
-            searchHasMore={search_has_more ?? true}
-            searchQuery={search_query}
-            searchPage={search_page}
-          />
+          <DeferredContentTab />
         </Deferred>
       </Layout>
     </BundleEditContext.Provider>

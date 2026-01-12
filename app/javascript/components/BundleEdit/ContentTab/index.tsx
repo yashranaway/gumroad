@@ -35,14 +35,19 @@ export const ContentTabPreview = () => {
   );
 };
 
-type ContentTabProps = {
-  searchProducts?: BundleProduct[];
-  searchHasMore?: boolean;
-  searchQuery: string;
-  searchPage: number;
+export type SearchData = {
+  products: BundleProduct[];
+  has_more: boolean;
+  query: string;
+  page: number;
 };
 
-export const ContentTab = ({ searchProducts = [], searchHasMore = true, searchQuery, searchPage }: ContentTabProps) => {
+type ContentTabProps = {
+  searchData: SearchData;
+};
+
+export const ContentTab = ({ searchData }: ContentTabProps) => {
+  const { products: searchProducts, has_more: searchHasMore, query: searchQuery, page: searchPage } = searchData;
   const { bundle, updateBundle, productsCount, hasOutdatedPurchases } = useBundleEditContext();
   const [query, setQuery] = React.useState(searchQuery);
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
@@ -53,7 +58,7 @@ export const ContentTab = ({ searchProducts = [], searchHasMore = true, searchQu
     setIsSearching(true);
     router.reload({
       data: { query: newQuery || undefined, page: 1 },
-      only: ["search_products", "search_has_more", "search_query", "search_page"],
+      only: ["search_data"],
       preserveUrl: true,
       onFinish: () => setIsSearching(false),
     });
@@ -81,7 +86,7 @@ export const ContentTab = ({ searchProducts = [], searchHasMore = true, searchQu
         setIsLoadingMore(true);
         router.reload({
           data: { query: query || undefined, page: searchPage + 1 },
-          only: ["search_products", "search_has_more", "search_query", "search_page"],
+          only: ["search_data"],
           preserveUrl: true,
           onFinish: () => setIsLoadingMore(false),
         });
@@ -95,7 +100,7 @@ export const ContentTab = ({ searchProducts = [], searchHasMore = true, searchQu
     setIsSearching(true);
     router.reload({
       data: { query: query || undefined, all: "true" },
-      only: ["search_products", "search_has_more", "search_query", "search_page"],
+      only: ["search_data"],
       preserveUrl: true,
     });
   };
