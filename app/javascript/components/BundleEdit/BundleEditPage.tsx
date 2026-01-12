@@ -24,8 +24,10 @@ export function BundleEditPage<T extends Record<string, unknown> = Record<string
   children: React.ReactNode;
   extractTabProps?: (props: BundleEditPageProps<T>) => Partial<BundleEditContextValue>;
 }) {
-  const pageProps = cast<BundleEditPageProps<T>>(usePage().props);
-  const { bundle: initialBundle, id, unique_permalink, is_bundle } = pageProps;
+  const page = usePage();
+  const sharedProps = cast<SharedProps>(page.props);
+  const pageProps = page.props as unknown as BundleEditPageProps<T>;
+  const { bundle: initialBundle, id, unique_permalink, is_bundle } = sharedProps;
 
   const [bundle, setBundle] = React.useState(initialBundle);
 

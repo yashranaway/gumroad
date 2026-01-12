@@ -20,7 +20,7 @@ export const ShareTab = () => {
   const currentSeller = useCurrentSeller();
   const url = useProductUrl();
 
-  if (!currentSeller) return;
+  if (!currentSeller || !taxonomies || !profileSections) return null;
 
   return (
     <Layout preview={<ProductPreview />}>

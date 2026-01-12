@@ -31,7 +31,9 @@ export const ProductTab = () => {
   } = useBundleEditContext();
   const uid = React.useId();
 
-  const [thumbnail, setThumbnail] = React.useState(initialThumbnail);
+  if (!currencyType || !refundPolicies) return null;
+
+  const [thumbnail, setThumbnail] = React.useState(initialThumbnail ?? null);
 
   const [initialBundle] = React.useState(bundle);
 
