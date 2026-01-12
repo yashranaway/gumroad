@@ -1,6 +1,5 @@
 import { useForm } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -9,7 +8,10 @@ type UseBundleFormSubmissionOptions<T> = {
   transform: () => T;
 };
 
-export const useBundleFormSubmission = <T>({ url, transform }: UseBundleFormSubmissionOptions<T>) => {
+export const useBundleFormSubmission = <T extends Record<string, unknown>>({
+  url,
+  transform,
+}: UseBundleFormSubmissionOptions<T>) => {
   const form = useForm({});
   const onSuccessRef = React.useRef<(() => void | Promise<void>) | undefined>(undefined);
 
@@ -17,7 +19,7 @@ export const useBundleFormSubmission = <T>({ url, transform }: UseBundleFormSubm
     (onSuccess?: () => void | Promise<void>) => {
       if (form.processing) return;
       onSuccessRef.current = onSuccess;
-      form.transform(() => cast<Record<string, unknown>>(transform()));
+      form.transform(() => transform());
       form.put(url, {
         preserveScroll: true,
         onSuccess: () => {

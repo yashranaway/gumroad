@@ -20,9 +20,11 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
 
 type PageProps = {
-  search_products?: BundleProduct[];
-  search_has_more?: boolean;
-  search_page?: number;
+  search_data?: {
+    products: BundleProduct[];
+    has_more: boolean;
+    page: number;
+  };
 };
 
 export const ContentTab = () => {
@@ -32,14 +34,14 @@ export const ContentTab = () => {
     id,
     productsCount,
     hasOutdatedPurchases,
-    searchProducts: initialSearchProducts,
-    searchHasMore: initialSearchHasMore,
+    searchData: initialSearchData,
   } = useBundleEditContext();
   const pageProps = cast<PageProps>(usePage().props);
 
-  const results = pageProps.search_products || initialSearchProducts || [];
-  const hasMoreResults = pageProps.search_has_more ?? initialSearchHasMore ?? false;
-  const currentPage = pageProps.search_page ?? 1;
+  const searchData = pageProps.search_data || initialSearchData;
+  const results = searchData?.products || [];
+  const hasMoreResults = searchData?.has_more ?? false;
+  const currentPage = searchData?.page ?? 1;
   const [isLoading, setIsLoading] = React.useState(false);
   const [query, setQuery] = React.useState("");
 
@@ -76,10 +78,8 @@ export const ContentTab = () => {
       preserveUrl?: boolean;
     }) => {
       const data: { query?: string; page?: number; all?: boolean } = {};
-      if (options.query !== undefined) {
-        if (options.query) {
-          data.query = options.query;
-        }
+      if (options.query !== undefined && options.query) {
+        data.query = options.query;
       }
       if (options.page !== undefined) {
         data.page = options.page;
@@ -90,7 +90,7 @@ export const ContentTab = () => {
 
       router.reload({
         data,
-        only: options.only ?? ["search_products", "search_has_more"],
+        only: options.only ?? ["search_data"],
         ...(options.reset && { reset: options.reset }),
         ...(options.preserveUrl && { preserveUrl: options.preserveUrl }),
         onStart: () => setIsLoading(true),
@@ -103,7 +103,7 @@ export const ContentTab = () => {
   const debouncedSearch = useDebouncedCallback((searchQuery: string) => {
     searchProducts({
       query: searchQuery,
-      reset: ["search_products"],
+      reset: ["search_data"],
     });
   }, 300);
 
@@ -114,7 +114,7 @@ export const ContentTab = () => {
     searchProducts({
       query,
       page: currentPage + 1,
-      only: ["search_products", "search_has_more", "search_page"],
+      only: ["search_data"],
       preserveUrl: true,
     });
   };
@@ -123,18 +123,18 @@ export const ContentTab = () => {
     searchProducts({
       query,
       all: true,
-      reset: ["search_products"],
+      reset: ["search_data"],
     });
   };
 
   const formRef = React.useRef<HTMLFormElement>(null);
-    useOnScrollToBottom(
-      formRef,
-      () => {
-        if (!isLoading) loadMore();
-      },
-      30,
-    );
+  useOnScrollToBottom(
+    formRef,
+    () => {
+      if (!isLoading) loadMore();
+    },
+    30,
+  );
 
   const [isSelecting, setIsSelecting] = React.useState(bundle.products.length > 0);
 

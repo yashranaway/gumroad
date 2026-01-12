@@ -24,8 +24,11 @@ export type BundleEditContextValue = {
   seller_refund_policy?: Pick<RefundPolicy, "title" | "fine_print">;
   productsCount?: number;
   hasOutdatedPurchases?: boolean;
-  searchProducts?: BundleProduct[];
-  searchHasMore?: boolean;
+  searchData?: {
+    products: BundleProduct[];
+    has_more: boolean;
+    page: number;
+  };
   taxonomies?: Taxonomy[];
   profileSections?: ProfileSection[];
   salesCountForInventory?: number;

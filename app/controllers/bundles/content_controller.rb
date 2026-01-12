@@ -5,16 +5,13 @@ class Bundles::ContentController < Bundles::BaseController
     props = BundlePresenter.new(bundle: @bundle).edit_content_props
     props[:tab] = "content"
 
-    props[:search_products] = InertiaRails.defer(merge: true) do
-      search_results[:products]
-    end
-
-    props[:search_has_more] = InertiaRails.defer do
-      search_results[:has_more]
-    end
-
-    props[:search_page] = InertiaRails.defer do
-      search_results[:page]
+    props[:search_data] = InertiaRails.defer(merge: true) do
+      results = search_results
+      {
+        products: results[:products],
+        has_more: results[:has_more],
+        page: results[:page],
+      }
     end
 
     render inertia: "Bundles/Content/Edit", props:
