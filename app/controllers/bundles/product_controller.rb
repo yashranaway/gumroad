@@ -15,8 +15,8 @@ class Bundles::ProductController < Bundles::BaseController
       @bundle.is_bundle = true
       @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
       @bundle.assign_attributes(product_permitted_params.except(
-        :products, :custom_button_text_option, :custom_summary, :custom_attributes, :tags, :covers, :refund_policy, :product_refund_policy_enabled,
-        :seller_refund_policy_enabled, :section_ids, :installment_plan)
+        :custom_button_text_option, :custom_summary, :custom_attributes, :tags, :covers, :refund_policy, :product_refund_policy_enabled,
+        :seller_refund_policy_enabled, :installment_plan)
       )
       @bundle.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
       @bundle.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
@@ -31,10 +31,8 @@ class Bundles::ProductController < Bundles::BaseController
           @bundle.product_refund_policy.destroy
         end
       end
-      @bundle.show_in_sections!(product_permitted_params[:section_ids]) if product_permitted_params[:section_ids]
 
       update_installment_plan
-      update_bundle_products(product_permitted_params[:products]) unless product_permitted_params[:products].nil?
       @bundle.save!
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       error_message = @bundle.errors.full_messages.first || e.message
@@ -46,37 +44,33 @@ class Bundles::ProductController < Bundles::BaseController
 
   private
     def product_permitted_params
-      params.permit(policy(@bundle).bundle_permitted_attributes)
-    end
-
-    def update_bundle_products(new_bundle_products)
-      bundle_products = @bundle.bundle_products.includes(:product)
-
-      bundle_products.each do |bundle_product|
-        new_bundle_product = new_bundle_products.find { _1[:product_id] == bundle_product.product.external_id }
-        if new_bundle_product.present?
-          bundle_product.update(variant: BaseVariant.find_by_external_id(new_bundle_product[:variant_id]), quantity: new_bundle_product[:quantity], deleted_at: nil, position: new_bundle_product[:position])
-          new_bundle_products.delete(new_bundle_product)
-          update_has_outdated_purchases
-        else
-          bundle_product.mark_deleted!
-        end
-      end
-
-      update_has_outdated_purchases if new_bundle_products.present?
-
-      new_bundle_products.each do |new_bundle_product|
-        product = Link.find_by_external_id!(new_bundle_product[:product_id])
-        variant = BaseVariant.find_by_external_id(new_bundle_product[:variant_id])
-
-        @bundle.bundle_products.create!(product:, variant:, quantity: new_bundle_product[:quantity], position: new_bundle_product[:position])
-      end
-    end
-
-    def update_has_outdated_purchases
-      return if @bundle.has_outdated_purchases?
-
-      @bundle.has_outdated_purchases = true if @bundle.successful_sales_count > 0
+      params.permit(
+        :name,
+        :description,
+        :custom_permalink,
+        :price_cents,
+        :customizable_price,
+        :suggested_price_cents,
+        :max_purchase_count,
+        :quantity_enabled,
+        :should_show_sales_count,
+        :taxonomy_id,
+        :display_product_reviews,
+        :is_adult,
+        :discover_fee_per_thousand,
+        :custom_button_text_option,
+        :custom_summary,
+        :custom_view_content_button_text,
+        :custom_receipt_text,
+        :is_epublication,
+        :product_refund_policy_enabled,
+        :seller_refund_policy_enabled,
+        refund_policy: [:max_refund_period_in_days, :title, :fine_print],
+        tags: [],
+        covers: [],
+        custom_attributes: [:name, :value],
+        installment_plan: [:number_of_installments]
+      )
     end
 
     def update_installment_plan

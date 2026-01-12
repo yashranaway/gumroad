@@ -4,6 +4,7 @@ import { Layout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { MarketingEmailStatus } from "$app/components/BundleEdit/ShareTab/MarketingEmailStatus";
 import { useBundleEditContext } from "$app/components/BundleEdit/state";
+import { useBundleFormSubmission } from "$app/components/BundleEdit/useBundleFormSubmission";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -16,14 +17,26 @@ import { Toggle } from "$app/components/Toggle";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 
 export const ShareTab = () => {
-  const { bundle, updateBundle, taxonomies, profileSections } = useBundleEditContext();
+  const { bundle, updateBundle, id, taxonomies, profileSections } = useBundleEditContext();
   const currentSeller = useCurrentSeller();
   const url = useProductUrl();
 
   if (!currentSeller || !taxonomies || !profileSections) return null;
 
+  const transformShareData = React.useCallback(
+    () => ({
+      section_ids: bundle.section_ids,
+    }),
+    [bundle.section_ids],
+  );
+
+  const { submit: submitForm, isProcessing } = useBundleFormSubmission({
+    url: Routes.edit_share_bundle_path(id),
+    transform: transformShareData,
+  });
+
   return (
-    <Layout preview={<ProductPreview />}>
+    <Layout preview={<ProductPreview />} onSave={submitForm} isProcessing={isProcessing}>
       <form>
         <section className="p-4! md:p-8!">
           <header>

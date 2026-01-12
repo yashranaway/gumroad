@@ -17,8 +17,4 @@ class Bundles::BaseController < Sellers::BaseController
       authorize @bundle
       @title = @bundle.name
     end
-
-    def bundle_props
-      BundlePresenter.new(bundle: @bundle).bundle_props
-    end
 end

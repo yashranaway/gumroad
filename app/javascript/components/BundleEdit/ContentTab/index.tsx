@@ -7,6 +7,7 @@ import { BundleProductItem } from "$app/components/BundleEdit/ContentTab/BundleP
 import { BundleProductSelector } from "$app/components/BundleEdit/ContentTab/BundleProductSelector";
 import { Layout } from "$app/components/BundleEdit/Layout";
 import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
+import { useBundleFormSubmission } from "$app/components/BundleEdit/useBundleFormSubmission";
 import { Button } from "$app/components/Button";
 import { CartItemList } from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
@@ -28,6 +29,7 @@ export const ContentTab = () => {
   const {
     bundle,
     updateBundle,
+    id,
     productsCount,
     hasOutdatedPurchases,
     searchProducts: initialSearchProducts,
@@ -64,49 +66,94 @@ export const ContentTab = () => {
     }
   }, [results, updateBundle, bundle.products]);
 
+  const searchProducts = React.useCallback(
+    (options: {
+      query?: string;
+      page?: number;
+      all?: boolean;
+      only?: string[];
+      reset?: string[];
+      preserveUrl?: boolean;
+    }) => {
+      const data: { query?: string; page?: number; all?: boolean } = {};
+      if (options.query !== undefined) {
+        if (options.query) {
+          data.query = options.query;
+        }
+      }
+      if (options.page !== undefined) {
+        data.page = options.page;
+      }
+      if (options.all !== undefined) {
+        data.all = options.all;
+      }
+
+      router.reload({
+        data,
+        only: options.only ?? ["search_products", "search_has_more"],
+        ...(options.reset && { reset: options.reset }),
+        ...(options.preserveUrl && { preserveUrl: options.preserveUrl }),
+        onStart: () => setIsLoading(true),
+        onFinish: () => setIsLoading(false),
+      });
+    },
+    [],
+  );
+
   const debouncedSearch = useDebouncedCallback((searchQuery: string) => {
-    router.reload({
-      data: { query: searchQuery || undefined, page: undefined, all: undefined },
-      only: ["search_products", "search_has_more"],
+    searchProducts({
+      query: searchQuery,
       reset: ["search_products"],
-      onStart: () => setIsLoading(true),
-      onFinish: () => setIsLoading(false),
     });
   }, 300);
 
   useOnChange(() => debouncedSearch(query), [query]);
 
-  const handleLoadMore = () => {
+  const loadMore = () => {
     if (!hasMoreResults || isLoading) return;
-    router.reload({
-      data: { query: query || undefined, page: currentPage + 1 },
+    searchProducts({
+      query,
+      page: currentPage + 1,
       only: ["search_products", "search_has_more", "search_page"],
       preserveUrl: true,
-      onStart: () => setIsLoading(true),
-      onFinish: () => setIsLoading(false),
     });
   };
 
-  const handleLoadAll = () => {
-    router.reload({
-      data: { query: query || undefined, all: true, page: undefined },
-      only: ["search_products", "search_has_more"],
+  const loadAll = () => {
+    searchProducts({
+      query,
+      all: true,
       reset: ["search_products"],
-      onStart: () => setIsLoading(true),
-      onFinish: () => setIsLoading(false),
     });
   };
 
   const formRef = React.useRef<HTMLFormElement>(null);
-  useOnScrollToBottom(
-    formRef,
-    () => {
-      if (!isLoading) handleLoadMore();
-    },
-    30,
-  );
+    useOnScrollToBottom(
+      formRef,
+      () => {
+        if (!isLoading) loadMore();
+      },
+      30,
+    );
 
   const [isSelecting, setIsSelecting] = React.useState(bundle.products.length > 0);
+
+  const transformContentData = React.useCallback(
+    () => ({
+      products: bundle.products.map((bundleProduct, idx) => ({
+        product_id: bundleProduct.id,
+        variant_id: bundleProduct.variants?.selected_id,
+        quantity: bundleProduct.quantity,
+        position: idx,
+      })),
+    }),
+    [bundle.products],
+  );
+
+  const { submit: submitForm, isProcessing } = useBundleFormSubmission({
+    url: Routes.edit_content_bundle_path(id),
+    transform: transformContentData,
+  });
 
   return (
     <Layout
@@ -124,6 +171,8 @@ export const ContentTab = () => {
           </section>
         </div>
       }
+      onSave={submitForm}
+      isProcessing={isProcessing}
     >
       <form onSubmit={(evt) => evt.preventDefault()} ref={formRef}>
         <section className="p-4! md:p-8!">
@@ -145,7 +194,7 @@ export const ContentTab = () => {
                     disabled={isLoading}
                     onChange={(evt) => {
                       if (evt.target.checked) {
-                        handleLoadAll();
+                        loadAll();
                       } else {
                         updateBundle({ products: [] });
                       }

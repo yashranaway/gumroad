@@ -12,9 +12,6 @@ class Bundles::ShareController < Bundles::BaseController
     authorize @bundle
 
     begin
-      @bundle.is_bundle = true
-      @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
-      @bundle.assign_attributes(share_permitted_params.except(:section_ids))
       @bundle.show_in_sections!(share_permitted_params[:section_ids]) if share_permitted_params[:section_ids]
       @bundle.save!
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e

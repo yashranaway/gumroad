@@ -30,7 +30,6 @@ describe Bundles::ProductController, inertia: true do
   end
 
   describe "PUT update" do
-    let(:product) { create(:product, user: seller) }
     let(:asset_previews) do
       previews = create_list(:asset_preview, 2, link: bundle)
       previews.each do |preview|
@@ -44,10 +43,6 @@ describe Bundles::ProductController, inertia: true do
       end
       previews
     end
-    let(:versioned_product) { create(:product_with_digital_versions, user: seller) }
-    let(:profile_section1) { create(:seller_profile_products_section, seller:, shown_products: [bundle.id]) }
-    let(:profile_section2) { create(:seller_profile_products_section, seller:) }
-    let!(:purchase) { create(:purchase, link: bundle) }
     let(:bundle_params) do
       {
         id: bundle.external_id,
@@ -75,23 +70,6 @@ describe Bundles::ProductController, inertia: true do
           title: "New refund policy",
           fine_print: "I really hate being small",
         },
-        section_ids: [profile_section2.external_id],
-        products: [
-          {
-            product_id: bundle.bundle_products.first.product.external_id,
-            variant_id: nil,
-            quantity: 3,
-          },
-          {
-            product_id: product.external_id,
-            quantity: 1,
-          },
-          {
-            product_id: versioned_product.external_id,
-            variant_id: versioned_product.alive_variants.first.external_id,
-            quantity: 2,
-          }
-        ]
       }
     end
 
@@ -129,34 +107,9 @@ describe Bundles::ProductController, inertia: true do
       .and not_change { bundle.product_refund_policy_enabled }
       .and not_change { bundle.product_refund_policy&.title }
       .and not_change { bundle.product_refund_policy&.fine_print }
-      .and change { bundle.has_outdated_purchases }.from(false).to(true)
-      .and change { profile_section1.reload.shown_products }.from([bundle.id]).to([])
-      .and change { profile_section2.reload.shown_products }.from([]).to([bundle.id])
 
       expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
       expect(flash[:notice]).to eq("Changes saved!")
-
-      deleted_bundle_products = bundle.bundle_products.deleted
-      expect(deleted_bundle_products.first.deleted_at).to be_present
-
-      new_bundle_products = bundle.bundle_products.alive
-      expect(new_bundle_products.first.product).to eq(bundle.bundle_products.first.product)
-      expect(new_bundle_products.first.variant).to be_nil
-      expect(new_bundle_products.first.bundle).to eq(bundle)
-      expect(new_bundle_products.first.quantity).to eq(3)
-      expect(new_bundle_products.first.deleted_at).to be_nil
-
-      expect(new_bundle_products.second.product).to eq(product)
-      expect(new_bundle_products.second.variant).to be_nil
-      expect(new_bundle_products.second.bundle).to eq(bundle)
-      expect(new_bundle_products.second.quantity).to eq(1)
-      expect(new_bundle_products.second.deleted_at).to be_nil
-
-      expect(new_bundle_products.third.product).to eq(versioned_product)
-      expect(new_bundle_products.third.variant).to eq(versioned_product.alive_variants.first)
-      expect(new_bundle_products.third.bundle).to eq(bundle)
-      expect(new_bundle_products.third.quantity).to eq(2)
-      expect(new_bundle_products.third.deleted_at).to be_nil
     end
 
     describe "installment plans" do
@@ -191,23 +144,20 @@ describe Bundles::ProductController, inertia: true do
             )
           end
 
-          it "does not allow adding products that are not eligible for installment plans" do
+          it "does not allow creating installment plan when bundle has ineligible products" do
+            existing_plan.destroy!
+            bundle.reload
+            create(:bundle_product, bundle: bundle, product: commission_product)
+
             params = bundle_params.merge(
-              installment_plan: { number_of_installments: 2 },
-              products: [
-                {
-                  product_id: commission_product.external_id,
-                  quantity: 1
-                },
-              ]
+              installment_plan: { number_of_installments: 2 }
             )
 
             expect { put :update, params: params }
-              .not_to change { bundle.bundle_products.count }
+              .not_to change { bundle.reload.installment_plan }
 
             expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
             expect(flash[:alert]).to include("Installment plan is not available for the bundled product")
-            expect(bundle.reload.bundle_products.map(&:product)).not_to include(commission_product)
           end
 
           context "with no existing payment options" do
@@ -379,57 +329,6 @@ describe Bundles::ProductController, inertia: true do
       end
     end
 
-    context "adding a call to a bundle" do
-      let(:call_product) { create(:call_product, user: seller) }
-
-      it "does not make any changes to the bundle and returns an error" do
-        expect do
-          put :update, params: {
-            id: bundle.external_id,
-            products: [
-              {
-                product_id: call_product.external_id,
-                variant_id: call_product.variants.first.external_id,
-                quantity: 1
-              },
-              { product_id: product.external_id, quantity: 1, },
-            ]
-          }
-          bundle.reload
-        end.to_not change { bundle.bundle_products.count }
-
-        expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
-        expect(flash[:alert]).to eq("Validation failed: A call product cannot be added to a bundle")
-      end
-    end
-
-    context "product is not a bundle" do
-      let(:product) { create(:product, user: seller) }
-
-      it "converts it to a bundle" do
-        expect do
-          put :update, params: {
-            id: product.external_id,
-            products: [
-              {
-                product_id: versioned_product.external_id,
-                variant_id: versioned_product.alive_variants.first.external_id,
-                quantity: 1,
-              },
-            ]
-          }
-          product.reload
-        end.to change { product.is_bundle }.from(false).to(true)
-           .and change { product.native_type }.from(Link::NATIVE_TYPE_DIGITAL).to(Link::NATIVE_TYPE_BUNDLE)
-
-        expect(product.bundle_products.count).to eq(1)
-        expect(product.bundle_products.first.product).to eq(versioned_product)
-        expect(product.bundle_products.first.variant).to eq(versioned_product.alive_variants.first)
-        expect(product.bundle_products.first.quantity).to eq(1)
-        expect(response).to redirect_to(edit_product_bundle_path(product.external_id))
-        expect(flash[:notice]).to eq("Changes saved!")
-      end
-    end
 
     context "when there is a validation error" do
       it "returns the error message" do
@@ -437,9 +336,8 @@ describe Bundles::ProductController, inertia: true do
           put :update, params: {
             id: bundle.external_id,
             custom_permalink: "*",
-            bundle_products: [],
           }
-        end.to change { bundle.bundle_products.count }.by(0)
+        end.to_not change { bundle.reload.custom_permalink }
 
         expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
         expect(flash[:alert]).to eq("Custom permalink is invalid")

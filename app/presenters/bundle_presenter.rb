@@ -110,24 +110,6 @@ class BundlePresenter
     )
   end
 
-  def bundle_props
-    edit_product_props.merge(
-      sales_count_for_inventory: bundle.sales_count_for_inventory,
-      ratings: bundle.rating_stats,
-      taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
-      profile_sections: bundle.user.seller_profile_products_sections.map do |section|
-        {
-          id: section.external_id,
-          header: section.header || "",
-          product_names: section.product_names,
-          default: section.add_new_products,
-        }
-      end,
-      products_count: bundle.user.products.alive.not_archived.not_is_recurring_billing.not_is_bundle.not_call.count,
-      has_outdated_purchases: bundle.has_outdated_purchases,
-    )
-  end
-
   def self.bundle_product(product:, quantity: 1, selected_variant_id: nil)
     variants = product.variants_or_skus
     ProductPresenter.card_for_web(product:).merge(

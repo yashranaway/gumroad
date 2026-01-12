@@ -1,10 +1,16 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
 
+import { setProductPublished } from "$app/data/publish_product";
+import { assertResponseError } from "$app/utils/request";
+
 import { CUSTOM_BUTTON_TEXT_OPTIONS } from "$app/parsers/product";
+import { showAlert } from "$app/components/server-components/Alert";
 
 import { Layout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { useBundleEditContext } from "$app/components/BundleEdit/state";
+import { useBundleFormSubmission } from "$app/components/BundleEdit/useBundleFormSubmission";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor";
@@ -47,8 +53,80 @@ export const ProductTab = () => {
 
   if (!currentSeller) return null;
 
+  const transformProductData = React.useCallback(
+    () => ({
+      ...bundle,
+      covers: bundle.covers.map(({ id }) => id),
+      custom_button_text_option: bundle.custom_button_text_option,
+      custom_summary: bundle.custom_summary,
+      custom_attributes: bundle.custom_attributes,
+      tags: bundle.tags,
+      refund_policy: bundle.refund_policy,
+      product_refund_policy_enabled: bundle.product_refund_policy_enabled,
+      installment_plan: bundle.allow_installment_plan ? bundle.installment_plan : undefined,
+    }),
+    [bundle],
+  );
+
+  const publishAfterSave = React.useCallback(async () => {
+    try {
+      await setProductPublished(uniquePermalink, true);
+      updateBundle({ is_published: true });
+      showAlert("Published!", "success");
+      router.visit(Routes.edit_share_bundle_path(id));
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+  }, [uniquePermalink, updateBundle, id]);
+
+  const unpublishAfterSave = React.useCallback(async () => {
+    try {
+      await setProductPublished(uniquePermalink, false);
+      updateBundle({ is_published: false });
+      showAlert("Unpublished!", "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+  }, [uniquePermalink, updateBundle]);
+
+  const { submit: submitForm, isProcessing } = useBundleFormSubmission({
+    url: Routes.edit_product_bundle_path(id),
+    transform: transformProductData,
+  });
+
+  const saveAndContinue = React.useCallback(() => {
+    submitForm(() => {
+      router.visit(Routes.edit_content_bundle_path(id));
+    });
+  }, [submitForm, id]);
+
+  const publishAndContinue = React.useCallback(() => {
+    submitForm(publishAfterSave);
+  }, [submitForm, publishAfterSave]);
+
+  const unpublish = React.useCallback(() => {
+    submitForm(unpublishAfterSave);
+  }, [submitForm, unpublishAfterSave]);
+
+  const preview = React.useCallback(() => {
+    submitForm(() => {
+      window.open(url);
+    });
+  }, [submitForm, url]);
+
   return (
-    <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
+    <Layout
+      preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />}
+      isLoading={isUploading}
+      isProcessing={isProcessing}
+      {...(bundle.is_published && { onSave: () => submitForm() })}
+      {...(bundle.is_published && { onUnpublish: unpublish })}
+      {...(!bundle.is_published && { onSaveAndContinue: saveAndContinue })}
+      {...(!bundle.is_published && { onPublishAndContinue: publishAndContinue })}
+      onPreview={preview}
+    >
       <form>
         <section className="p-4! md:p-8!">
           <fieldset>
