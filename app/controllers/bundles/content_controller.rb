@@ -2,7 +2,7 @@
 
 class Bundles::ContentController < Bundles::BaseController
   def edit
-    props = bundle_props
+    props = BundlePresenter.new(bundle: @bundle).edit_content_props
     props[:tab] = "content"
 
     props[:search_products] = InertiaRails.defer(merge: true) do
@@ -17,7 +17,7 @@ class Bundles::ContentController < Bundles::BaseController
       search_results[:page]
     end
 
-    render inertia: "Bundles/ContentTab", props:
+    render inertia: "Bundles/Content/Edit", props:
   end
 
   def update
@@ -31,21 +31,22 @@ class Bundles::ContentController < Bundles::BaseController
         @bundle.save!
       rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
         error_message = @bundle.errors.full_messages.first || e.message
-        return redirect_to bundles_edit_content_path(@bundle.external_id), alert: error_message
+        return redirect_to edit_content_bundle_path(@bundle.external_id), alert: error_message
       end
     end
 
-    redirect_to bundles_edit_content_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+    redirect_to edit_content_bundle_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
   end
 
   def update_purchases_content
-
-
-    return render json: { error: "This bundle has no purchases with outdated content." }, status: :forbidden unless @bundle.has_outdated_purchases?
+    unless @bundle.has_outdated_purchases?
+      redirect_to edit_content_bundle_path(@bundle.external_id), alert: "This bundle has no purchases with outdated content.", status: :see_other
+      return
+    end
 
     UpdateBundlePurchasesContentJob.perform_async(@bundle.id)
 
-    head :no_content
+    redirect_to edit_content_bundle_path(@bundle.external_id), notice: "Queued an update to the content of all outdated purchases.", status: :see_other
   end
 
   private

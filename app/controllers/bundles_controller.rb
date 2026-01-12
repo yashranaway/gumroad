@@ -7,7 +7,7 @@ class BundlesController < Sellers::BaseController
     bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
     authorize bundle
 
-    redirect_to bundles_edit_product_path(params[:id]), status: :moved_permanently
+    redirect_to edit_product_bundle_path(params[:id]), status: :moved_permanently
   end
 
   def create_from_email
@@ -28,7 +28,7 @@ class BundlesController < Sellers::BaseController
     end
     bundle.save!
 
-    redirect_to bundles_edit_product_path(bundle.external_id)
+    redirect_to edit_product_bundle_path(bundle.external_id)
   end
 
   private

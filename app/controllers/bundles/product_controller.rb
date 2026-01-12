@@ -2,10 +2,10 @@
 
 class Bundles::ProductController < Bundles::BaseController
   def edit
-    props = bundle_props
+    props = BundlePresenter.new(bundle: @bundle).edit_product_props
     props[:tab] = "product"
 
-    render inertia: "Bundles/ProductTab", props:
+    render inertia: "Bundles/Product/Edit", props:
   end
 
   def update
@@ -38,10 +38,10 @@ class Bundles::ProductController < Bundles::BaseController
       @bundle.save!
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       error_message = @bundle.errors.full_messages.first || e.message
-      return redirect_to bundles_edit_product_path(@bundle.external_id), alert: error_message
+      return redirect_to edit_product_bundle_path(@bundle.external_id), alert: error_message
     end
 
-    redirect_to bundles_edit_product_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+    redirect_to edit_product_bundle_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
   end
 
   private

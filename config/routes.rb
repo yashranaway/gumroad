@@ -606,19 +606,19 @@ Rails.application.routes.draw do
       end
     end
 
-    namespace :bundles do
-      get ":id/edit", to: "product#edit", as: :edit_product
-      patch ":id/edit", to: "product#update"
-      put ":id/edit", to: "product#update"
-
-      get ":id/edit/content", to: "content#edit", as: :edit_content
-      patch ":id/edit/content", to: "content#update"
-      put ":id/edit/content", to: "content#update"
-      post ":id/edit/content/update_purchases_content", to: "content#update_purchases_content", as: :update_purchases_content_content
-
-      get ":id/edit/share", to: "share#edit", as: :edit_share
-      patch ":id/edit/share", to: "share#update"
-      put ":id/edit/share", to: "share#update"
+    resources :bundles, path: "bundles", param: :id, only: [] do
+      member do
+        get :edit, to: "bundles/product#edit", as: :edit_product
+        patch :update, to: "bundles/product#update"
+        put :update, to: "bundles/product#update"
+        get "edit/content", to: "bundles/content#edit", as: :edit_content
+        patch "edit/content", to: "bundles/content#update"
+        put "edit/content", to: "bundles/content#update"
+        post "edit/content/update_purchases_content", to: "bundles/content#update_purchases_content", as: :update_purchases_content
+        get "edit/share", to: "bundles/share#edit", as: :edit_share
+        patch "edit/share", to: "bundles/share#update"
+        put "edit/share", to: "bundles/share#update"
+      end
     end
 
     resources :links, except: [:edit, :show, :update, :new] do

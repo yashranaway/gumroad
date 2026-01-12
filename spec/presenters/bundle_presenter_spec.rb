@@ -224,4 +224,73 @@ describe BundlePresenter do
       end
     end
   end
+
+  describe "#shared_props" do
+    let(:seller) { create(:named_seller, :eligible_for_service_products) }
+    let(:bundle) { create(:product, :bundle, user: seller, name: "Bundle", description: "I am a bundle!", custom_permalink: "bundle") }
+
+    it "returns shared props with minimal bundle data" do
+      presenter = described_class.new(bundle:)
+      props = presenter.shared_props
+
+      expect(props.keys).to match_array([:bundle, :id, :unique_permalink, :is_bundle])
+      expect(props[:bundle]).to include(:name, :description, :custom_permalink, :is_published)
+      expect(props[:id]).to eq(bundle.external_id)
+      expect(props[:unique_permalink]).to eq(bundle.unique_permalink)
+      expect(props[:is_bundle]).to eq(true)
+      expect(props).not_to include(:currency_type, :thumbnail, :taxonomies, :products_count)
+    end
+  end
+
+  describe "#edit_product_props" do
+    let(:seller) { create(:named_seller, :eligible_for_service_products) }
+    let(:bundle) { create(:product, :bundle, user: seller) }
+
+    it "includes shared props plus product-specific props" do
+      presenter = described_class.new(bundle:)
+      props = presenter.edit_product_props
+
+      expect(props).to include(:bundle, :id, :unique_permalink, :is_bundle)
+      expect(props).to include(:currency_type, :thumbnail, :refund_policies, :seller_refund_policy_enabled, :seller_refund_policy)
+      expect(props).to include(:sales_count_for_inventory, :ratings)
+      expect(props[:currency_type]).to eq(bundle.price_currency_type)
+    end
+  end
+
+  describe "#edit_content_props" do
+    let(:seller) { create(:named_seller, :eligible_for_service_products) }
+    let(:bundle) { create(:product, :bundle, user: seller) }
+
+    before do
+      create(:bundle_product, bundle:, product: create(:product, user: seller), quantity: 1, position: 0)
+      bundle.reload
+    end
+
+    it "includes shared props plus content-specific props" do
+      presenter = described_class.new(bundle: bundle.reload)
+      props = presenter.edit_content_props
+
+      expect(props).to include(:bundle, :id, :unique_permalink, :is_bundle)
+      expect(props).to include(:products_count, :has_outdated_purchases)
+      expect(props[:products_count]).to be_a(Integer)
+      expect(props[:has_outdated_purchases]).to be_in([true, false])
+      expect(props).not_to include(:currency_type, :thumbnail, :taxonomies, :refund_policies)
+    end
+  end
+
+  describe "#edit_share_props" do
+    let(:seller) { create(:named_seller, :eligible_for_service_products) }
+    let(:bundle) { create(:product, :bundle, user: seller) }
+
+    it "includes shared props plus share-specific props" do
+      presenter = described_class.new(bundle:)
+      props = presenter.edit_share_props
+
+      expect(props).to include(:bundle, :id, :unique_permalink, :is_bundle)
+      expect(props).to include(:taxonomies, :profile_sections)
+      expect(props).to include(:currency_type, :sales_count_for_inventory, :ratings)
+      expect(props).to include(:seller_refund_policy_enabled, :seller_refund_policy)
+      expect(props).not_to include(:thumbnail, :refund_policies, :products_count)
+    end
+  end
 end

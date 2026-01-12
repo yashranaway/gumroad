@@ -42,7 +42,7 @@ export const Layout = ({
   const { tab } = cast<{ tab: "product" | "content" | "share" }>(usePage().props);
 
   const url = useProductUrl();
-  const rootPath = Routes.bundles_edit_product_path(id);
+  const rootPath = Routes.edit_product_bundle_path(id);
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
@@ -65,11 +65,11 @@ export const Layout = ({
   const getUpdateRoute = () => {
     switch (tab) {
       case "content":
-        return Routes.bundles_edit_content_path(id);
+        return Routes.edit_content_bundle_path(id);
       case "share":
-        return Routes.bundles_edit_share_path(id);
+        return Routes.edit_share_bundle_path(id);
       default:
-        return Routes.bundles_edit_product_path(id);
+        return Routes.edit_product_bundle_path(id);
     }
   };
 
@@ -99,9 +99,9 @@ export const Layout = ({
         updateBundle({ is_published: published });
         showAlert(published ? "Published!" : "Unpublished!", "success");
         if (tab === "share") {
-          router.visit(Routes.bundles_edit_content_path(id));
+          router.visit(Routes.edit_content_bundle_path(id));
         } else if (published) {
-          router.visit(Routes.bundles_edit_share_path(id));
+          router.visit(Routes.edit_share_bundle_path(id));
         }
       } catch (e) {
         assertResponseError(e);
@@ -179,7 +179,7 @@ export const Layout = ({
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => saveBundle(() => router.visit(Routes.bundles_edit_content_path(id)))}
+              onClick={() => saveBundle(() => router.visit(Routes.edit_content_bundle_path(id)))}
             >
               {form.processing ? "Saving changes..." : "Save and continue"}
             </Button>
@@ -202,12 +202,12 @@ export const Layout = ({
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "content"}>
-            <Link href={Routes.bundles_edit_content_path(id)} onClick={(e) => handleTabClick(e, "content")}>
+            <Link href={Routes.edit_content_bundle_path(id)} onClick={(e) => handleTabClick(e, "content")}>
               Content
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "share"}>
-            <Link href={Routes.bundles_edit_share_path(id)} onClick={(e) => handleTabClick(e, "share")}>
+            <Link href={Routes.edit_share_bundle_path(id)} onClick={(e) => handleTabClick(e, "share")}>
               Share
             </Link>
           </Tab>

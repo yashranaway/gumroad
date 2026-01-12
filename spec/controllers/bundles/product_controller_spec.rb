@@ -12,10 +12,10 @@ describe Bundles::ProductController, inertia: true do
   include_context "with user signed in as admin for seller"
 
   describe "GET edit" do
-    it "renders the ProductTab Inertia component with bundle props and sets the title" do
+    it "renders the Bundles/Product/Edit Inertia component with bundle props and sets the title" do
       get :edit, params: { id: bundle.external_id }
       expect(response).to be_successful
-      expect(inertia.component).to eq("Bundles/ProductTab")
+      expect(inertia.component).to eq("Bundles/Product/Edit")
       expect(inertia.props).to have_key(:bundle)
       expect(inertia.props).to have_key(:tab)
       expect(inertia.props[:tab]).to eq("product")
@@ -133,7 +133,7 @@ describe Bundles::ProductController, inertia: true do
       .and change { profile_section1.reload.shown_products }.from([bundle.id]).to([])
       .and change { profile_section2.reload.shown_products }.from([]).to([bundle.id])
 
-      expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+      expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
       expect(flash[:notice]).to eq("Changes saved!")
 
       deleted_bundle_products = bundle.bundle_products.deleted
@@ -177,7 +177,7 @@ describe Bundles::ProductController, inertia: true do
             plan = bundle.reload.installment_plan
             expect(plan.number_of_installments).to eq(3)
             expect(plan.recurrence).to eq("monthly")
-            expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+            expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
             expect(flash[:notice]).to eq("Changes saved!")
           end
         end
@@ -205,7 +205,7 @@ describe Bundles::ProductController, inertia: true do
             expect { put :update, params: params }
               .not_to change { bundle.bundle_products.count }
 
-            expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+            expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
             expect(flash[:alert]).to include("Installment plan is not available for the bundled product")
             expect(bundle.reload.bundle_products.map(&:product)).not_to include(commission_product)
           end
@@ -224,7 +224,7 @@ describe Bundles::ProductController, inertia: true do
                 number_of_installments: 4,
                 recurrence: "monthly"
               )
-              expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+              expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
               expect(flash[:notice]).to eq("Changes saved!")
             end
           end
@@ -247,7 +247,7 @@ describe Bundles::ProductController, inertia: true do
                 recurrence: "monthly"
               )
               expect(new_plan).not_to eq(existing_plan)
-              expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+              expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
               expect(flash[:notice]).to eq("Changes saved!")
             end
           end
@@ -272,7 +272,7 @@ describe Bundles::ProductController, inertia: true do
 
               expect { existing_plan.reload }.to raise_error(ActiveRecord::RecordNotFound)
               expect(bundle.reload.installment_plan).to be_nil
-              expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+              expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
               expect(flash[:notice]).to eq("Changes saved!")
             end
           end
@@ -290,7 +290,7 @@ describe Bundles::ProductController, inertia: true do
                 .to change { existing_plan.reload.deleted_at }.from(nil)
 
               expect(bundle.reload.installment_plan).to be_nil
-              expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+              expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
               expect(flash[:notice]).to eq("Changes saved!")
             end
           end
@@ -307,7 +307,7 @@ describe Bundles::ProductController, inertia: true do
             .not_to change { ProductInstallmentPlan.count }
 
           expect(bundle.reload.installment_plan).to be_nil
-          expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+          expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
           expect(flash[:alert]).to include("Installment plan is not available for the bundled product")
         end
       end
@@ -325,7 +325,7 @@ describe Bundles::ProductController, inertia: true do
             .not_to change { ProductInstallmentPlan.count }
 
           expect(bundle.reload.installment_plan).to be_nil
-          expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+          expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
           expect(flash[:alert]).to include("Installment plans are not available for \"pay what you want\" pricing")
         end
       end
@@ -342,7 +342,7 @@ describe Bundles::ProductController, inertia: true do
         expect(bundle.product_refund_policy_enabled).to be(true)
         expect(bundle.product_refund_policy.title).to eq("30-day money back guarantee")
         expect(bundle.product_refund_policy.fine_print).to eq("I really hate being small")
-        expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+        expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
         expect(flash[:notice]).to eq("Changes saved!")
       end
     end
@@ -358,7 +358,7 @@ describe Bundles::ProductController, inertia: true do
         expect(bundle.product_refund_policy_enabled).to be(true)
         expect(bundle.product_refund_policy.title).to eq("30-day money back guarantee")
         expect(bundle.product_refund_policy.fine_print).to eq("I really hate being small")
-        expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+        expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
         expect(flash[:notice]).to eq("Changes saved!")
       end
 
@@ -373,7 +373,7 @@ describe Bundles::ProductController, inertia: true do
           bundle.reload
           expect(bundle.product_refund_policy_enabled).to be(false)
           expect(bundle.product_refund_policy).to be_nil
-          expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+          expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
           expect(flash[:notice]).to eq("Changes saved!")
         end
       end
@@ -398,7 +398,7 @@ describe Bundles::ProductController, inertia: true do
           bundle.reload
         end.to_not change { bundle.bundle_products.count }
 
-        expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+        expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
         expect(flash[:alert]).to eq("Validation failed: A call product cannot be added to a bundle")
       end
     end
@@ -426,7 +426,7 @@ describe Bundles::ProductController, inertia: true do
         expect(product.bundle_products.first.product).to eq(versioned_product)
         expect(product.bundle_products.first.variant).to eq(versioned_product.alive_variants.first)
         expect(product.bundle_products.first.quantity).to eq(1)
-        expect(response).to redirect_to(bundles_edit_product_path(product.external_id))
+        expect(response).to redirect_to(edit_product_bundle_path(product.external_id))
         expect(flash[:notice]).to eq("Changes saved!")
       end
     end
@@ -441,7 +441,7 @@ describe Bundles::ProductController, inertia: true do
           }
         end.to change { bundle.bundle_products.count }.by(0)
 
-        expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+        expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
         expect(flash[:alert]).to eq("Custom permalink is invalid")
       end
     end

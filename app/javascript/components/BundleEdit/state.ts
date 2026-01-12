@@ -12,25 +12,27 @@ import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEdit
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ProfileSection, PublicFileWithStatus } from "$app/components/ProductEdit/state";
 
-export const BundleEditContext = React.createContext<{
+export type BundleEditContextValue = {
   bundle: Bundle;
   updateBundle: (update: Partial<Bundle> | ((bundle: Bundle) => void)) => void;
   id: string;
   uniquePermalink: string;
-  currencyType: CurrencyCode;
-  thumbnail: Thumbnail | null;
-  salesCountForInventory: number;
-  ratings: RatingsWithPercentages;
-  taxonomies: Taxonomy[];
-  profileSections: ProfileSection[];
-  refundPolicies: OtherRefundPolicy[];
-  productsCount: number;
-  hasOutdatedPurchases: boolean;
-  seller_refund_policy_enabled: boolean;
-  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
+  currencyType?: CurrencyCode;
+  thumbnail?: Thumbnail | null;
+  refundPolicies?: OtherRefundPolicy[];
+  seller_refund_policy_enabled?: boolean;
+  seller_refund_policy?: Pick<RefundPolicy, "title" | "fine_print">;
+  productsCount?: number;
+  hasOutdatedPurchases?: boolean;
   searchProducts?: BundleProduct[];
   searchHasMore?: boolean;
-} | null>(null);
+  taxonomies?: Taxonomy[];
+  profileSections?: ProfileSection[];
+  salesCountForInventory?: number;
+  ratings?: RatingsWithPercentages;
+};
+
+export const BundleEditContext = React.createContext<BundleEditContextValue | null>(null);
 export const useBundleEditContext = () => assertDefined(React.useContext(BundleEditContext));
 
 export type BundleProduct = CardProduct & {

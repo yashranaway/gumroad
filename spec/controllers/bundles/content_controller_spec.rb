@@ -12,10 +12,10 @@ describe Bundles::ContentController, inertia: true do
   include_context "with user signed in as admin for seller"
 
   describe "GET edit" do
-    it "renders the ContentTab Inertia component when tab is content" do
+    it "renders the Bundles/Content/Edit Inertia component when tab is content" do
       get :edit, params: { id: bundle.external_id }
       expect(response).to be_successful
-      expect(inertia.component).to eq("Bundles/ContentTab")
+      expect(inertia.component).to eq("Bundles/Content/Edit")
       expect(inertia.props).to have_key(:bundle)
       expect(inertia.props).to have_key(:tab)
       expect(inertia.props[:tab]).to eq("content")
@@ -60,7 +60,7 @@ describe Bundles::ContentController, inertia: true do
         bundle.reload
       end.to change { bundle.has_outdated_purchases }.from(false).to(true)
 
-      expect(response).to redirect_to(bundles_edit_content_path(bundle.external_id))
+      expect(response).to redirect_to(edit_content_bundle_path(bundle.external_id))
       expect(flash[:notice]).to eq("Changes saved!")
 
       deleted_bundle_products = bundle.bundle_products.deleted
@@ -105,7 +105,7 @@ describe Bundles::ContentController, inertia: true do
           bundle.reload
         end.to_not change { bundle.bundle_products.count }
 
-        expect(response).to redirect_to(bundles_edit_content_path(bundle.external_id))
+        expect(response).to redirect_to(edit_content_bundle_path(bundle.external_id))
         expect(flash[:alert]).to eq("Validation failed: A call product cannot be added to a bundle")
       end
     end
@@ -119,7 +119,7 @@ describe Bundles::ContentController, inertia: true do
           }
         end.to_not change { bundle.bundle_products.count }
 
-        expect(response).to redirect_to(bundles_edit_content_path(bundle.external_id))
+        expect(response).to redirect_to(edit_content_bundle_path(bundle.external_id))
       end
     end
   end

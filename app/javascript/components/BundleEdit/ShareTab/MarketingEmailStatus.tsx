@@ -9,6 +9,8 @@ import { Alert } from "$app/components/ui/Alert";
 export const MarketingEmailStatus = () => {
   const { bundle, uniquePermalink, currencyType } = useBundleEditContext();
 
+  if (!currencyType) return null;
+
   const [sendToAllCustomers, setSendToAllCustomers] = React.useState(false);
   const queryParams = {
     template: "bundle_marketing",

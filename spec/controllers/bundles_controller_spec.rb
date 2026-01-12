@@ -14,7 +14,7 @@ describe BundlesController, inertia: true do
   describe "GET show" do
     it "redirects to the edit product page" do
       get :show, params: { id: bundle.external_id }
-      expect(response).to redirect_to(bundles_edit_product_path(bundle.external_id))
+      expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
       expect(response).to have_http_status(:moved_permanently)
     end
 
@@ -55,7 +55,7 @@ describe BundlesController, inertia: true do
       get :create_from_email, params: { type: Product::BundlesMarketing::BEST_SELLING_BUNDLE, price: 100, products: [product.external_id, versioned_product.external_id] }
 
       bundle = Link.last
-      expect(response).to redirect_to bundles_edit_product_path(bundle.external_id)
+      expect(response).to redirect_to edit_product_bundle_path(bundle.external_id)
       expect(bundle.name).to eq("Best Selling Bundle")
       expect(bundle.price_cents).to eq(100)
       expect(bundle.is_bundle).to eq(true)

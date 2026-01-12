@@ -20,7 +20,8 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
   } = useBundleEditContext();
   const url = useProductUrl();
 
-  if (!currentSeller) return null;
+  if (!currentSeller || !currencyType || salesCountForInventory === undefined || !ratings || !seller_refund_policy)
+    return null;
 
   return (
     <>
