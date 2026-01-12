@@ -52,7 +52,7 @@ export const Layout = ({
   const { tab } = cast<{ tab: "product" | "content" | "share" }>(usePage().props);
 
   const url = useProductUrl();
-  const rootPath = Routes.edit_product_bundle_path(id);
+  const rootPath = Routes.edit_bundle_product_path(id);
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
@@ -150,12 +150,12 @@ export const Layout = ({
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "content"}>
-            <Link href={Routes.edit_content_bundle_path(id)} onClick={(e) => handleTabClick(e, "content")}>
+            <Link href={Routes.edit_bundle_content_path(id)} onClick={(e) => handleTabClick(e, "content")}>
               Content
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "share"}>
-            <Link href={Routes.edit_share_bundle_path(id)} onClick={(e) => handleTabClick(e, "share")}>
+            <Link href={Routes.edit_bundle_share_path(id)} onClick={(e) => handleTabClick(e, "share")}>
               Share
             </Link>
           </Tab>

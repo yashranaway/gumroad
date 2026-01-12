@@ -13,7 +13,7 @@ describe Bundles::ShareController, inertia: true do
 
   describe "GET edit" do
     it "renders the Bundles/Share/Edit Inertia component when tab is share" do
-      get :edit, params: { id: bundle.external_id }
+      get :edit, params: { bundle_id: bundle.external_id }
       expect(response).to be_successful
       expect(inertia.component).to eq("Bundles/Share/Edit")
       expect(inertia.props).to have_key(:bundle)
@@ -30,20 +30,20 @@ describe Bundles::ShareController, inertia: true do
     it_behaves_like "authorize called for action", :put, :update do
       let(:policy_klass) { LinkPolicy }
       let(:record) { bundle }
-      let(:request_params) { { id: bundle.external_id } }
+      let(:request_params) { { bundle_id: bundle.external_id } }
     end
 
     it "updates section_ids and redirects" do
       expect do
         put :update, params: {
-          id: bundle.external_id,
+          bundle_id: bundle.external_id,
           section_ids: [profile_section2.external_id]
         }
         bundle.reload
       end.to change { profile_section1.reload.shown_products }.from([bundle.id]).to([])
       .and change { profile_section2.reload.shown_products }.from([]).to([bundle.id])
 
-      expect(response).to redirect_to(edit_share_bundle_path(bundle.external_id))
+      expect(response).to redirect_to(edit_bundle_share_path(bundle.external_id))
       expect(flash[:notice]).to eq("Changes saved!")
     end
   end

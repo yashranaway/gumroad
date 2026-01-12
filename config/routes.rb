@@ -607,17 +607,18 @@ Rails.application.routes.draw do
     end
 
     resources :bundles, path: "bundles", param: :id, only: [] do
+      scope module: :bundles do
+        resource :product, only: [:edit, :update], path: "product", controller: "product", param: :id
+        resource :content, only: [:edit, :update], path: "content", controller: "content", param: :id do
+          post :update_purchases_content
+        end
+        resource :share, only: [:edit, :update], path: "share", controller: "share", param: :id
+      end
+
       member do
-        get :edit, to: "bundles/product#edit", as: :edit_product
-        patch :update, to: "bundles/product#update"
-        put :update, to: "bundles/product#update"
-        get "edit/content", to: "bundles/content#edit", as: :edit_content
-        patch "edit/content", to: "bundles/content#update"
-        put "edit/content", to: "bundles/content#update"
-        post "edit/content/update_purchases_content", to: "bundles/content#update_purchases_content", as: :update_purchases_content
-        get "edit/share", to: "bundles/share#edit", as: :edit_share
-        patch "edit/share", to: "bundles/share#update"
-        put "edit/share", to: "bundles/share#update"
+        get :edit, to: redirect("/bundles/%{id}/product/edit")
+        get "edit/content", to: redirect("/bundles/%{id}/content/edit")
+        get "edit/share", to: redirect("/bundles/%{id}/share/edit")
       end
     end
 

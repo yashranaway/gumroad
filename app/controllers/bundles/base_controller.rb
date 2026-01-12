@@ -10,7 +10,7 @@ class Bundles::BaseController < Sellers::BaseController
 
   private
     def set_bundle
-      @bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
+      @bundle = Link.can_be_bundle.find_by_external_id!(params[:bundle_id] || params[:id])
     end
 
     def authorize_bundle

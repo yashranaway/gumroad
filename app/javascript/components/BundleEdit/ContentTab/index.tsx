@@ -151,7 +151,7 @@ export const ContentTab = () => {
   );
 
   const { submit: submitForm, isProcessing } = useBundleFormSubmission({
-    url: Routes.edit_content_bundle_path(id),
+    url: Routes.edit_bundle_content_path(id),
     transform: transformContentData,
   });
 

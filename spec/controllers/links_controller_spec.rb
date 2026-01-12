@@ -556,7 +556,7 @@ describe LinksController, :vcr, inertia: true do
         it "redirects to the bundle edit page" do
           sign_in bundle.user
           get :edit, params: { id: bundle.unique_permalink }
-          expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+          expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
         end
       end
     end

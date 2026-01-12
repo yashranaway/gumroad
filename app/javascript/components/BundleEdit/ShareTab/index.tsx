@@ -31,7 +31,7 @@ export const ShareTab = () => {
   );
 
   const { submit: submitForm, isProcessing } = useBundleFormSubmission({
-    url: Routes.edit_share_bundle_path(id),
+    url: Routes.edit_bundle_share_path(id),
     transform: transformShareData,
   });
 

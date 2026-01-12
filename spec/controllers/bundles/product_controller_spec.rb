@@ -13,7 +13,7 @@ describe Bundles::ProductController, inertia: true do
 
   describe "GET edit" do
     it "renders the Bundles/Product/Edit Inertia component with bundle props and sets the title" do
-      get :edit, params: { id: bundle.external_id }
+      get :edit, params: { bundle_id: bundle.external_id }
       expect(response).to be_successful
       expect(inertia.component).to eq("Bundles/Product/Edit")
       expect(inertia.props).to have_key(:bundle)
@@ -24,7 +24,7 @@ describe Bundles::ProductController, inertia: true do
 
     context "when the bundle doesn't exist" do
       it "returns 404" do
-        expect { get :edit, params: { id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
+        expect { get :edit, params: { bundle_id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
   end
@@ -45,7 +45,7 @@ describe Bundles::ProductController, inertia: true do
     end
     let(:bundle_params) do
       {
-        id: bundle.external_id,
+        bundle_id: bundle.external_id,
         name: "New name",
         description: "New description",
         custom_permalink: "new-permalink",
@@ -76,7 +76,7 @@ describe Bundles::ProductController, inertia: true do
     it_behaves_like "authorize called for action", :put, :update do
       let(:policy_klass) { LinkPolicy }
       let(:record) { bundle }
-      let(:request_params) { { id: bundle.external_id } }
+      let(:request_params) { { bundle_id: bundle.external_id } }
     end
 
     before { index_model_records(Purchase) }
@@ -108,7 +108,7 @@ describe Bundles::ProductController, inertia: true do
       .and not_change { bundle.product_refund_policy&.title }
       .and not_change { bundle.product_refund_policy&.fine_print }
 
-      expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+      expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
       expect(flash[:notice]).to eq("Changes saved!")
     end
 
@@ -130,7 +130,7 @@ describe Bundles::ProductController, inertia: true do
             plan = bundle.reload.installment_plan
             expect(plan.number_of_installments).to eq(3)
             expect(plan.recurrence).to eq("monthly")
-            expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+            expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
             expect(flash[:notice]).to eq("Changes saved!")
           end
         end
@@ -156,7 +156,7 @@ describe Bundles::ProductController, inertia: true do
             expect { put :update, params: params }
               .not_to change { bundle.reload.installment_plan }
 
-            expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+            expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
             expect(flash[:alert]).to include("Installment plan is not available for the bundled product")
           end
 
@@ -174,7 +174,7 @@ describe Bundles::ProductController, inertia: true do
                 number_of_installments: 4,
                 recurrence: "monthly"
               )
-              expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+              expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
               expect(flash[:notice]).to eq("Changes saved!")
             end
           end
@@ -197,7 +197,7 @@ describe Bundles::ProductController, inertia: true do
                 recurrence: "monthly"
               )
               expect(new_plan).not_to eq(existing_plan)
-              expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+              expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
               expect(flash[:notice]).to eq("Changes saved!")
             end
           end
@@ -222,7 +222,7 @@ describe Bundles::ProductController, inertia: true do
 
               expect { existing_plan.reload }.to raise_error(ActiveRecord::RecordNotFound)
               expect(bundle.reload.installment_plan).to be_nil
-              expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+              expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
               expect(flash[:notice]).to eq("Changes saved!")
             end
           end
@@ -240,7 +240,7 @@ describe Bundles::ProductController, inertia: true do
                 .to change { existing_plan.reload.deleted_at }.from(nil)
 
               expect(bundle.reload.installment_plan).to be_nil
-              expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+              expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
               expect(flash[:notice]).to eq("Changes saved!")
             end
           end
@@ -257,7 +257,7 @@ describe Bundles::ProductController, inertia: true do
             .not_to change { ProductInstallmentPlan.count }
 
           expect(bundle.reload.installment_plan).to be_nil
-          expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+          expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
           expect(flash[:alert]).to include("Installment plan is not available for the bundled product")
         end
       end
@@ -275,7 +275,7 @@ describe Bundles::ProductController, inertia: true do
             .not_to change { ProductInstallmentPlan.count }
 
           expect(bundle.reload.installment_plan).to be_nil
-          expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+          expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
           expect(flash[:alert]).to include("Installment plans are not available for \"pay what you want\" pricing")
         end
       end
@@ -292,7 +292,7 @@ describe Bundles::ProductController, inertia: true do
         expect(bundle.product_refund_policy_enabled).to be(true)
         expect(bundle.product_refund_policy.title).to eq("30-day money back guarantee")
         expect(bundle.product_refund_policy.fine_print).to eq("I really hate being small")
-        expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+        expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
         expect(flash[:notice]).to eq("Changes saved!")
       end
     end
@@ -308,7 +308,7 @@ describe Bundles::ProductController, inertia: true do
         expect(bundle.product_refund_policy_enabled).to be(true)
         expect(bundle.product_refund_policy.title).to eq("30-day money back guarantee")
         expect(bundle.product_refund_policy.fine_print).to eq("I really hate being small")
-        expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+        expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
         expect(flash[:notice]).to eq("Changes saved!")
       end
 
@@ -323,7 +323,7 @@ describe Bundles::ProductController, inertia: true do
           bundle.reload
           expect(bundle.product_refund_policy_enabled).to be(false)
           expect(bundle.product_refund_policy).to be_nil
-          expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+          expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
           expect(flash[:notice]).to eq("Changes saved!")
         end
       end
@@ -334,19 +334,19 @@ describe Bundles::ProductController, inertia: true do
       it "returns the error message" do
         expect do
           put :update, params: {
-            id: bundle.external_id,
+            bundle_id: bundle.external_id,
             custom_permalink: "*",
           }
         end.to_not change { bundle.reload.custom_permalink }
 
-        expect(response).to redirect_to(edit_product_bundle_path(bundle.external_id))
+        expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
         expect(flash[:alert]).to eq("Custom permalink is invalid")
       end
     end
 
     context "when the bundle doesn't exist" do
       it "returns 404" do
-        expect { put :update, params: { id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
+        expect { put :update, params: { bundle_id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
 
@@ -354,7 +354,7 @@ describe Bundles::ProductController, inertia: true do
       let(:product) { create(:call_product) }
 
       it "returns 404" do
-        expect { put :update, params: { id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
+        expect { put :update, params: { bundle_id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
 
@@ -362,7 +362,7 @@ describe Bundles::ProductController, inertia: true do
       let(:product) { create(:membership_product) }
 
       it "returns 404" do
-        expect { put :update, params: { id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
+        expect { put :update, params: { bundle_id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
 
@@ -370,7 +370,7 @@ describe Bundles::ProductController, inertia: true do
       let(:product) { create(:product_with_digital_versions) }
 
       it "returns 404" do
-        expect { put :update, params: { id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
+        expect { put :update, params: { bundle_id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
   end

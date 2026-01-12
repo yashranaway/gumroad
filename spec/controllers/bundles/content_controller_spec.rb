@@ -13,7 +13,7 @@ describe Bundles::ContentController, inertia: true do
 
   describe "GET edit" do
     it "renders the Bundles/Content/Edit Inertia component when tab is content" do
-      get :edit, params: { id: bundle.external_id }
+      get :edit, params: { bundle_id: bundle.external_id }
       expect(response).to be_successful
       expect(inertia.component).to eq("Bundles/Content/Edit")
       expect(inertia.props).to have_key(:bundle)
@@ -31,7 +31,7 @@ describe Bundles::ContentController, inertia: true do
     it_behaves_like "authorize called for action", :put, :update do
       let(:policy_klass) { LinkPolicy }
       let(:record) { bundle }
-      let(:request_params) { { id: bundle.external_id } }
+      let(:request_params) { { bundle_id: bundle.external_id } }
     end
 
     before { index_model_records(Purchase) }
@@ -39,7 +39,7 @@ describe Bundles::ContentController, inertia: true do
     it "updates bundle products and redirects" do
       expect do
         put :update, params: {
-          id: bundle.external_id,
+          bundle_id: bundle.external_id,
           products: [
             {
               product_id: bundle.bundle_products.first.product.external_id,
@@ -60,7 +60,7 @@ describe Bundles::ContentController, inertia: true do
         bundle.reload
       end.to change { bundle.has_outdated_purchases }.from(false).to(true)
 
-      expect(response).to redirect_to(edit_content_bundle_path(bundle.external_id))
+      expect(response).to redirect_to(edit_bundle_content_path(bundle.external_id))
       expect(flash[:notice]).to eq("Changes saved!")
 
       deleted_bundle_products = bundle.bundle_products.deleted
@@ -92,7 +92,7 @@ describe Bundles::ContentController, inertia: true do
       it "does not make any changes to the bundle and returns an error" do
         expect do
           put :update, params: {
-            id: bundle.external_id,
+            bundle_id: bundle.external_id,
             products: [
               {
                 product_id: call_product.external_id,
@@ -105,7 +105,7 @@ describe Bundles::ContentController, inertia: true do
           bundle.reload
         end.to_not change { bundle.bundle_products.count }
 
-        expect(response).to redirect_to(edit_content_bundle_path(bundle.external_id))
+        expect(response).to redirect_to(edit_bundle_content_path(bundle.external_id))
         expect(flash[:alert]).to eq("Validation failed: A call product cannot be added to a bundle")
       end
     end
@@ -119,12 +119,12 @@ describe Bundles::ContentController, inertia: true do
       end
 
       it "returns the error message when published bundle has no products" do
-        put :update, params: {
-          id: published_bundle.external_id,
+          put :update, params: {
+            bundle_id: published_bundle.external_id,
           products: []
         }
 
-        expect(response).to redirect_to(edit_content_bundle_path(published_bundle.external_id))
+        expect(response).to redirect_to(edit_bundle_content_path(published_bundle.external_id))
         # Validation should catch this and return an error
         # Note: The validation may run after products are updated, so we just check that an error is shown
         expect(flash[:alert]).to be_present

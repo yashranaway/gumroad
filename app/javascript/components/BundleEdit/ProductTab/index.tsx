@@ -73,7 +73,7 @@ export const ProductTab = () => {
       await setProductPublished(uniquePermalink, true);
       updateBundle({ is_published: true });
       showAlert("Published!", "success");
-      router.visit(Routes.edit_share_bundle_path(id));
+      router.visit(Routes.edit_bundle_share_path(id));
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -92,13 +92,13 @@ export const ProductTab = () => {
   }, [uniquePermalink, updateBundle]);
 
   const { submit: submitForm, isProcessing } = useBundleFormSubmission({
-    url: Routes.edit_product_bundle_path(id),
+    url: Routes.edit_bundle_product_path(id),
     transform: transformProductData,
   });
 
   const saveAndContinue = React.useCallback(() => {
     submitForm(() => {
-      router.visit(Routes.edit_content_bundle_path(id));
+      router.visit(Routes.edit_bundle_content_path(id));
     });
   }, [submitForm, id]);
 

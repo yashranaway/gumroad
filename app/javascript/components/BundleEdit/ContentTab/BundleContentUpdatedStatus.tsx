@@ -12,7 +12,7 @@ export const BundleContentUpdatedStatus = () => {
   const updatePurchases = () => {
     setIsLoading(true);
     router.post(
-      Routes.update_purchases_content_bundle_path(id),
+      Routes.update_purchases_content_bundle_content_path(id),
       {},
       {
         preserveScroll: true,
