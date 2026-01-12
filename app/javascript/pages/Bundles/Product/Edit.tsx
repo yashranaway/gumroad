@@ -7,6 +7,8 @@ import { RatingsWithPercentages } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
 import { Taxonomy } from "$app/utils/discover";
 
+import { Layout } from "$app/components/BundleEdit/Layout";
+import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { ProductTab as ProductTabContent } from "$app/components/BundleEdit/ProductTab";
 import { Bundle, BundleEditContext } from "$app/components/BundleEdit/state";
 import { useBundleForm } from "$app/components/BundleEdit/useBundleForm";
@@ -17,6 +19,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 const defaultRatings: RatingsWithPercentages = { average: 0, count: 0, percentages: [0, 0, 0, 0, 0] };
 
 type Props = {
+  tab: "product" | "content" | "share";
   bundle: Bundle;
   id: string;
   unique_permalink: string;
@@ -29,8 +32,9 @@ type Props = {
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
 };
 
-export default function ProductTab() {
+export default function ProductEdit() {
   const {
+    tab,
     bundle: initialBundle,
     id,
     unique_permalink,
@@ -43,12 +47,15 @@ export default function ProductTab() {
     seller_refund_policy,
   } = usePage<Props>().props;
 
-  const { bundle, updateBundle, formMethods } = useBundleForm({
+  const { bundle, updateBundle, form, isPublishing, handleSave, handlePublish, handleUnpublish } = useBundleForm({
     initialBundle,
-    id,
     uniquePermalink: unique_permalink,
-    currentTab: "product",
+    savePath: Routes.bundle_product_path(id),
+    publishRedirectPath: Routes.edit_bundle_share_path(id),
   });
+
+  const [showRefundPolicyPreview, setShowRefundPolicyPreview] = React.useState(false);
+  const [isUploading, setIsUploading] = React.useState(false);
 
   useRunOnce(() => {
     if (!is_bundle)
@@ -72,7 +79,6 @@ export default function ProductTab() {
       hasOutdatedPurchases: false,
       seller_refund_policy_enabled,
       seller_refund_policy,
-      formMethods,
     }),
     [
       bundle,
@@ -85,13 +91,23 @@ export default function ProductTab() {
       refund_policies,
       seller_refund_policy_enabled,
       seller_refund_policy,
-      formMethods,
     ],
   );
 
   return (
     <BundleEditContext.Provider value={contextValue}>
-      <ProductTabContent />
+      <Layout
+        tab={tab}
+        preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />}
+        onSave={handleSave}
+        onPublish={handlePublish}
+        onUnpublish={handleUnpublish}
+        isSaving={form.processing}
+        isPublishing={isPublishing}
+        isLoading={isUploading}
+      >
+        <ProductTabContent setShowRefundPolicyPreview={setShowRefundPolicyPreview} setIsUploading={setIsUploading} />
+      </Layout>
     </BundleEditContext.Provider>
   );
 }

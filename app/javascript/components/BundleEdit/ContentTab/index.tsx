@@ -1,198 +1,209 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
-
-import { searchProducts } from "$app/data/bundle";
-import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { BundleContentUpdatedStatus } from "$app/components/BundleEdit/ContentTab/BundleContentUpdatedStatus";
 import { BundleProductItem } from "$app/components/BundleEdit/ContentTab/BundleProductItem";
 import { BundleProductSelector } from "$app/components/BundleEdit/ContentTab/BundleProductSelector";
-import { Layout } from "$app/components/BundleEdit/Layout";
 import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { CartItemList } from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
-import { useRunOnce } from "$app/components/useRunOnce";
 
-const RESULTS_PER_PAGE = 10;
-export const ContentTab = () => {
-  const { bundle, updateBundle, id, productsCount, hasOutdatedPurchases } = useBundleEditContext();
-  const [results, setResults] = React.useState<BundleProduct[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [hasMoreResults, setHasMoreResults] = React.useState(true);
-  const [query, setQuery] = React.useState("");
-  const [totalResultsCount, setTotalResultsCount] = React.useState<number | null>(null);
+export const ContentTabPreview = () => {
+  const { bundle } = useBundleEditContext();
 
-  const activeRequest = React.useRef<{ cancel: () => void } | null>();
-  const loadSearchResults = async ({ query = "", loadMore = false, all = false } = {}) => {
-    if (!hasMoreResults && loadMore) return results;
-    setIsLoading(true);
-    let newResults = results;
-    try {
-      activeRequest.current?.cancel();
-      const request = searchProducts({ product_id: id, query, from: loadMore ? results.length + 1 : 0, all });
-      activeRequest.current = request;
-      newResults = loadMore ? [...results, ...(await request.response)] : await request.response;
-      setResults(newResults);
-      const allLoaded = all || newResults.length < RESULTS_PER_PAGE;
-      setHasMoreResults(!allLoaded);
-      if (allLoaded) setTotalResultsCount(newResults.length);
-      activeRequest.current = null;
-    } catch (e) {
-      if (e instanceof AbortError) return newResults;
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsLoading(false);
-    return newResults;
-  };
-
-  useRunOnce(() => void loadSearchResults());
-  useOnChange(
-    useDebouncedCallback(() => void loadSearchResults({ query }), 300),
-    [query],
+  return (
+    <div>
+      <header>
+        <h1>Library</h1>
+      </header>
+      <section>
+        <ProductCardGrid>
+          {bundle.products.map((bundleProduct) => (
+            <Card key={bundleProduct.id} product={bundleProduct} />
+          ))}
+        </ProductCardGrid>
+      </section>
+    </div>
   );
+};
+
+type ContentTabProps = {
+  searchProducts?: BundleProduct[];
+  searchHasMore?: boolean;
+  searchQuery: string;
+  searchPage: number;
+};
+
+export const ContentTab = ({ searchProducts = [], searchHasMore = true, searchQuery, searchPage }: ContentTabProps) => {
+  const { bundle, updateBundle, productsCount, hasOutdatedPurchases } = useBundleEditContext();
+  const [query, setQuery] = React.useState(searchQuery);
+  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
+  const [isSearching, setIsSearching] = React.useState(false);
+  const [selectAllPending, setSelectAllPending] = React.useState(false);
+
+  const updateSearch = useDebouncedCallback((newQuery: string) => {
+    setIsSearching(true);
+    router.reload({
+      data: { query: newQuery || undefined, page: 1 },
+      only: ["search_products", "search_has_more", "search_query", "search_page"],
+      preserveUrl: true,
+      onFinish: () => setIsSearching(false),
+    });
+  }, 300);
+
+  useOnChange(() => {
+    if (query !== searchQuery) {
+      updateSearch(query);
+    }
+  }, [query, searchQuery, updateSearch]);
+
+  React.useEffect(() => {
+    if (selectAllPending && !searchHasMore && searchProducts.length > 0) {
+      updateBundle({ products: searchProducts });
+      setSelectAllPending(false);
+      setIsSearching(false);
+    }
+  }, [selectAllPending, searchHasMore, searchProducts, updateBundle]);
 
   const formRef = React.useRef<HTMLFormElement>(null);
   useOnScrollToBottom(
     formRef,
     () => {
-      if (!activeRequest.current) void loadSearchResults({ query, loadMore: true });
+      if (!isLoadingMore && searchHasMore) {
+        setIsLoadingMore(true);
+        router.reload({
+          data: { query: query || undefined, page: searchPage + 1 },
+          only: ["search_products", "search_has_more", "search_query", "search_page"],
+          preserveUrl: true,
+          onFinish: () => setIsLoadingMore(false),
+        });
+      }
     },
     30,
   );
 
+  const loadAllProducts = () => {
+    setSelectAllPending(true);
+    setIsSearching(true);
+    router.reload({
+      data: { query: query || undefined, all: "true" },
+      only: ["search_products", "search_has_more", "search_query", "search_page"],
+      preserveUrl: true,
+    });
+  };
+
   const [isSelecting, setIsSelecting] = React.useState(bundle.products.length > 0);
+  const isLoading = isSearching || isLoadingMore;
 
   return (
-    <Layout
-      preview={
-        <div>
-          <header>
-            <h1>Library</h1>
-          </header>
-          <section>
-            <ProductCardGrid>
-              {bundle.products.map((bundleProduct) => (
-                <Card key={bundleProduct.id} product={bundleProduct} />
-              ))}
-            </ProductCardGrid>
-          </section>
-        </div>
-      }
-    >
-      <form onSubmit={(evt) => evt.preventDefault()} ref={formRef}>
-        <section className="p-4! md:p-8!">
-          {hasOutdatedPurchases ? <BundleContentUpdatedStatus /> : null}
-          {isSelecting ? (
-            <>
-              <header
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <h2>Products</h2>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={bundle.products.length === (totalResultsCount ?? productsCount)}
-                    disabled={isLoading}
-                    onChange={(evt) =>
-                      evt.target.checked
-                        ? void loadSearchResults({ query, all: true }).then((results) =>
-                            updateBundle({ products: results }),
-                          )
-                        : updateBundle({ products: [] })
+    <form onSubmit={(evt) => evt.preventDefault()} ref={formRef}>
+      <section className="p-4! md:p-8!">
+        {hasOutdatedPurchases ? <BundleContentUpdatedStatus /> : null}
+        {isSelecting ? (
+          <>
+            <header
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h2>Products</h2>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={bundle.products.length === productsCount}
+                  disabled={isLoading}
+                  onChange={(evt) => (evt.target.checked ? loadAllProducts() : updateBundle({ products: [] }))}
+                />
+                All products
+              </label>
+            </header>
+            {bundle.products.length > 0 ? (
+              <CartItemList aria-label="Bundle products">
+                {bundle.products.map((bundleProduct, idx) => (
+                  <BundleProductItem
+                    key={bundleProduct.id}
+                    bundleProduct={bundleProduct}
+                    updateBundleProduct={(update) =>
+                      updateBundle({
+                        products: [
+                          ...bundle.products.slice(0, idx),
+                          { ...bundleProduct, ...update },
+                          ...bundle.products.slice(idx + 1),
+                        ],
+                      })
+                    }
+                    removeBundleProduct={() =>
+                      updateBundle({ products: bundle.products.filter(({ id }) => id !== bundleProduct.id) })
                     }
                   />
-                  All products
-                </label>
-              </header>
-              {bundle.products.length > 0 ? (
-                <CartItemList aria-label="Bundle products">
-                  {bundle.products.map((bundleProduct, idx) => (
-                    <BundleProductItem
-                      key={bundleProduct.id}
-                      bundleProduct={bundleProduct}
-                      updateBundleProduct={(update) =>
-                        updateBundle({
-                          products: [
-                            ...bundle.products.slice(0, idx),
-                            { ...bundleProduct, ...update },
-                            ...bundle.products.slice(idx + 1),
-                          ],
-                        })
-                      }
-                      removeBundleProduct={() =>
-                        updateBundle({ products: bundle.products.filter(({ id }) => id !== bundleProduct.id) })
-                      }
-                    />
-                  ))}
-                </CartItemList>
-              ) : null}
-              <div
-                className="grid gap-4 rounded-sm border border-border bg-background p-4"
-                aria-label="Product selector"
-              >
-                <div className="input">
-                  <Icon name="solid-search" />
-                  <input
-                    type="text"
-                    value={query}
-                    onChange={(evt) => setQuery(evt.target.value)}
-                    placeholder="Search products"
-                  />
-                </div>
-                {isLoading && results.length === 0 ? (
-                  <div style={{ justifySelf: "center" }}>
-                    <LoadingSpinner />
-                  </div>
-                ) : results.length > 0 ? (
-                  <CartItemList>
-                    {results.map((bundleProduct) => {
-                      const selected = bundle.products.some(({ id }) => id === bundleProduct.id);
-                      return (
-                        <BundleProductSelector
-                          key={bundleProduct.id}
-                          bundleProduct={bundleProduct}
-                          selected={selected}
-                          onToggle={() =>
-                            updateBundle({
-                              products: selected
-                                ? bundle.products.filter(({ id }) => id !== bundleProduct.id)
-                                : [...bundle.products, bundleProduct],
-                            })
-                          }
-                        />
-                      );
-                    })}
-                  </CartItemList>
-                ) : (
-                  <div style={{ justifySelf: "center" }}>No products found</div>
-                )}
+                ))}
+              </CartItemList>
+            ) : null}
+            <div className="grid gap-4 rounded-sm border border-border bg-background p-4" aria-label="Product selector">
+              <div className="input">
+                <Icon name="solid-search" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(evt) => setQuery(evt.target.value)}
+                  placeholder="Search products"
+                />
               </div>
-            </>
-          ) : (
-            <Placeholder>
-              <h2>Select products</h2>
-              <p>Choose the products you want to include in your bundle</p>
-              <Button color="primary" onClick={() => setIsSelecting(true)}>
-                <Icon name="plus" />
-                Add products
-              </Button>
-            </Placeholder>
-          )}
-        </section>
-      </form>
-    </Layout>
+              {isSearching && searchProducts.length === 0 ? (
+                <div style={{ justifySelf: "center" }}>
+                  <LoadingSpinner />
+                </div>
+              ) : searchProducts.length > 0 ? (
+                <CartItemList>
+                  {searchProducts.map((bundleProduct) => {
+                    const selected = bundle.products.some(({ id }) => id === bundleProduct.id);
+                    return (
+                      <BundleProductSelector
+                        key={bundleProduct.id}
+                        bundleProduct={bundleProduct}
+                        selected={selected}
+                        onToggle={() =>
+                          updateBundle({
+                            products: selected
+                              ? bundle.products.filter(({ id }) => id !== bundleProduct.id)
+                              : [...bundle.products, bundleProduct],
+                          })
+                        }
+                      />
+                    );
+                  })}
+                </CartItemList>
+              ) : (
+                <div style={{ justifySelf: "center" }}>No products found</div>
+              )}
+              {isLoadingMore ? (
+                <div style={{ justifySelf: "center" }}>
+                  <LoadingSpinner />
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <Placeholder>
+            <h2>Select products</h2>
+            <p>Choose the products you want to include in your bundle</p>
+            <Button color="primary" onClick={() => setIsSelecting(true)}>
+              <Icon name="plus" />
+              Add products
+            </Button>
+          </Placeholder>
+        )}
+      </section>
+    </form>
   );
 };

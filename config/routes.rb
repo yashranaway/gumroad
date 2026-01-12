@@ -600,17 +600,23 @@ Rails.application.routes.draw do
       get :compute_discount
     end
 
-    resources :bundles, only: [:update] do
+    resources :bundles, only: [] do
       collection do
-        get :products
         get :create_from_email
       end
 
+      scope module: :bundles do
+        resource :product, only: [:edit, :update]
+        resource :content, only: [:edit, :update] do
+          post :update_purchases_content
+        end
+        resource :share, only: [:edit, :update]
+      end
+
       member do
-        get :edit, action: :edit
-        get "edit/content", action: :edit_content, as: :edit_content
-        get "edit/share", action: :edit_share, as: :edit_share
-        post :update_purchases_content
+        get :edit, to: redirect("/bundles/%{id}/product/edit")
+        get "edit/content", to: redirect("/bundles/%{id}/content/edit")
+        get "edit/share", to: redirect("/bundles/%{id}/share/edit")
       end
     end
 

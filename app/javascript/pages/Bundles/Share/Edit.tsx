@@ -6,12 +6,15 @@ import { RatingsWithPercentages } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
 import { Taxonomy } from "$app/utils/discover";
 
+import { Layout } from "$app/components/BundleEdit/Layout";
+import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { ShareTab as ShareTabContent } from "$app/components/BundleEdit/ShareTab";
 import { Bundle, BundleEditContext } from "$app/components/BundleEdit/state";
 import { useBundleForm } from "$app/components/BundleEdit/useBundleForm";
 import { ProfileSection } from "$app/components/ProductEdit/state";
 
 type Props = {
+  tab: "product" | "content" | "share";
   bundle: Bundle;
   id: string;
   unique_permalink: string;
@@ -24,8 +27,9 @@ type Props = {
   is_bundle: boolean;
 };
 
-export default function ShareTab() {
+export default function ShareEdit() {
   const {
+    tab,
     bundle: initialBundle,
     id,
     unique_permalink,
@@ -37,11 +41,11 @@ export default function ShareTab() {
     profile_sections,
   } = usePage<Props>().props;
 
-  const { bundle, updateBundle, formMethods } = useBundleForm({
+  const { bundle, updateBundle, form, isPublishing, handleSave, handlePublish, handleUnpublish } = useBundleForm({
     initialBundle,
-    id,
     uniquePermalink: unique_permalink,
-    currentTab: "share",
+    savePath: Routes.bundle_share_path(id),
+    unpublishRedirectPath: Routes.edit_bundle_content_path(id),
   });
 
   const contextValue = React.useMemo(
@@ -61,7 +65,6 @@ export default function ShareTab() {
       hasOutdatedPurchases: false,
       seller_refund_policy_enabled: false,
       seller_refund_policy: { title: "", fine_print: "" },
-      formMethods,
     }),
     [
       bundle,
@@ -74,13 +77,22 @@ export default function ShareTab() {
       ratings,
       taxonomies,
       profile_sections,
-      formMethods,
     ],
   );
 
   return (
     <BundleEditContext.Provider value={contextValue}>
-      <ShareTabContent />
+      <Layout
+        tab={tab}
+        preview={<ProductPreview />}
+        onSave={handleSave}
+        onPublish={handlePublish}
+        onUnpublish={handleUnpublish}
+        isSaving={form.processing}
+        isPublishing={isPublishing}
+      >
+        <ShareTabContent />
+      </Layout>
     </BundleEditContext.Provider>
   );
 }

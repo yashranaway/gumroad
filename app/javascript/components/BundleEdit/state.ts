@@ -12,14 +12,6 @@ import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEdit
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ProfileSection, PublicFileWithStatus } from "$app/components/ProductEdit/state";
 
-export type BundleFormMethods = {
-  save: () => void;
-  publish: () => void;
-  unpublish: () => void;
-  isSaving: boolean;
-  isPublishing: boolean;
-};
-
 export const BundleEditContext = React.createContext<{
   bundle: Bundle;
   updateBundle: (update: Partial<Bundle> | ((bundle: Bundle) => void)) => void;
@@ -36,7 +28,6 @@ export const BundleEditContext = React.createContext<{
   hasOutdatedPurchases: boolean;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
-  formMethods: BundleFormMethods;
 } | null>(null);
 export const useBundleEditContext = () => assertDefined(React.useContext(BundleEditContext));
 
