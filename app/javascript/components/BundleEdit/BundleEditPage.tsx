@@ -6,14 +6,14 @@ import { Bundle, BundleEditContext } from "$app/components/BundleEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-type SharedProps = {
+type CommonProps = {
   bundle: Bundle;
   id: string;
   unique_permalink: string;
   is_bundle: boolean;
 };
 
-type BundleEditPageProps<T extends Record<string, unknown> = Record<string, never>> = SharedProps & T;
+type BundleEditPageProps<T extends Record<string, unknown> = Record<string, never>> = CommonProps & T;
 
 type BundleEditContextValue = React.ComponentProps<typeof BundleEditContext.Provider>["value"];
 
@@ -25,9 +25,9 @@ export function BundleEditPage<T extends Record<string, unknown> = Record<string
   extractTabProps?: (props: BundleEditPageProps<T>) => Partial<BundleEditContextValue>;
 }) {
   const page = usePage();
-  const sharedProps = cast<SharedProps>(page.props);
+  const commonProps = cast<CommonProps>(page.props);
   const pageProps = page.props as unknown as BundleEditPageProps<T>;
-  const { bundle: initialBundle, id, unique_permalink, is_bundle } = sharedProps;
+  const { bundle: initialBundle, id, unique_permalink, is_bundle } = commonProps;
 
   const [bundle, setBundle] = React.useState(initialBundle);
 
