@@ -7,14 +7,18 @@ class Bundles::BaseController < Sellers::BaseController
 
   before_action :set_bundle
   before_action :authorize_bundle
+  before_action :set_title
 
-  private
+  protected
     def set_bundle
       @bundle = Link.can_be_bundle.find_by_external_id!(params[:bundle_id] || params[:id])
     end
 
     def authorize_bundle
       authorize @bundle
+    end
+
+    def set_title
       @title = @bundle.name
     end
 end

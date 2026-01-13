@@ -1,10 +1,10 @@
+import { useForm } from "@inertiajs/react";
 import * as React from "react";
 
 import { Layout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { MarketingEmailStatus } from "$app/components/BundleEdit/ShareTab/MarketingEmailStatus";
 import { useBundleEditContext } from "$app/components/BundleEdit/state";
-import { useBundleFormSubmission } from "$app/components/BundleEdit/useBundleFormSubmission";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -23,20 +23,32 @@ export const ShareTab = () => {
 
   if (!currentSeller || !taxonomies || !profileSections) return null;
 
-  const transformShareData = React.useCallback(
-    () => ({
-      section_ids: bundle.section_ids,
-    }),
-    [bundle.section_ids],
-  );
+  const form = useForm({});
 
-  const { submit: submitForm, isProcessing } = useBundleFormSubmission({
-    url: Routes.edit_bundle_share_path(id),
-    transform: transformShareData,
+  const transformShareData = () => ({
+    section_ids: bundle.section_ids,
+    taxonomy_id: bundle.taxonomy_id,
+    tags: bundle.tags,
+    display_product_reviews: bundle.display_product_reviews,
+    is_adult: bundle.is_adult,
   });
 
+  const submitForm = (additionalData: Record<string, unknown> = {}) => {
+    if (form.processing) return;
+    form.transform(() => ({ ...transformShareData(), ...additionalData }));
+    form.put(Routes.bundle_share_path(id), { preserveScroll: true });
+  };
+
+  const handleSave = () => submitForm();
+  const handleUnpublish = () => submitForm({ unpublish: true });
+
   return (
-    <Layout preview={<ProductPreview />} onSave={submitForm} isProcessing={isProcessing}>
+    <Layout
+      preview={<ProductPreview />}
+      onSave={handleSave}
+      onUnpublish={handleUnpublish}
+      isProcessing={form.processing}
+    >
       <form>
         <section className="p-4! md:p-8!">
           <header>

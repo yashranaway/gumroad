@@ -1,6 +1,5 @@
-import { Link, usePage } from "@inertiajs/react";
+import { Link } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
@@ -26,15 +25,22 @@ export const useProductUrl = (params = {}) => {
   });
 };
 
+const useCurrentTab = (): "product" | "content" | "share" => {
+  const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+  if (pathname.includes("/content")) return "content";
+  if (pathname.includes("/share")) return "share";
+  return "product";
+};
+
 export const Layout = ({
   children,
   preview,
   isLoading = false,
   isProcessing = false,
   onSave,
+  onPublish,
   onUnpublish,
   onSaveAndContinue,
-  onPublishAndContinue,
   onPreview,
 }: {
   children: React.ReactNode;
@@ -45,11 +51,10 @@ export const Layout = ({
   onPublish?: () => void;
   onUnpublish?: () => void;
   onSaveAndContinue?: () => void;
-  onPublishAndContinue?: () => void;
   onPreview?: () => void;
 }) => {
   const { bundle, id } = useBundleEditContext();
-  const { tab } = cast<{ tab: "product" | "content" | "share" }>(usePage().props);
+  const tab = useCurrentTab();
 
   const url = useProductUrl();
   const rootPath = Routes.edit_bundle_product_path(id);
@@ -77,7 +82,7 @@ export const Layout = ({
     </WithTooltip>
   ) : null;
 
-  const handleTabClick = (e: React.MouseEvent, targetTab: "product" | "content" | "share") => {
+  const handleTabClick = (e: React.MouseEvent) => {
     const message = isUploadingFiles
       ? "Some files are still uploading, please wait..."
       : isUploadingFilesOrImages
@@ -87,15 +92,6 @@ export const Layout = ({
     if (message) {
       e.preventDefault();
       showAlert(message, "warning");
-      return;
-    }
-
-    if (targetTab === "share" && !bundle.is_published) {
-      e.preventDefault();
-      showAlert(
-        "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-        "warning",
-      );
     }
   };
 
@@ -132,10 +128,10 @@ export const Layout = ({
           ) : (
             <>
               {saveButton}
-              {onPublishAndContinue ? (
+              {onPublish ? (
                 <WithTooltip tip={saveButtonTooltip}>
-                  <Button color="accent" disabled={isBusy} onClick={onPublishAndContinue}>
-                    {isProcessing ? "Publishing..." : "Publish and continue"}
+                  <Button color="accent" disabled={isBusy} onClick={onPublish}>
+                    {isProcessing ? "Publishing..." : "Publish"}
                   </Button>
                 </WithTooltip>
               ) : null}
@@ -145,17 +141,17 @@ export const Layout = ({
       >
         <Tabs style={{ gridColumn: 1 }}>
           <Tab asChild isSelected={tab === "product"}>
-            <Link href={rootPath} onClick={(e) => handleTabClick(e, "product")}>
+            <Link href={rootPath} onClick={handleTabClick}>
               Product
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "content"}>
-            <Link href={Routes.edit_bundle_content_path(id)} onClick={(e) => handleTabClick(e, "content")}>
+            <Link href={Routes.edit_bundle_content_path(id)} onClick={handleTabClick}>
               Content
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "share"}>
-            <Link href={Routes.edit_bundle_share_path(id)} onClick={(e) => handleTabClick(e, "share")}>
+            <Link href={Routes.edit_bundle_share_path(id)} onClick={handleTabClick}>
               Share
             </Link>
           </Tab>

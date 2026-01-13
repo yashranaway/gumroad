@@ -7,25 +7,36 @@ require "inertia_rails/rspec"
 
 describe Bundles::ShareController, inertia: true do
   let(:seller) { create(:named_seller, :eligible_for_service_products) }
-  let(:bundle) { create(:product, :bundle, user: seller, price_cents: 2000) }
+  let(:bundle) { create(:product, :bundle, user: seller, price_cents: 2000, draft: false) }
 
   include_context "with user signed in as admin for seller"
 
   describe "GET edit" do
-    it "renders the Bundles/Share/Edit Inertia component when tab is share" do
-      get :edit, params: { bundle_id: bundle.external_id }
-      expect(response).to be_successful
-      expect(inertia.component).to eq("Bundles/Share/Edit")
-      expect(inertia.props).to have_key(:bundle)
-      expect(inertia.props).to have_key(:tab)
-      expect(inertia.props[:tab]).to eq("share")
-      expect(assigns(:title)).to eq(bundle.name)
+    context "when bundle is published" do
+      it "renders the Bundles/Share/Edit Inertia component" do
+        get :edit, params: { bundle_id: bundle.external_id }
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Bundles/Share/Edit")
+        expect(inertia.props).to have_key(:bundle)
+        expect(assigns(:title)).to eq(bundle.name)
+      end
+    end
+
+    context "when bundle is unpublished" do
+      let(:bundle) { create(:product, :bundle, user: seller, price_cents: 2000, draft: true) }
+
+      it "redirects to content page with alert" do
+        get :edit, params: { bundle_id: bundle.external_id }
+        expect(response).to redirect_to(edit_bundle_content_path(bundle.external_id))
+        expect(flash[:alert]).to eq("Not yet! You've got to publish your awesome product before you can share it with your audience and the world.")
+      end
     end
   end
 
   describe "PUT update" do
     let(:profile_section1) { create(:seller_profile_products_section, seller:, shown_products: [bundle.id]) }
     let(:profile_section2) { create(:seller_profile_products_section, seller:) }
+    let!(:taxonomy) { Taxonomy.create!(slug: "test-taxonomy") }
 
     it_behaves_like "authorize called for action", :put, :update do
       let(:policy_klass) { LinkPolicy }
@@ -45,6 +56,40 @@ describe Bundles::ShareController, inertia: true do
 
       expect(response).to redirect_to(edit_bundle_share_path(bundle.external_id))
       expect(flash[:notice]).to eq("Changes saved!")
+    end
+
+    it "updates discover attributes" do
+      expect do
+        put :update, params: {
+          bundle_id: bundle.external_id,
+          taxonomy_id: taxonomy.id,
+          tags: ["tag1", "tag2"],
+          display_product_reviews: false,
+          is_adult: true
+        }
+        bundle.reload
+      end.to change { bundle.taxonomy_id }.from(nil).to(taxonomy.id)
+      .and change { bundle.tags.pluck(:name) }.from([]).to(["tag1", "tag2"])
+      .and change { bundle.display_product_reviews }.from(true).to(false)
+      .and change { bundle.is_adult }.from(false).to(true)
+
+      expect(response).to redirect_to(edit_bundle_share_path(bundle.external_id))
+      expect(flash[:notice]).to eq("Changes saved!")
+    end
+
+    context "when unpublishing" do
+      it "unpublishes and redirects to product page" do
+        expect do
+          put :update, params: {
+            bundle_id: bundle.external_id,
+            unpublish: true
+          }
+          bundle.reload
+        end.to change { bundle.published? }.from(true).to(false)
+
+        expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
+        expect(flash[:notice]).to eq("Unpublished!")
+      end
     end
   end
 end

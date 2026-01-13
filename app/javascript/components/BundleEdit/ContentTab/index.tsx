@@ -1,4 +1,4 @@
-import { router, usePage } from "@inertiajs/react";
+import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -7,7 +7,6 @@ import { BundleProductItem } from "$app/components/BundleEdit/ContentTab/BundleP
 import { BundleProductSelector } from "$app/components/BundleEdit/ContentTab/BundleProductSelector";
 import { Layout } from "$app/components/BundleEdit/Layout";
 import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
-import { useBundleFormSubmission } from "$app/components/BundleEdit/useBundleFormSubmission";
 import { Button } from "$app/components/Button";
 import { CartItemList } from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
@@ -42,7 +41,7 @@ export const ContentTab = () => {
   const results = searchData?.products || [];
   const hasMoreResults = searchData?.has_more ?? false;
   const currentPage = searchData?.page ?? 1;
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [isSearchLoading, setIsSearchLoading] = React.useState(false);
   const [query, setQuery] = React.useState("");
 
   const lastProcessedResultsRef = React.useRef<string>("");
@@ -69,91 +68,64 @@ export const ContentTab = () => {
   }, [results, updateBundle, bundle.products]);
 
   const searchProducts = React.useCallback(
-    (options: {
-      query?: string;
-      page?: number;
-      all?: boolean;
-      only?: string[];
-      reset?: string[];
-      preserveUrl?: boolean;
-    }) => {
+    (options: { query?: string; page?: number; all?: boolean; reset?: string[]; preserveUrl?: boolean }) => {
       const data: { query?: string; page?: number; all?: boolean } = {};
-      if (options.query !== undefined && options.query) {
-        data.query = options.query;
-      }
-      if (options.page !== undefined) {
-        data.page = options.page;
-      }
-      if (options.all !== undefined) {
-        data.all = options.all;
-      }
+      if (options.query) data.query = options.query;
+      if (options.page !== undefined) data.page = options.page;
+      if (options.all !== undefined) data.all = options.all;
 
       router.reload({
         data,
-        only: options.only ?? ["search_data"],
+        only: ["search_data"],
         ...(options.reset && { reset: options.reset }),
         ...(options.preserveUrl && { preserveUrl: options.preserveUrl }),
-        onStart: () => setIsLoading(true),
-        onFinish: () => setIsLoading(false),
+        onStart: () => setIsSearchLoading(true),
+        onFinish: () => setIsSearchLoading(false),
       });
     },
     [],
   );
 
   const debouncedSearch = useDebouncedCallback((searchQuery: string) => {
-    searchProducts({
-      query: searchQuery,
-      reset: ["search_data"],
-    });
+    searchProducts({ query: searchQuery, reset: ["search_data"] });
   }, 300);
 
   useOnChange(() => debouncedSearch(query), [query]);
 
   const loadMore = () => {
-    if (!hasMoreResults || isLoading) return;
-    searchProducts({
-      query,
-      page: currentPage + 1,
-      only: ["search_data"],
-      preserveUrl: true,
-    });
+    if (!hasMoreResults || isSearchLoading) return;
+    searchProducts({ query, page: currentPage + 1, preserveUrl: true });
   };
 
   const loadAll = () => {
-    searchProducts({
-      query,
-      all: true,
-      reset: ["search_data"],
-    });
+    searchProducts({ query, all: true, reset: ["search_data"] });
   };
 
   const formRef = React.useRef<HTMLFormElement>(null);
-  useOnScrollToBottom(
-    formRef,
-    () => {
-      if (!isLoading) loadMore();
-    },
-    30,
-  );
+  useOnScrollToBottom(formRef, () => { if (!isSearchLoading) loadMore(); }, 30);
 
   const [isSelecting, setIsSelecting] = React.useState(bundle.products.length > 0);
 
-  const transformContentData = React.useCallback(
-    () => ({
-      products: bundle.products.map((bundleProduct, idx) => ({
-        product_id: bundleProduct.id,
-        variant_id: bundleProduct.variants?.selected_id,
-        quantity: bundleProduct.quantity,
-        position: idx,
-      })),
-    }),
-    [bundle.products],
-  );
+  const form = useForm({});
 
-  const { submit: submitForm, isProcessing } = useBundleFormSubmission({
-    url: Routes.edit_bundle_content_path(id),
-    transform: transformContentData,
+  const transformContentData = () => ({
+    products: bundle.products.map((bundleProduct, idx) => ({
+      product_id: bundleProduct.id,
+      variant_id: bundleProduct.variants?.selected_id,
+      quantity: bundleProduct.quantity,
+      position: idx,
+    })),
   });
+
+  const submitForm = (additionalData: Record<string, unknown> = {}) => {
+    if (form.processing) return;
+    form.transform(() => ({ ...transformContentData(), ...additionalData }));
+    form.put(Routes.bundle_content_path(id), { preserveScroll: true });
+  };
+
+  const handleSave = () => submitForm();
+  const handlePublish = () => submitForm({ publish: true });
+  const handleUnpublish = () => submitForm({ unpublish: true });
 
   return (
     <Layout
@@ -171,8 +143,10 @@ export const ContentTab = () => {
           </section>
         </div>
       }
-      onSave={submitForm}
-      isProcessing={isProcessing}
+      {...(bundle.is_published && { onSave: handleSave })}
+      {...(bundle.is_published && { onUnpublish: handleUnpublish })}
+      {...(!bundle.is_published && { onPublish: handlePublish })}
+      isProcessing={form.processing}
     >
       <form onSubmit={(evt) => evt.preventDefault()} ref={formRef}>
         <section className="p-4! md:p-8!">
@@ -191,7 +165,7 @@ export const ContentTab = () => {
                   <input
                     type="checkbox"
                     checked={bundle.products.length === productsCount}
-                    disabled={isLoading}
+                    disabled={isSearchLoading}
                     onChange={(evt) => {
                       if (evt.target.checked) {
                         loadAll();
@@ -238,7 +212,7 @@ export const ContentTab = () => {
                     placeholder="Search products"
                   />
                 </div>
-                {isLoading && results.length === 0 ? (
+                {isSearchLoading && results.length === 0 ? (
                   <div style={{ justifySelf: "center" }}>
                     <LoadingSpinner />
                   </div>

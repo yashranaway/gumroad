@@ -1,16 +1,11 @@
-import { router } from "@inertiajs/react";
+import { useForm } from "@inertiajs/react";
 import * as React from "react";
 
-import { setProductPublished } from "$app/data/publish_product";
-import { assertResponseError } from "$app/utils/request";
-
 import { CUSTOM_BUTTON_TEXT_OPTIONS } from "$app/parsers/product";
-import { showAlert } from "$app/components/server-components/Alert";
 
 import { Layout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { useBundleEditContext } from "$app/components/BundleEdit/state";
-import { useBundleFormSubmission } from "$app/components/BundleEdit/useBundleFormSubmission";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor";
@@ -51,81 +46,46 @@ export const ProductTab = () => {
 
   const url = useProductUrl();
 
+  const form = useForm({});
+
   if (!currentSeller) return null;
 
-  const transformProductData = React.useCallback(
-    () => ({
-      ...bundle,
-      covers: bundle.covers.map(({ id }) => id),
-      custom_button_text_option: bundle.custom_button_text_option,
-      custom_summary: bundle.custom_summary,
-      custom_attributes: bundle.custom_attributes,
-      tags: bundle.tags,
-      refund_policy: bundle.refund_policy,
-      product_refund_policy_enabled: bundle.product_refund_policy_enabled,
-      installment_plan: bundle.allow_installment_plan ? bundle.installment_plan : undefined,
-    }),
-    [bundle],
-  );
-
-  const publishAfterSave = React.useCallback(async () => {
-    try {
-      await setProductPublished(uniquePermalink, true);
-      updateBundle({ is_published: true });
-      showAlert("Published!", "success");
-      router.visit(Routes.edit_bundle_share_path(id));
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  }, [uniquePermalink, updateBundle, id]);
-
-  const unpublishAfterSave = React.useCallback(async () => {
-    try {
-      await setProductPublished(uniquePermalink, false);
-      updateBundle({ is_published: false });
-      showAlert("Unpublished!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  }, [uniquePermalink, updateBundle]);
-
-  const { submit: submitForm, isProcessing } = useBundleFormSubmission({
-    url: Routes.edit_bundle_product_path(id),
-    transform: transformProductData,
+  const transformProductData = () => ({
+    ...bundle,
+    covers: bundle.covers.map(({ id }) => id),
+    custom_button_text_option: bundle.custom_button_text_option,
+    custom_summary: bundle.custom_summary,
+    custom_attributes: bundle.custom_attributes,
+    refund_policy: bundle.refund_policy,
+    product_refund_policy_enabled: bundle.product_refund_policy_enabled,
+    installment_plan: bundle.allow_installment_plan ? bundle.installment_plan : undefined,
   });
 
-  const saveAndContinue = React.useCallback(() => {
-    submitForm(() => {
-      router.visit(Routes.edit_bundle_content_path(id));
+  const submitForm = (additionalData: Record<string, unknown> = {}) => {
+    if (form.processing) return;
+    form.transform(() => ({ ...transformProductData(), ...additionalData }));
+    form.put(Routes.bundle_product_path(id), { preserveScroll: true });
+  };
+
+  const handleSave = () => submitForm();
+  const handleUnpublish = () => submitForm({ unpublish: true });
+  const handlePreview = () => {
+    form.transform(() => transformProductData());
+    form.put(Routes.bundle_product_path(id), {
+      preserveScroll: true,
+      onSuccess: () => window.open(url),
     });
-  }, [submitForm, id]);
-
-  const publishAndContinue = React.useCallback(() => {
-    submitForm(publishAfterSave);
-  }, [submitForm, publishAfterSave]);
-
-  const unpublish = React.useCallback(() => {
-    submitForm(unpublishAfterSave);
-  }, [submitForm, unpublishAfterSave]);
-
-  const preview = React.useCallback(() => {
-    submitForm(() => {
-      window.open(url);
-    });
-  }, [submitForm, url]);
+  };
 
   return (
     <Layout
       preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />}
       isLoading={isUploading}
-      isProcessing={isProcessing}
-      {...(bundle.is_published && { onSave: () => submitForm() })}
-      {...(bundle.is_published && { onUnpublish: unpublish })}
-      {...(!bundle.is_published && { onSaveAndContinue: saveAndContinue })}
-      {...(!bundle.is_published && { onPublishAndContinue: publishAndContinue })}
-      onPreview={preview}
+      isProcessing={form.processing}
+      {...(bundle.is_published && { onSave: handleSave })}
+      {...(bundle.is_published && { onUnpublish: handleUnpublish })}
+      {...(!bundle.is_published && { onSaveAndContinue: handleSave })}
+      onPreview={handlePreview}
     >
       <form>
         <section className="p-4! md:p-8!">

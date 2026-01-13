@@ -39,6 +39,7 @@ export const BundleConversionNotice = () => {
         footer={
           <>
             <Button onClick={() => setIsModalOpen(false)}>No, cancel</Button>
+{/* TODO: Change to NavigationButtonInertia once ProductEdit page is migrated to Inertia */}
             <NavigationButton href={Routes.edit_bundle_content_path(id)}>
               Yes, let's select the products
             </NavigationButton>

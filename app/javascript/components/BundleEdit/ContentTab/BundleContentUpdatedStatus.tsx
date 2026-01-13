@@ -10,12 +10,12 @@ export const BundleContentUpdatedStatus = () => {
   const [isLoading, setIsLoading] = React.useState(false);
 
   const updatePurchases = () => {
-    setIsLoading(true);
     router.post(
       Routes.update_purchases_content_bundle_content_path(id),
       {},
       {
         preserveScroll: true,
+        onStart: () => setIsLoading(true),
         onFinish: () => setIsLoading(false),
       },
     );

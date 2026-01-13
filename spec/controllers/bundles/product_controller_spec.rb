@@ -17,8 +17,6 @@ describe Bundles::ProductController, inertia: true do
       expect(response).to be_successful
       expect(inertia.component).to eq("Bundles/Product/Edit")
       expect(inertia.props).to have_key(:bundle)
-      expect(inertia.props).to have_key(:tab)
-      expect(inertia.props[:tab]).to eq("product")
       expect(assigns(:title)).to eq(bundle.name)
     end
 
@@ -59,11 +57,6 @@ describe Bundles::ProductController, inertia: true do
         max_purchase_count: 10,
         quantity_enabled: true,
         should_show_sales_count: true,
-        taxonomy_id: 1,
-        tags: ["tag1", "tag2", "tag3"],
-        display_product_reviews: false,
-        is_adult: true,
-        discover_fee_per_thousand: 400,
         is_epublication: true,
         product_refund_policy_enabled: true,
         refund_policy: {
@@ -81,7 +74,7 @@ describe Bundles::ProductController, inertia: true do
 
     before { index_model_records(Purchase) }
 
-    it "updates the bundle and redirects" do
+    it "updates the bundle and redirects back for published bundle" do
       expect do
         put :update, params: bundle_params
         bundle.reload
@@ -98,11 +91,6 @@ describe Bundles::ProductController, inertia: true do
       .and change { bundle.max_purchase_count }.from(nil).to(10)
       .and change { bundle.quantity_enabled }.from(false).to(true)
       .and change { bundle.should_show_sales_count }.from(false).to(true)
-      .and change { bundle.taxonomy_id }.from(nil).to(1)
-      .and change { bundle.tags.pluck(:name) }.from([]).to(["tag1", "tag2", "tag3"])
-      .and change { bundle.display_product_reviews }.from(true).to(false)
-      .and change { bundle.is_adult }.from(false).to(true)
-      .and change { bundle.discover_fee_per_thousand }.from(100).to(400)
       .and change { bundle.is_epublication }.from(false).to(true)
       .and not_change { bundle.product_refund_policy_enabled }
       .and not_change { bundle.product_refund_policy&.title }
@@ -110,6 +98,16 @@ describe Bundles::ProductController, inertia: true do
 
       expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
       expect(flash[:notice]).to eq("Changes saved!")
+    end
+
+    context "when bundle is unpublished" do
+      let(:bundle) { create(:product, :bundle, :unpublished, user: seller, price_cents: 2000) }
+
+      it "redirects to content page after saving" do
+        put :update, params: bundle_params
+        expect(response).to redirect_to(edit_bundle_content_path(bundle.external_id))
+        expect(flash[:notice]).to eq("Changes saved!")
+      end
     end
 
     describe "installment plans" do
