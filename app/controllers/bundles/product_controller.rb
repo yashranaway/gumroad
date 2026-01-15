@@ -3,7 +3,6 @@
 class Bundles::ProductController < Bundles::BaseController
   def edit
     props = BundlePresenter.new(bundle: @bundle).edit_product_props
-    props[:tab] = "product"
 
     render inertia: "Bundles/Product/Edit", props:
   end
@@ -11,17 +10,19 @@ class Bundles::ProductController < Bundles::BaseController
   def update
     authorize @bundle
 
-    begin
+    should_unpublish = params[:unpublish].present? && @bundle.published?
+    was_published = @bundle.published?
+
+    ActiveRecord::Base.transaction do
       @bundle.is_bundle = true
       @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
       @bundle.assign_attributes(product_permitted_params.except(
-        :custom_button_text_option, :custom_summary, :custom_attributes, :tags, :covers, :refund_policy, :product_refund_policy_enabled,
+        :custom_button_text_option, :custom_summary, :custom_attributes, :covers, :refund_policy, :product_refund_policy_enabled,
         :seller_refund_policy_enabled, :installment_plan)
       )
       @bundle.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
       @bundle.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
       @bundle.save_custom_attributes(product_permitted_params[:custom_attributes]) unless product_permitted_params[:custom_attributes].nil?
-      @bundle.save_tags!(product_permitted_params[:tags]) unless product_permitted_params[:tags].nil?
       @bundle.reorder_previews(product_permitted_params[:covers].map.with_index.to_h) if product_permitted_params[:covers].present?
       if !current_seller.account_level_refund_policy_enabled?
         @bundle.product_refund_policy_enabled = product_permitted_params[:product_refund_policy_enabled]
@@ -34,12 +35,20 @@ class Bundles::ProductController < Bundles::BaseController
 
       update_installment_plan
       @bundle.save!
-    rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
-      error_message = @bundle.errors.full_messages.first || e.message
-      return redirect_to edit_bundle_product_path(@bundle.external_id), alert: error_message
+
+      @bundle.unpublish! if should_unpublish
     end
 
-    redirect_to edit_bundle_product_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+    if should_unpublish
+      redirect_back fallback_location: edit_bundle_product_path(@bundle.external_id), notice: "Unpublished!", status: :see_other
+    elsif was_published
+      redirect_back fallback_location: edit_bundle_product_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+    else
+      redirect_to edit_bundle_content_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+    end
+  rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
+    error_message = @bundle.errors.full_messages.first || e.message
+    redirect_to edit_bundle_product_path(@bundle.external_id), alert: error_message
   end
 
   private
@@ -54,19 +63,12 @@ class Bundles::ProductController < Bundles::BaseController
         :max_purchase_count,
         :quantity_enabled,
         :should_show_sales_count,
-        :taxonomy_id,
-        :display_product_reviews,
-        :is_adult,
-        :discover_fee_per_thousand,
         :custom_button_text_option,
         :custom_summary,
-        :custom_view_content_button_text,
-        :custom_receipt_text,
         :is_epublication,
         :product_refund_policy_enabled,
         :seller_refund_policy_enabled,
         refund_policy: [:max_refund_period_in_days, :title, :fine_print],
-        tags: [],
         covers: [],
         custom_attributes: [:name, :value],
         installment_plan: [:number_of_installments]

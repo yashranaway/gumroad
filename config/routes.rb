@@ -606,15 +606,16 @@ Rails.application.routes.draw do
       end
     end
 
-    resources :bundles, path: "bundles", param: :id, only: [] do
+    resources :bundles, only: [] do
       scope module: :bundles do
-        resource :product, only: [:edit, :update], path: "product", controller: "product", param: :id
-        resource :content, only: [:edit, :update], path: "content", controller: "content", param: :id do
+        resource :product, only: [:edit, :update], controller: "product"
+        resource :content, only: [:edit, :update], controller: "content" do
           post :update_purchases_content
         end
-        resource :share, only: [:edit, :update], path: "share", controller: "share", param: :id
+        resource :share, only: [:edit, :update], controller: "share"
       end
 
+      # Backward compatibility redirects for old bundle edit URLs
       member do
         get :edit, to: redirect("/bundles/%{id}/product/edit")
         get "edit/content", to: redirect("/bundles/%{id}/content/edit")

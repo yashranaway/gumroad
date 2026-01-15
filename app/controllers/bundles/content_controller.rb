@@ -3,16 +3,8 @@
 class Bundles::ContentController < Bundles::BaseController
   def edit
     props = BundlePresenter.new(bundle: @bundle).edit_content_props
-    props[:tab] = "content"
 
-    props[:search_data] = InertiaRails.defer(merge: true) do
-      results = search_results
-      {
-        products: results[:products],
-        has_more: results[:has_more],
-        page: results[:page],
-      }
-    end
+    props[:search_data] = InertiaRails.defer(merge: true) { search_results }
 
     render inertia: "Bundles/Content/Edit", props:
   end
@@ -20,15 +12,27 @@ class Bundles::ContentController < Bundles::BaseController
   def update
     authorize @bundle
 
-    begin
-      Bundle::UpdateProductsService.new(bundle: @bundle, products: content_permitted_params[:products]).perform
+    should_publish = params[:publish].present? && !@bundle.published?
+    should_unpublish = params[:unpublish].present? && @bundle.published?
+
+    ActiveRecord::Base.transaction do
+      Bundle::UpdateProductsService.new(bundle: @bundle, products: content_permitted_params).perform
       @bundle.save!
-    rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
-      error_message = @bundle.errors.full_messages.first || e.message
-      return redirect_to edit_bundle_content_path(@bundle.external_id), alert: error_message
+
+      @bundle.publish! if should_publish
+      @bundle.unpublish! if should_unpublish
     end
 
-    redirect_to edit_bundle_content_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+    if should_publish
+      redirect_to edit_bundle_share_path(@bundle.external_id), notice: "Published!", status: :see_other
+    elsif should_unpublish
+      redirect_back fallback_location: edit_bundle_content_path(@bundle.external_id), notice: "Unpublished!", status: :see_other
+    else
+      redirect_back fallback_location: edit_bundle_content_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+    end
+  rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
+    error_message = @bundle.errors.full_messages.first || e.message
+    redirect_to edit_bundle_content_path(@bundle.external_id), alert: error_message
   end
 
   def update_purchases_content
@@ -44,8 +48,7 @@ class Bundles::ContentController < Bundles::BaseController
 
   private
     def content_permitted_params
-      products_param = params.fetch(:products, [])
-      { products: Array(products_param).map { |p| p.permit(:product_id, :variant_id, :quantity, :position) } }
+      params.permit(products: %i[product_id variant_id quantity position]).require(:products)
     end
 
     def search_results

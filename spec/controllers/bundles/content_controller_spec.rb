@@ -12,13 +12,11 @@ describe Bundles::ContentController, inertia: true do
   include_context "with user signed in as admin for seller"
 
   describe "GET edit" do
-    it "renders the Bundles/Content/Edit Inertia component when tab is content" do
+    it "renders the Bundles/Content/Edit Inertia component" do
       get :edit, params: { bundle_id: bundle.external_id }
       expect(response).to be_successful
       expect(inertia.component).to eq("Bundles/Content/Edit")
       expect(inertia.props).to have_key(:bundle)
-      expect(inertia.props).to have_key(:tab)
-      expect(inertia.props[:tab]).to eq("content")
       expect(assigns(:title)).to eq(bundle.name)
     end
   end
@@ -113,21 +111,18 @@ describe Bundles::ContentController, inertia: true do
     context "when there is a validation error" do
       let(:published_bundle) do
         bundle = create(:product, :bundle, user: seller, price_cents: 2000, draft: false)
-        bundle.update_column(:deleted_at, nil)
         create(:bundle_product, bundle: bundle, product: product)
         bundle.reload
       end
 
       it "returns the error message when published bundle has no products" do
-          put :update, params: {
-            bundle_id: published_bundle.external_id,
+        put :update, params: {
+          bundle_id: published_bundle.external_id,
           products: []
         }
 
         expect(response).to redirect_to(edit_bundle_content_path(published_bundle.external_id))
-        # Validation should catch this and return an error
-        # Note: The validation may run after products are updated, so we just check that an error is shown
-        expect(flash[:alert]).to be_present
+        expect(flash[:alert]).to eq("A published bundle must have at least one product")
       end
     end
   end
