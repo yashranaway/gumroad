@@ -102,6 +102,21 @@ describe FightDisputeJob do
             expect(dispute_evidence.error_message).to eq(error_message)
           end
         end
+
+        context "when PayPal merchant is not authorized to submit evidence" do
+          let(:error_message) { "PayPal Disputes API Error: NOT_AUTHORIZED - Authorization failed due to insufficient permissions" }
+          before do
+            allow_any_instance_of(Purchase).to receive(:fight_chargeback)
+              .and_raise(ChargeProcessorInvalidRequestError.new(error_message))
+          end
+
+          it "marks the dispute evidence as rejected" do
+            described_class.new.perform(dispute.id)
+            expect(dispute_evidence.reload.resolved?).to eq(true)
+            expect(dispute_evidence.resolution).to eq(DisputeEvidence::RESOLUTION_REJECTED)
+            expect(dispute_evidence.error_message).to eq(error_message)
+          end
+        end
       end
 
       context "when the seller has been contacted" do
