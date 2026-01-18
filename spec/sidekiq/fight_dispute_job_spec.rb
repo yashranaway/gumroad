@@ -117,6 +117,36 @@ describe FightDisputeJob do
             expect(dispute_evidence.error_message).to eq(error_message)
           end
         end
+
+        context "when PayPal evidence was already provided" do
+          let(:error_message) { "PayPal Disputes API Error: EVIDENCE_ALREADY_PROVIDED - Evidence has already been submitted for this dispute" }
+          before do
+            allow_any_instance_of(Purchase).to receive(:fight_chargeback)
+              .and_raise(ChargeProcessorInvalidRequestError.new(error_message))
+          end
+
+          it "marks the dispute evidence as rejected" do
+            described_class.new.perform(dispute.id)
+            expect(dispute_evidence.reload.resolved?).to eq(true)
+            expect(dispute_evidence.resolution).to eq(DisputeEvidence::RESOLUTION_REJECTED)
+            expect(dispute_evidence.error_message).to eq(error_message)
+          end
+        end
+
+        context "when PayPal dispute lifecycle stage is invalid" do
+          let(:error_message) { "PayPal Disputes API Error: DISPUTE_LIFE_CYCLE_STAGE_INVALID - Cannot submit evidence at this dispute stage" }
+          before do
+            allow_any_instance_of(Purchase).to receive(:fight_chargeback)
+              .and_raise(ChargeProcessorInvalidRequestError.new(error_message))
+          end
+
+          it "marks the dispute evidence as rejected" do
+            described_class.new.perform(dispute.id)
+            expect(dispute_evidence.reload.resolved?).to eq(true)
+            expect(dispute_evidence.resolution).to eq(DisputeEvidence::RESOLUTION_REJECTED)
+            expect(dispute_evidence.error_message).to eq(error_message)
+          end
+        end
       end
 
       context "when the seller has been contacted" do

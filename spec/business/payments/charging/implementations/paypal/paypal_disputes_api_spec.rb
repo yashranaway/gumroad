@@ -113,6 +113,46 @@ describe PaypalDisputesApi do
 
         api.provide_evidence(dispute_id:, merchant_account:, notes:)
       end
+
+      it "includes PayPal-Request-Id header for idempotency" do
+        expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
+          expect(request.headers["PayPal-Request-Id"]).to be_present
+          expect(request.headers["PayPal-Request-Id"]).to start_with("gumroad-dispute-evidence-#{dispute_id}-")
+          successful_response
+        end.and_return(successful_response)
+
+        api.provide_evidence(dispute_id:, merchant_account:, notes:)
+      end
+
+      it "accepts evidence_type parameter for dispute reason mapping" do
+        expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
+          expect(request.body[:evidence_type]).to eq("PROOF_OF_REFUND")
+          successful_response
+        end.and_return(successful_response)
+
+        api.provide_evidence(
+          dispute_id:,
+          merchant_account:,
+          evidence_type: "PROOF_OF_REFUND",
+          tracking_info: nil,
+          notes:
+        )
+      end
+
+      it "overrides evidence_type to PROOF_OF_FULFILLMENT when tracking info present" do
+        expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
+          expect(request.body[:evidence_type]).to eq("PROOF_OF_FULFILLMENT")
+          successful_response
+        end.and_return(successful_response)
+
+        api.provide_evidence(
+          dispute_id:,
+          merchant_account:,
+          evidence_type: "OTHER",
+          tracking_info:,
+          notes:
+        )
+      end
     end
 
     context "when evidence submission fails" do

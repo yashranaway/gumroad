@@ -4,6 +4,16 @@ class FightDisputeJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
+  REJECTION_PATTERNS = [
+    "This dispute is already closed",
+    "DISPUTE_NOT_ELIGIBLE_FOR_EVIDENCE",
+    "DISPUTE_ALREADY_RESOLVED",
+    "EVIDENCE_ALREADY_PROVIDED",
+    "DISPUTE_LIFE_CYCLE_STAGE_INVALID",
+    "NOT_AUTHORIZED",
+    "PERMISSION_DENIED"
+  ].freeze
+
   def perform(dispute_id)
     dispute = Dispute.find(dispute_id)
     dispute_evidence = dispute.dispute_evidence
@@ -25,9 +35,6 @@ class FightDisputeJob
 
   private
     def rejected?(message)
-      message.include?("This dispute is already closed") ||
-        message.include?("DISPUTE_NOT_ELIGIBLE_FOR_EVIDENCE") ||
-        message.include?("DISPUTE_ALREADY_RESOLVED") ||
-        message.include?("NOT_AUTHORIZED")
+      REJECTION_PATTERNS.any? { |pattern| message.include?(pattern) }
     end
 end

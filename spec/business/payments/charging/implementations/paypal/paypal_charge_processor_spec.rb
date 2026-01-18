@@ -1561,34 +1561,37 @@ describe PaypalChargeProcessor, :vcr do
     end
 
     context "with digital product (no tracking info)" do
-      it "submits evidence with notes only" do
+      it "submits evidence with structured notes" do
         expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
           dispute_id: "PP-D-12345",
           merchant_account:,
+          evidence_type: "OTHER",
           tracking_info: nil,
-          notes: a_string_including("Reason merchant should win")
+          notes: a_string_including("MERCHANT STATEMENT")
         ).and_return(successful_response)
 
         processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
       end
 
-      it "includes product description in notes" do
+      it "includes product description in structured notes" do
         expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
           dispute_id: "PP-D-12345",
           merchant_account:,
+          evidence_type: "OTHER",
           tracking_info: nil,
-          notes: a_string_including("Product: Digital Product")
+          notes: a_string_including("PRODUCT/SERVICE")
         ).and_return(successful_response)
 
         processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
       end
 
-      it "includes customer email in notes" do
+      it "includes customer email in structured notes" do
         expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
           dispute_id: "PP-D-12345",
           merchant_account:,
+          evidence_type: "OTHER",
           tracking_info: nil,
-          notes: a_string_including("Customer email: buyer@example.com")
+          notes: a_string_including("Email: buyer@example.com")
         ).and_return(successful_response)
 
         processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
@@ -1611,19 +1614,28 @@ describe PaypalChargeProcessor, :vcr do
                reason_for_winning: "License was activated by customer")
       end
 
-      it "includes license key in notes" do
+      it "includes license key evidence section" do
         license # ensure license is created
         expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
-          hash_including(notes: a_string_including("License key: #{license.serial}"))
+          hash_including(notes: a_string_including("LICENSE KEY EVIDENCE"))
         ).and_return(successful_response)
 
         processor.fight_chargeback("PAYPAL_CAPTURE_123", licensed_dispute_evidence, merchant_account:)
       end
 
-      it "includes license activation count in notes" do
+      it "includes license serial in notes" do
         license # ensure license is created
         expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
-          hash_including(notes: a_string_including("License activation count: 3 (proof of product activation)"))
+          hash_including(notes: a_string_including("Serial: #{license.serial}"))
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", licensed_dispute_evidence, merchant_account:)
+      end
+
+      it "includes activation count as proof" do
+        license # ensure license is created
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(notes: a_string_including("3 activations"))
         ).and_return(successful_response)
 
         processor.fight_chargeback("PAYPAL_CAPTURE_123", licensed_dispute_evidence, merchant_account:)
@@ -1646,15 +1658,45 @@ describe PaypalChargeProcessor, :vcr do
         expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
           dispute_id: "PP-D-12345",
           merchant_account:,
+          evidence_type: "OTHER",
           tracking_info: {
             carrier_name: "USPS",
             tracking_number: "9400111899223456789012",
             ship_date: "2024-01-15"
           },
-          notes: a_string_including("Reason merchant should win")
+          notes: a_string_including("SHIPPING INFORMATION")
         ).and_return(successful_response)
 
         processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence_with_tracking, merchant_account:)
+      end
+    end
+
+    context "evidence type mapping based on dispute reason" do
+      it "uses PROOF_OF_FULFILLMENT for product_not_received disputes" do
+        dispute.update!(reason: Dispute::REASON_PRODUCT_NOT_RECEIVED)
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(evidence_type: "PROOF_OF_FULFILLMENT")
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
+      end
+
+      it "uses PROOF_OF_REFUND for credit_not_processed disputes" do
+        dispute.update!(reason: Dispute::REASON_CREDIT_NOT_PROCESSED)
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(evidence_type: "PROOF_OF_REFUND")
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
+      end
+
+      it "uses OTHER for fraudulent disputes" do
+        dispute.update!(reason: Dispute::REASON_FRAUDULENT)
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(evidence_type: "OTHER")
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
       end
     end
 

@@ -16,14 +16,46 @@ class PaypalChargeProcessor
   DISPUTE_OUTCOME_SELLER_FAVOUR = %w[RESOLVED_SELLER_FAVOUR CANCELED_BY_BUYER DENIED].freeze
   private_constant :DISPUTE_OUTCOME_SELLER_FAVOUR
 
+  DISPUTE_REASON_TO_EVIDENCE_TYPE = {
+    Dispute::REASON_PRODUCT_NOT_RECEIVED => "PROOF_OF_FULFILLMENT",
+    Dispute::REASON_PRODUCT_UNACCEPTABLE => "PROOF_OF_FULFILLMENT",
+    Dispute::REASON_SUBSCRIPTION_CANCELED => "PROOF_OF_FULFILLMENT",
+    Dispute::REASON_CREDIT_NOT_PROCESSED => "PROOF_OF_REFUND",
+    Dispute::REASON_DUPLICATE => "OTHER",
+    Dispute::REASON_FRAUDULENT => "OTHER",
+    Dispute::REASON_UNRECOGNIZED => "OTHER",
+    Dispute::REASON_GENERAL => "OTHER"
+  }.freeze
+
   PAYPAL_CARRIER_MAP = {
     "USPS" => "USPS",
+    "usps" => "USPS",
     "UPS" => "UPS",
+    "ups" => "UPS",
     "FedEx" => "FEDEX",
+    "fedex" => "FEDEX",
     "DHL" => "DHL",
+    "dhl" => "DHL",
+    "DHL Express" => "DHL",
+    "dhl_express" => "DHL",
     "DHL Global Mail" => "DHL_GLOBAL_MAIL",
     "OnTrac" => "ONTRAC",
-    "Canada Post" => "CANADA_POST"
+    "LaserShip" => "LASERSHIP",
+    "Canada Post" => "CANADA_POST",
+    "canada_post" => "CANADA_POST",
+    "Royal Mail" => "ROYAL_MAIL",
+    "royal_mail" => "ROYAL_MAIL",
+    "Australia Post" => "AUSTRALIA_POST",
+    "australia_post" => "AUSTRALIA_POST",
+    "Deutsche Post" => "DEUTSCHE_POST",
+    "Hermes" => "HERMES_DE",
+    "DPD" => "DPD_DE",
+    "GLS" => "GLS",
+    "TNT" => "TNT",
+    "Aramex" => "ARAMEX",
+    "Japan Post" => "JAPAN_POST",
+    "China Post" => "CHINA_POST",
+    "SF Express" => "SF_EXPRESS"
   }.freeze
 
   # https://developer.paypal.com/docs/api/orders/v1/
@@ -600,15 +632,19 @@ class PaypalChargeProcessor
     return unless merchant_account&.charge_processor_merchant_id.present?
 
     tracking_info = build_tracking_info(dispute_evidence)
-    notes = build_evidence_notes(dispute_evidence)
+    evidence_type = determine_evidence_type_for_dispute(dispute)
+    notes = build_structured_evidence_notes(dispute_evidence, dispute)
 
     api = PaypalDisputesApi.new
     api_response = api.provide_evidence(
       dispute_id:,
       merchant_account:,
+      evidence_type:,
       tracking_info:,
       notes:
     )
+
+    PaypalChargeProcessor.log_paypal_api_response("Provide Dispute Evidence", dispute_id, api_response)
 
     unless api.successful_response?(api_response)
       error_message = build_dispute_error_message(api_response)
@@ -675,28 +711,125 @@ class PaypalChargeProcessor
       nil
     end
 
-    def build_evidence_notes(dispute_evidence)
-      parts = []
-      parts << "Reason merchant should win: #{dispute_evidence.reason_for_winning}" if dispute_evidence.reason_for_winning.present?
-      parts << "Product: #{dispute_evidence.product_description}" if dispute_evidence.product_description.present?
-      parts << "Customer email: #{dispute_evidence.customer_email}" if dispute_evidence.customer_email.present?
-      parts << "Customer IP: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
-      parts << "Billing address: #{dispute_evidence.billing_address}" if dispute_evidence.billing_address.present?
-      parts.concat(build_license_evidence(dispute_evidence))
-      parts << dispute_evidence.uncategorized_text if dispute_evidence.uncategorized_text.present?
-      parts << "Access activity: #{dispute_evidence.access_activity_log}" if dispute_evidence.access_activity_log.present?
-      parts.join("\n\n")[0...2000]
+    def determine_evidence_type_for_dispute(dispute)
+      return "OTHER" unless dispute&.reason.present?
+      DISPUTE_REASON_TO_EVIDENCE_TYPE[dispute.reason] || "OTHER"
     end
 
-    def build_license_evidence(dispute_evidence)
-      parts = []
-      purchase = dispute_evidence.dispute.disputable.purchase_for_dispute_evidence
-      return parts unless purchase&.license.present?
+    def build_structured_evidence_notes(dispute_evidence, dispute)
+      sections = []
 
-      license = purchase.license
-      parts << "License key: #{license.serial}"
-      parts << "License activation count: #{license.uses} (proof of product activation)" if license.uses.positive?
-      parts
+      transaction_info = build_transaction_section(dispute)
+      sections << transaction_info if transaction_info.present?
+
+      customer_info = build_customer_section(dispute_evidence)
+      sections << customer_info if customer_info.present?
+
+      product_info = build_product_section(dispute_evidence)
+      sections << product_info if product_info.present?
+
+      license_info = build_license_section(dispute)
+      sections << license_info if license_info.present?
+
+      shipping_info = build_shipping_section(dispute_evidence)
+      sections << shipping_info if shipping_info.present?
+
+      activity_info = build_activity_section(dispute_evidence)
+      sections << activity_info if activity_info.present?
+
+      policy_info = build_policy_section(dispute_evidence)
+      sections << policy_info if policy_info.present?
+
+      statement_info = build_merchant_statement_section(dispute_evidence)
+      sections << statement_info if statement_info.present?
+
+      sections.join("\n\n")[0...2000]
+    end
+
+    def build_transaction_section(dispute)
+      return nil unless dispute.present?
+
+      lines = ["═══ TRANSACTION DETAILS ═══"]
+      purchases = dispute.purchases.to_a.compact
+
+      purchases.each_with_index do |purchase, index|
+        prefix = purchases.size > 1 ? "Purchase #{index + 1}: " : ""
+        lines << "#{prefix}Transaction ID: #{purchase.stripe_transaction_id}" if purchase.stripe_transaction_id.present?
+        lines << "#{prefix}Date: #{purchase.created_at.strftime('%Y-%m-%d %H:%M UTC')}" if purchase.created_at.present?
+        lines << "#{prefix}Product: #{purchase.link&.name}" if purchase.link&.name.present?
+      end
+
+      lines << "Dispute Filed: #{dispute.event_created_at.strftime('%Y-%m-%d %H:%M UTC')}" if dispute.event_created_at.present?
+
+      lines.size > 1 ? lines.join("\n") : nil
+    end
+
+    def build_customer_section(dispute_evidence)
+      lines = []
+      lines << dispute_evidence.customer_name if dispute_evidence.customer_name.present?
+      lines << "Email: #{dispute_evidence.customer_email}" if dispute_evidence.customer_email.present?
+      lines << "Purchase IP: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
+      lines << "Billing Address: #{dispute_evidence.billing_address}" if dispute_evidence.billing_address.present?
+
+      return nil if lines.empty?
+      ["═══ CUSTOMER INFORMATION ═══", *lines].join("\n")
+    end
+
+    def build_product_section(dispute_evidence)
+      return nil unless dispute_evidence.product_description.present?
+      ["═══ PRODUCT/SERVICE ═══", dispute_evidence.product_description].join("\n")
+    end
+
+    def build_license_section(dispute)
+      return nil unless dispute.present?
+
+      license_lines = []
+      dispute.purchases.each do |purchase|
+        next unless purchase&.license.present?
+        license = purchase.license
+        info = "Serial: #{license.serial}"
+        info += " (#{license.uses} activations - proves product was accessed)" if license.uses.to_i > 0
+        license_lines << info
+      end
+
+      return nil if license_lines.empty?
+      ["═══ LICENSE KEY EVIDENCE ═══", "Digital product delivery confirmed:", *license_lines].join("\n")
+    end
+
+    def build_shipping_section(dispute_evidence)
+      lines = []
+      lines << "Address: #{dispute_evidence.shipping_address}" if dispute_evidence.shipping_address.present?
+      lines << "Carrier: #{dispute_evidence.shipping_carrier}" if dispute_evidence.shipping_carrier.present?
+      lines << "Tracking: #{dispute_evidence.shipping_tracking_number}" if dispute_evidence.shipping_tracking_number.present?
+      lines << "Ship Date: #{dispute_evidence.shipped_at}" if dispute_evidence.shipped_at.present?
+
+      return nil if lines.empty?
+      ["═══ SHIPPING INFORMATION ═══", *lines].join("\n")
+    end
+
+    def build_activity_section(dispute_evidence)
+      return nil unless dispute_evidence.access_activity_log.present?
+      ["═══ ACCESS ACTIVITY LOG ═══", dispute_evidence.access_activity_log].join("\n")
+    end
+
+    def build_policy_section(dispute_evidence)
+      lines = []
+      lines << "Refund Policy: #{dispute_evidence.refund_policy_disclosure}" if dispute_evidence.refund_policy_disclosure.present?
+      lines << "Cancellation Policy: #{dispute_evidence.cancellation_policy_disclosure}" if dispute_evidence.cancellation_policy_disclosure.present?
+
+      return nil if lines.empty?
+      ["═══ POLICIES ═══", *lines].join("\n")
+    end
+
+    def build_merchant_statement_section(dispute_evidence)
+      lines = []
+      lines << dispute_evidence.reason_for_winning if dispute_evidence.reason_for_winning.present?
+      lines << dispute_evidence.refund_refusal_explanation if dispute_evidence.refund_refusal_explanation.present?
+      lines << dispute_evidence.cancellation_rebuttal if dispute_evidence.cancellation_rebuttal.present?
+      lines << dispute_evidence.uncategorized_text if dispute_evidence.uncategorized_text.present?
+
+      return nil if lines.empty?
+      ["═══ MERCHANT STATEMENT ═══", *lines].join("\n")
     end
 
     def build_dispute_error_message(api_response)

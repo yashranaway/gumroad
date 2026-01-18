@@ -8,12 +8,13 @@ class PaypalDisputesApi
     @paypal_client = PayPal::PayPalHttpClient.new(paypal_environment)
   end
 
-  def provide_evidence(dispute_id:, merchant_account:, tracking_info: nil, notes: nil)
+  def provide_evidence(dispute_id:, merchant_account:, evidence_type: "OTHER", tracking_info: nil, notes: nil)
     @request = new_request(path: "/v1/customer/disputes/#{dispute_id}/provide-evidence", verb: "POST")
     @request.headers["PayPal-Auth-Assertion"] = paypal_auth_assertion_header(merchant_account.charge_processor_merchant_id)
+    @request.headers["PayPal-Request-Id"] = generate_idempotency_key(dispute_id)
 
     body = {}
-    body[:evidence_type] = tracking_info.present? ? "PROOF_OF_FULFILLMENT" : "OTHER"
+    body[:evidence_type] = determine_evidence_type(evidence_type, tracking_info)
     body[:evidence_info] = { tracking_info: [tracking_info] } if tracking_info.present?
     body[:notes] = notes.to_s[0...2000] if notes.present?
 
@@ -55,6 +56,15 @@ class PaypalDisputesApi
       header_part_one = { alg: "none" }.to_json
       header_part_two = { payer_id: seller_merchant_id, iss: PAYPAL_PARTNER_CLIENT_ID }.to_json
       "#{Base64.strict_encode64(header_part_one)}.#{Base64.strict_encode64(header_part_two)}."
+    end
+
+    def generate_idempotency_key(dispute_id)
+      "gumroad-dispute-evidence-#{dispute_id}-#{Time.current.to_i}"
+    end
+
+    def determine_evidence_type(evidence_type, tracking_info)
+      return "PROOF_OF_FULFILLMENT" if tracking_info.present?
+      evidence_type.presence || "OTHER"
     end
 
     def execute_request
