@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { BundleProduct } from "$app/components/BundleEdit/state";
+import { CardProduct } from "$app/parsers/product";
+
 import {
   CartItem,
   CartItemEnd,
@@ -10,6 +11,20 @@ import {
   CartItemFooter,
 } from "$app/components/CartItemList";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+
+type BundleProduct = CardProduct & {
+  is_quantity_enabled: boolean;
+  quantity: number;
+  variants: {
+    selected_id: string;
+    list: {
+      id: string;
+      name: string;
+      description: string;
+      price_difference: number;
+    }[];
+  } | null;
+};
 
 export const BundleProductSelector = ({
   bundleProduct,

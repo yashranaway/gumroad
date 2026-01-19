@@ -40,6 +40,7 @@ class Bundle::UpdateProductsService
       )
     end
 
+    @bundle.save!
     @bundle
   end
 

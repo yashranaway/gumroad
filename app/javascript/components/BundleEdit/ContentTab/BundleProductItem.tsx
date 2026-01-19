@@ -1,8 +1,21 @@
 import * as React from "react";
 
+import { CardProduct } from "$app/parsers/product";
 import { variantLabel } from "$app/utils/labels";
 
-import { BundleProduct } from "$app/components/BundleEdit/state";
+type BundleProduct = CardProduct & {
+  is_quantity_enabled: boolean;
+  quantity: number;
+  variants: {
+    selected_id: string;
+    list: {
+      id: string;
+      name: string;
+      description: string;
+      price_difference: number;
+    }[];
+  } | null;
+};
 import { Button } from "$app/components/Button";
 import {
   CartItemEnd,

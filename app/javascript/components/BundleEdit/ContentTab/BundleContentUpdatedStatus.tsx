@@ -1,12 +1,14 @@
 import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
 
-export const BundleContentUpdatedStatus = () => {
-  const { id } = useBundleEditContext();
+type BundleContentUpdatedStatusProps = {
+  id: string;
+};
+
+export const BundleContentUpdatedStatus = ({ id }: BundleContentUpdatedStatusProps) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
   const updatePurchases = () => {

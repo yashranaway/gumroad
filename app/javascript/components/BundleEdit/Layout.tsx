@@ -1,7 +1,8 @@
 import { Link } from "@inertiajs/react";
 import * as React from "react";
 
-import { useBundleEditContext } from "$app/components/BundleEdit/state";
+import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
+
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -15,13 +16,11 @@ import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-export const useProductUrl = (params = {}) => {
-  const { bundle, uniquePermalink } = useBundleEditContext();
+export const useProductUrl = (uniquePermalink: string, customPermalink?: string | null) => {
   const currentSeller = useCurrentSeller();
   const { appDomain } = useDomains();
-  return Routes.short_link_url(bundle.custom_permalink ?? uniquePermalink, {
+  return Routes.short_link_url(customPermalink ?? uniquePermalink, {
     host: currentSeller?.subdomain ?? appDomain,
-    ...params,
   });
 };
 
@@ -32,8 +31,32 @@ const useCurrentTab = (): "product" | "content" | "share" => {
   return "product";
 };
 
-export const Layout = ({
+type BundleEditLayoutProps = {
+  children: React.ReactNode;
+  id: string;
+  name?: string;
+  customPermalink?: string | null;
+  uniquePermalink?: string;
+  isPublished: boolean;
+  publicFiles?: PublicFileWithStatus[];
+  preview?: React.ReactNode;
+  isLoading?: boolean;
+  isProcessing?: boolean;
+  onSave?: () => void;
+  onPublish?: () => void;
+  onUnpublish?: () => void;
+  onSaveAndContinue?: () => void;
+  onPreview?: () => void;
+};
+
+export const BundleEditLayout = ({
   children,
+  id,
+  name = "Untitled",
+  customPermalink,
+  uniquePermalink = "",
+  isPublished,
+  publicFiles = [],
   preview,
   isLoading = false,
   isProcessing = false,
@@ -42,26 +65,15 @@ export const Layout = ({
   onUnpublish,
   onSaveAndContinue,
   onPreview,
-}: {
-  children: React.ReactNode;
-  preview: React.ReactNode;
-  isLoading?: boolean;
-  isProcessing?: boolean;
-  onSave?: () => void;
-  onPublish?: () => void;
-  onUnpublish?: () => void;
-  onSaveAndContinue?: () => void;
-  onPreview?: () => void;
-}) => {
-  const { bundle, id } = useBundleEditContext();
+}: BundleEditLayoutProps) => {
   const tab = useCurrentTab();
 
-  const url = useProductUrl();
+  const url = useProductUrl(uniquePermalink, customPermalink);
   const rootPath = Routes.edit_bundle_product_path(id);
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
-  const isUploadingFiles = bundle.public_files.some(
+  const isUploadingFiles = publicFiles.some(
     (f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading",
   );
   const isUploadingFilesOrImages = isLoading || isUploadingFiles;
@@ -99,9 +111,9 @@ export const Layout = ({
     <>
       <PageHeader
         className="sticky-top"
-        title={bundle.name || "Untitled"}
+        title={name || "Untitled"}
         actions={
-          bundle.is_published ? (
+          isPublished ? (
             <>
               {onUnpublish ? (
                 <Button disabled={isBusy} onClick={onUnpublish}>
@@ -182,3 +194,7 @@ export const Layout = ({
     </>
   );
 };
+
+// Keep the old Layout export for backward compatibility during migration
+// TODO: Remove this after all pages are migrated
+export { BundleEditLayout as Layout };

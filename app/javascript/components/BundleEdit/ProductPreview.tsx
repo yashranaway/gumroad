@@ -1,27 +1,63 @@
 import * as React from "react";
 
+import { AssetPreview, CustomButtonTextOption, RatingsWithPercentages } from "$app/parsers/product";
+
 import { useProductUrl } from "$app/components/BundleEdit/Layout";
-import { computeStandalonePrice, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Product } from "$app/components/Product";
-import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
+import { Product, Seller } from "$app/components/Product";
+import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
+import { RefundPolicy, RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
+import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 
-export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
+type ProductPreviewBundle = {
+  name: string;
+  description: string;
+  covers: AssetPreview[];
+  collaborating_user: Seller | null;
+  customizable_price: boolean;
+  price_cents: number;
+  suggested_price_cents: number | null;
+  max_purchase_count: number | null;
+  allow_installment_plan: boolean;
+  installment_plan: { number_of_installments: number } | null;
+  display_product_reviews: boolean;
+  quantity_enabled: boolean;
+  should_show_sales_count: boolean;
+  custom_button_text_option: CustomButtonTextOption | null;
+  custom_summary: string | null;
+  custom_attributes: Attribute[];
+  refund_policy: RefundPolicy;
+  public_files: PublicFileWithStatus[];
+  audio_previews_enabled: boolean;
+  is_published: boolean;
+  custom_permalink?: string | null;
+};
+
+type ProductPreviewProps = {
+  bundle: ProductPreviewBundle;
+  id: string;
+  uniquePermalink: string;
+  salesCountForInventory: number;
+  ratings: RatingsWithPercentages;
+  sellerRefundPolicyEnabled: boolean;
+  sellerRefundPolicy: Pick<RefundPolicy, "title" | "fine_print">;
+  showRefundPolicyModal?: boolean;
+};
+
+export const ProductPreview = ({
+  bundle,
+  id,
+  uniquePermalink,
+  salesCountForInventory,
+  ratings,
+  sellerRefundPolicyEnabled,
+  sellerRefundPolicy,
+  showRefundPolicyModal,
+}: ProductPreviewProps) => {
   const currentSeller = useCurrentSeller();
-  const {
-    bundle,
-    id,
-    uniquePermalink,
-    currencyType,
-    salesCountForInventory,
-    ratings,
-    seller_refund_policy_enabled,
-    seller_refund_policy,
-  } = useBundleEditContext();
-  const url = useProductUrl();
+  const url = useProductUrl(uniquePermalink, bundle.custom_permalink);
 
-  if (!currentSeller || !currencyType || salesCountForInventory === undefined || !ratings || !seller_refund_policy)
-    return null;
+  if (!currentSeller) return null;
 
   return (
     <>
@@ -41,7 +77,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           main_cover_id: bundle.covers[0]?.id ?? null,
           quantity_remaining:
             bundle.max_purchase_count !== null ? Math.max(bundle.max_purchase_count - salesCountForInventory, 0) : null,
-          currency_code: currencyType,
+          currency_code: "usd",
           long_url: url,
           duration_in_months: null,
           is_sales_limited: bundle.max_purchase_count !== null,
@@ -80,10 +116,10 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           has_third_party_analytics: false,
           ppp_details: null,
           can_edit: false,
-          refund_policy: seller_refund_policy_enabled
+          refund_policy: sellerRefundPolicyEnabled
             ? {
-                title: seller_refund_policy.title,
-                fine_print: seller_refund_policy.fine_print ?? "",
+                title: sellerRefundPolicy.title,
+                fine_print: sellerRefundPolicy.fine_print ?? "",
                 updated_at: "",
               }
             : {
@@ -94,12 +130,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
                 fine_print: bundle.refund_policy.fine_print ?? "",
                 updated_at: "",
               },
-          bundle_products: bundle.products.map((bundleProduct) => ({
-            ...bundleProduct,
-            price: computeStandalonePrice(bundleProduct),
-            variant:
-              bundleProduct.variants?.list.find(({ id }) => id === bundleProduct.variants?.selected_id)?.name ?? null,
-          })),
+          bundle_products: [],
           public_files: bundle.public_files,
           audio_previews_enabled: bundle.audio_previews_enabled,
         }}

@@ -6,6 +6,8 @@ class Bundles::ContentController < Bundles::BaseController
 
     props[:search_data] = InertiaRails.defer(merge: true) { search_results }
 
+    flash.now[:alert] = "Select products and save your changes to finish converting this product to a bundle." unless @bundle.is_bundle?
+
     render inertia: "Bundles/Content/Edit", props:
   end
 
@@ -15,23 +17,23 @@ class Bundles::ContentController < Bundles::BaseController
     should_publish = params[:publish].present? && !@bundle.published?
     should_unpublish = params[:unpublish].present? && @bundle.published?
 
+    bundle = nil
     ActiveRecord::Base.transaction do
-      Bundle::UpdateProductsService.new(bundle: @bundle, products: content_permitted_params).perform
-      @bundle.save!
+      bundle = Bundle::UpdateProductsService.new(bundle: @bundle, products: content_permitted_params).perform
 
-      @bundle.publish! if should_publish
-      @bundle.unpublish! if should_unpublish
+      bundle.publish! if should_publish
+      bundle.unpublish! if should_unpublish
     end
 
     if should_publish
-      redirect_to edit_bundle_share_path(@bundle.external_id), notice: "Published!", status: :see_other
+      redirect_to edit_bundle_share_path(bundle.external_id), notice: "Published!", status: :see_other
     elsif should_unpublish
-      redirect_back fallback_location: edit_bundle_content_path(@bundle.external_id), notice: "Unpublished!", status: :see_other
+      redirect_back fallback_location: edit_bundle_content_path(bundle.external_id), notice: "Unpublished!", status: :see_other
     else
-      redirect_back fallback_location: edit_bundle_content_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+      redirect_back fallback_location: edit_bundle_content_path(bundle.external_id), notice: "Changes saved!", status: :see_other
     end
   rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
-    error_message = @bundle.errors.full_messages.first || e.message
+    error_message = (@bundle.errors.full_messages.first || e.message)
     redirect_to edit_bundle_content_path(@bundle.external_id), alert: error_message
   end
 

@@ -4,6 +4,8 @@ class Bundles::ProductController < Bundles::BaseController
   def edit
     props = BundlePresenter.new(bundle: @bundle).edit_product_props
 
+    flash.now[:alert] = "Select products and save your changes to finish converting this product to a bundle." unless @bundle.is_bundle?
+
     render inertia: "Bundles/Product/Edit", props:
   end
 

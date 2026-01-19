@@ -12,21 +12,26 @@ class Bundles::ShareController < Bundles::BaseController
   def update
     authorize @bundle
 
+    bundle = nil
     ActiveRecord::Base.transaction do
-      @bundle.assign_attributes(share_permitted_params.slice(:taxonomy_id, :display_product_reviews, :is_adult))
-      @bundle.save_tags!(share_permitted_params[:tags]) if share_permitted_params[:tags].present?
-      @bundle.show_in_sections!(share_permitted_params[:section_ids]) if share_permitted_params[:section_ids]
-      @bundle.save!
+      bundle = Bundle::UpdateShareService.new(
+        bundle: @bundle,
+        taxonomy_id: share_permitted_params[:taxonomy_id],
+        tags: share_permitted_params[:tags],
+        section_ids: share_permitted_params[:section_ids],
+        display_product_reviews: share_permitted_params[:display_product_reviews],
+        is_adult: share_permitted_params[:is_adult]
+      ).perform
 
-      if params[:unpublish].present? && @bundle.published?
-        @bundle.unpublish!
+      if params[:unpublish].present? && bundle.published?
+        bundle.unpublish!
       end
     end
 
     if params[:unpublish].present?
-      redirect_to edit_bundle_product_path(@bundle.external_id), notice: "Unpublished!", status: :see_other
+      redirect_to edit_bundle_product_path(bundle.external_id), notice: "Unpublished!", status: :see_other
     else
-      redirect_back fallback_location: edit_bundle_share_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+      redirect_back fallback_location: edit_bundle_share_path(bundle.external_id), notice: "Changes saved!", status: :see_other
     end
   rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
     error_message = @bundle.errors.full_messages.first || e.message
