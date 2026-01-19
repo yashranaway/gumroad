@@ -54,7 +54,6 @@ type ProductPageProps = {
   };
   id: string;
   unique_permalink: string;
-  is_bundle: boolean;
   currency_type: CurrencyCode;
   thumbnail: Thumbnail | null;
   sales_count_for_inventory: number;

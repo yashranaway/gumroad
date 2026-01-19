@@ -43,7 +43,6 @@ type ContentPageProps = {
   };
   id: string;
   unique_permalink: string;
-  is_bundle: boolean;
   products_count: number;
   has_outdated_purchases: boolean;
   search_data?: {

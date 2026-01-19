@@ -70,7 +70,6 @@ type SharePageProps = {
   };
   id: string;
   unique_permalink: string;
-  is_bundle: boolean;
   taxonomies: Taxonomy[];
   profile_sections: ProfileSection[];
   currency_type: CurrencyCode;
