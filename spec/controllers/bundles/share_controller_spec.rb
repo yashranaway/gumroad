@@ -25,10 +25,10 @@ describe Bundles::ShareController, inertia: true do
     context "when bundle is unpublished" do
       let(:bundle) { create(:product, :bundle, user: seller, price_cents: 2000, draft: true) }
 
-      it "redirects to content page with alert" do
+      it "redirects to content page with warning" do
         get :edit, params: { bundle_id: bundle.external_id }
         expect(response).to redirect_to(edit_bundle_content_path(bundle.external_id))
-        expect(flash[:alert]).to eq("Not yet! You've got to publish your awesome product before you can share it with your audience and the world.")
+        expect(flash[:warning]).to eq("Not yet! You've got to publish your awesome product before you can share it with your audience and the world.")
       end
     end
   end

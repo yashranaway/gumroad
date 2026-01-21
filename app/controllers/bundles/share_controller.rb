@@ -46,7 +46,7 @@ class Bundles::ShareController < Bundles::BaseController
     def ensure_published
       return if @bundle.published?
 
-      redirect_to edit_bundle_content_path(@bundle.external_id),
-        alert: "Not yet! You've got to publish your awesome product before you can share it with your audience and the world."
+      flash[:warning] = "Not yet! You've got to publish your awesome product before you can share it with your audience and the world."
+      redirect_to edit_bundle_content_path(@bundle.external_id)
     end
 end

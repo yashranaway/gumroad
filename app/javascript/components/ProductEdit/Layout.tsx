@@ -292,20 +292,7 @@ export const Layout = ({
               </Link>
             </Tab>
             <Tab asChild isSelected={tab === "share"}>
-              <Link
-                to={`${rootPath}/share`}
-                onClick={(evt) => {
-                  onTabClick(evt, () => {
-                    if (!product.is_published) {
-                      evt.preventDefault();
-                      showAlert(
-                        "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-                        "warning",
-                      );
-                    }
-                  });
-                }}
-              >
+              <Link to={`${rootPath}/share`} onClick={onTabClick}>
                 Share
               </Link>
             </Tab>

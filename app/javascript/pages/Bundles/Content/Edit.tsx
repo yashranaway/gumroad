@@ -196,6 +196,8 @@ export default function BundlesContentEdit() {
     <BundleEditLayout
       id={id}
       name={bundle.name}
+      customPermalink={bundle.custom_permalink}
+      uniquePermalink={unique_permalink}
       isPublished={bundle.is_published}
       preview={
         <div>
