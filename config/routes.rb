@@ -676,6 +676,7 @@ Rails.application.routes.draw do
       scope module: :products, format: true, constraints: { format: :json } do
         resources :other_refund_policies, only: :index
         resources :remaining_call_availabilities, only: :index
+        resources :available_offer_codes, only: :index
       end
     end
 
@@ -885,11 +886,6 @@ Rails.application.routes.draw do
     # old API route
     namespace "api" do
       api_routes
-    end
-
-    # developers pages
-    scope "developers" do
-      get "/", to: "public#developers", as: "developers"
     end
 
     scope "api" do
