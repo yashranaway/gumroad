@@ -11,9 +11,9 @@ describe Subscription, :vcr do
   before do
     @product = create(:subscription_product, user: seller, is_licensed: true)
     @subscription = create(:subscription, user: create(:user), link: @product)
-    @purchase = create(:free_purchase, link: @product, email: @subscription.user.email, full_name: "squiddy",
-                                       is_original_subscription_purchase: true,
-                                       subscription: @subscription, created_at: 2.days.ago)
+    @purchase = create(:purchase, link: @product, email: @subscription.user.email, full_name: "squiddy",
+                                  price_cents: @product.price_cents, is_original_subscription_purchase: true,
+                                  subscription: @subscription, created_at: 2.days.ago)
   end
 
   describe "associations" do
