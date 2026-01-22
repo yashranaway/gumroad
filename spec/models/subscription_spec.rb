@@ -3533,9 +3533,9 @@ describe Subscription, :vcr do
     context "when offer code has max usage limit" do
       it "preserves discount for all installments even after max usage is reached" do
         purchase = create(:installment_plan_purchase,
-                         link: product,
-                         offer_code: offer_code,
-                         purchaser: buyer)
+                          link: product,
+                          offer_code: offer_code,
+                          purchaser: buyer)
 
         subscription = purchase.subscription
         payment_option = subscription.last_payment_option
@@ -3547,10 +3547,10 @@ describe Subscription, :vcr do
         expect(payment_option.installment_plan_snapshot.original_offer_code_is_percent).to be false
 
         another_buyer = create(:user)
-        another_purchase = create(:purchase,
-                                  link: product,
-                                  offer_code: offer_code,
-                                  purchaser: another_buyer)
+        create(:purchase,
+               link: product,
+               offer_code: offer_code,
+               purchaser: another_buyer)
 
         expect(offer_code.reload.quantity_left).to be <= 0
 
@@ -3567,9 +3567,9 @@ describe Subscription, :vcr do
         percentage_offer_code = create(:offer_code, code: "PERCENT25", products: [product], amount_percentage: 25, max_purchase_count: 1)
 
         purchase = create(:installment_plan_purchase,
-                         link: product,
-                         offer_code: percentage_offer_code,
-                         purchaser: buyer)
+                          link: product,
+                          offer_code: percentage_offer_code,
+                          purchaser: buyer)
 
         subscription = purchase.subscription
         payment_option = subscription.last_payment_option
@@ -3578,10 +3578,10 @@ describe Subscription, :vcr do
         expect(payment_option.installment_plan_snapshot.original_offer_code_is_percent).to be true
 
         another_buyer = create(:user)
-        another_purchase = create(:purchase,
-                                  link: product,
-                                  offer_code: percentage_offer_code,
-                                  purchaser: another_buyer)
+        create(:purchase,
+               link: product,
+               offer_code: percentage_offer_code,
+               purchaser: another_buyer)
 
         expect(percentage_offer_code.reload.quantity_left).to be <= 0
 
@@ -3598,9 +3598,9 @@ describe Subscription, :vcr do
 
       it "uses live offer code for subsequent installments" do
         purchase = create(:installment_plan_purchase,
-                         link: product,
-                         offer_code: unlimited_offer_code,
-                         purchaser: buyer)
+                          link: product,
+                          offer_code: unlimited_offer_code,
+                          purchaser: buyer)
 
         subscription = purchase.subscription
         payment_option = subscription.last_payment_option
@@ -3615,9 +3615,9 @@ describe Subscription, :vcr do
     context "when offer code is deleted between installments" do
       it "preserves discount from snapshot data even after offer code deletion" do
         purchase = create(:installment_plan_purchase,
-                         link: product,
-                         offer_code: offer_code,
-                         purchaser: buyer)
+                          link: product,
+                          offer_code: offer_code,
+                          purchaser: buyer)
 
         subscription = purchase.subscription
         payment_option = subscription.last_payment_option
@@ -3649,9 +3649,9 @@ describe Subscription, :vcr do
         expiring_offer_code = create(:offer_code, code: "EXPIRING100", products: [product], amount_cents: 100, valid_at: 1.day.ago, expires_at: 1.hour.from_now)
 
         purchase = create(:installment_plan_purchase,
-                         link: product,
-                         offer_code: expiring_offer_code,
-                         purchaser: buyer)
+                          link: product,
+                          offer_code: expiring_offer_code,
+                          purchaser: buyer)
 
         subscription = purchase.subscription
         payment_option = subscription.last_payment_option
@@ -3677,9 +3677,9 @@ describe Subscription, :vcr do
     context "when offer code amount changes between installments" do
       it "uses original snapshotted amount, not the changed amount" do
         purchase = create(:installment_plan_purchase,
-                         link: product,
-                         offer_code: offer_code,
-                         purchaser: buyer)
+                          link: product,
+                          offer_code: offer_code,
+                          purchaser: buyer)
 
         subscription = purchase.subscription
         snapshot = subscription.last_payment_option.installment_plan_snapshot
@@ -3708,9 +3708,9 @@ describe Subscription, :vcr do
                                      duration_in_months: 6)
 
         purchase = create(:installment_plan_purchase,
-                         link: product,
-                         offer_code: offer_with_currency,
-                         purchaser: buyer)
+                          link: product,
+                          offer_code: offer_with_currency,
+                          purchaser: buyer)
 
         snapshot = purchase.subscription.last_payment_option.installment_plan_snapshot
 

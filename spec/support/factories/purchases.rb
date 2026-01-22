@@ -280,7 +280,6 @@ FactoryBot.define do
           end
         end
       end
-
     end
 
     factory :recurring_installment_plan_purchase do

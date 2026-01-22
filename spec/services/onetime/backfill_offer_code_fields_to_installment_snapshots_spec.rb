@@ -68,7 +68,6 @@ describe Onetime::BackfillOfferCodeFieldsToInstallmentSnapshots do
       end
     end
 
-
     context "when snapshot already has all offer code data" do
       it "does not query for offer code" do
         offer_code = create(:offer_code, code: "EXISTING", products: [product], amount_cents: 100)
@@ -149,4 +148,3 @@ describe Onetime::BackfillOfferCodeFieldsToInstallmentSnapshots do
     end
   end
 end
-
