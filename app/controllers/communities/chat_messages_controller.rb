@@ -1,13 +1,17 @@
 # frozen_string_literal: true
 
-class Api::Internal::Communities::ChatMessagesController < Api::Internal::BaseController
+class Communities::ChatMessagesController < ApplicationController
   before_action :authenticate_user!
   before_action :set_community
   before_action :set_message, only: [:update, :destroy]
   after_action :verify_authorized
 
   def index
-    render json: PaginatedCommunityChatMessagesPresenter.new(community: @community, timestamp: params[:timestamp], fetch_type: params[:fetch_type]).props
+    render json: PaginatedCommunityChatMessagesPresenter.new(
+      community: @community,
+      timestamp: params[:timestamp],
+      fetch_type: params[:fetch_type]
+    ).props
   end
 
   def create
@@ -41,31 +45,32 @@ class Api::Internal::Communities::ChatMessagesController < Api::Internal::BaseCo
   end
 
   private
-    def set_community
-      @community = Community.find_by_external_id(params[:community_id])
-      return e404_json unless @community
 
-      authorize @community, :show?
-    end
+  def set_community
+    @community = Community.find_by_external_id(params[:community_id])
+    return e404_json unless @community
 
-    def set_message
-      @message = @community.community_chat_messages.find_by_external_id(params[:id])
-      return e404_json unless @message
+    authorize @community, :show?
+  end
 
-      authorize @message
-    end
+  def set_message
+    @message = @community.community_chat_messages.find_by_external_id(params[:id])
+    return e404_json unless @message
 
-    def permitted_params
-      params.require(:community_chat_message).permit(:content)
-    end
+    authorize @message
+  end
 
-    def broadcast_message(message_props, type)
-      CommunityChannel.broadcast_to(
-        "community_#{@community.external_id}",
-        { type:, message: message_props },
-      )
-    rescue => e
-      Rails.logger.error("Error broadcasting message to community channel: #{e.message}")
-      Bugsnag.notify(e)
-    end
+  def permitted_params
+    params.require(:community_chat_message).permit(:content)
+  end
+
+  def broadcast_message(message_props, type)
+    CommunityChannel.broadcast_to(
+      "community_#{@community.external_id}",
+      { type:, message: message_props },
+    )
+  rescue => e
+    Rails.logger.error("Error broadcasting message to community channel: #{e.message}")
+    Bugsnag.notify(e)
+  end
 end
