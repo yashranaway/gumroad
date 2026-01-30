@@ -9,7 +9,6 @@ class CommunitiesController < ApplicationController
 
   def index
     authorize Community
-
     props = CommunitiesPresenter.new(current_user: current_seller).props
 
     if params[:seller_id].present? && params[:community_id].present?

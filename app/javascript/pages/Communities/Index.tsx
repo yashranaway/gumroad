@@ -516,7 +516,6 @@ function CommunitiesIndex() {
 
     const community = communities.find((community) => community.id === communityId);
     if (!community) return;
-
     router.get(
       Routes.community_path({ seller_id: community.seller.id, community_id: community.id }),
       {},
