@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe Communities::NotificationSettingsController do
+describe Api::Internal::Communities::NotificationSettingsController do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, community_chat_enabled: true) }
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }
@@ -23,8 +23,16 @@ describe Communities::NotificationSettingsController do
       let(:request_params) { { community_id: community.external_id } }
     end
 
+    it "returns unauthorized response if the :communities feature flag is disabled" do
+      Feature.deactivate_user(:communities, seller)
+
+      put :update, params: { community_id: community.external_id }
+
+      expect(response).to redirect_to dashboard_path
+      expect(flash[:alert]).to eq("Your current role as Admin cannot perform this action.")
+    end
+
     it "returns 404 when community is not found" do
-      sign_in seller
       put :update, params: { community_id: "nonexistent" }
 
       expect(response).to have_http_status(:not_found)
@@ -34,15 +42,6 @@ describe Communities::NotificationSettingsController do
     context "when seller is logged in" do
       before do
         sign_in seller
-      end
-
-      it "returns unauthorized response if the :communities feature flag is disabled" do
-        Feature.deactivate_user(:communities, seller)
-
-        put :update, params: { community_id: community.external_id }
-
-        expect(response).to redirect_to dashboard_path
-        expect(flash[:alert]).to eq("You are not allowed to perform this action.")
       end
 
       it "creates notification settings when they don't exist" do

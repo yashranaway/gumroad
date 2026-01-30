@@ -50,7 +50,7 @@ export function getCommunityChatMessages({
   const response = request({
     method: "GET",
     accept: "json",
-    url: Routes.community_chat_messages_path(communityId, { timestamp, fetch_type: fetchType }),
+    url: Routes.internal_community_chat_messages_path(communityId, { timestamp, fetch_type: fetchType }),
     abortSignal: abort.signal,
   })
     .then((res) => {
@@ -76,7 +76,7 @@ export function createCommunityChatMessage({ communityId, content }: { community
   const response = request({
     method: "POST",
     accept: "json",
-    url: Routes.community_chat_messages_path(communityId),
+    url: Routes.internal_community_chat_messages_path(communityId),
     abortSignal: abort.signal,
     data: { community_chat_message: { content } },
   })
@@ -104,7 +104,7 @@ export async function updateCommunityChatMessage({
   const response = await request({
     method: "PUT",
     accept: "json",
-    url: Routes.community_chat_message_path(communityId, messageId),
+    url: Routes.internal_community_chat_message_path(communityId, messageId),
     data: { community_chat_message: { content } },
   });
   const json: unknown = await response.json();
@@ -122,7 +122,7 @@ export async function deleteCommunityChatMessage({
   const response = await request({
     method: "DELETE",
     accept: "json",
-    url: Routes.community_chat_message_path(communityId, messageId),
+    url: Routes.internal_community_chat_message_path(communityId, messageId),
   });
   if (!response.ok) throw new ResponseError();
 }
@@ -138,7 +138,7 @@ export function markCommunityChatMessagesAsRead({
   const response = request({
     method: "POST",
     accept: "json",
-    url: Routes.community_last_read_chat_message_path(communityId, { message_id: messageId }),
+    url: Routes.internal_community_last_read_chat_message_path(communityId, { message_id: messageId }),
     abortSignal: abort.signal,
   })
     .then((res) => {
@@ -163,7 +163,7 @@ export async function updateCommunityNotificationSettings({
   const response = await request({
     method: "PUT",
     accept: "json",
-    url: Routes.community_notification_setting_path(communityId),
+    url: Routes.internal_community_notification_setting_path(communityId),
     data: { settings },
   });
   if (!response.ok) throw new ResponseError();

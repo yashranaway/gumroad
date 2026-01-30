@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Communities::NotificationSettingsController < ApplicationController
+class Api::Internal::Communities::NotificationSettingsController < Api::Internal::BaseController
   before_action :authenticate_user!
   before_action :set_community
   after_action :verify_authorized
@@ -13,15 +13,13 @@ class Communities::NotificationSettingsController < ApplicationController
   end
 
   private
+    def set_community
+      @community = Community.find_by_external_id(params[:community_id])
+      return e404_json unless @community
+      authorize @community, :show?
+    end
 
-  def set_community
-    @community = Community.find_by_external_id(params[:community_id])
-    return e404_json unless @community
-
-    authorize @community, :show?
-  end
-
-  def permitted_params
-    params.require(:settings).permit(:recap_frequency)
-  end
+    def permitted_params
+      params.require(:settings).permit(:recap_frequency)
+    end
 end

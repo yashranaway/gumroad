@@ -1,10 +1,9 @@
+import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link } from "@inertiajs/react";
 
 import { Community } from "$app/data/communities";
-
-import { scrollTo } from "./CommunityView";
+import { scrollTo } from "$app/pages/Communities/Index";
 
 export const CommunityList = ({
   communities,
@@ -24,7 +23,7 @@ export const CommunityList = ({
       return (
         <Link
           key={community.id}
-          href={Routes.community_path(community.seller.id, community.id)}
+          href={Routes.community_path({ seller_id: community.seller.id, community_id: community.id })}
           preserveScroll
           aria-selected={isCommunitySelected}
           onClick={(e) => {

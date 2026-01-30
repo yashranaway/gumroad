@@ -2,6 +2,7 @@ import cx from "classnames";
 import React from "react";
 
 import { CommunityChatMessage } from "$app/data/communities";
+import { CommunityViewContext, MAX_MESSAGE_LENGTH, MIN_MESSAGE_LENGTH } from "$app/pages/Communities/Index";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
@@ -15,7 +16,6 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { CommunityViewContext, MAX_MESSAGE_LENGTH, MIN_MESSAGE_LENGTH } from "./CommunityView";
 import { UserAvatar } from "./UserAvatar";
 
 const MAX_TEXTAREA_HEIGHT = 300;

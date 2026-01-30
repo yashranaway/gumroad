@@ -2,9 +2,9 @@ import cx from "classnames";
 import React from "react";
 
 import { Community, CommunityChatMessage } from "$app/data/communities";
+import { scrollTo } from "$app/pages/Communities/Index";
 
 import { ChatMessage } from "./ChatMessage";
-import { scrollTo } from "./CommunityView";
 import { DateSeparator, UnreadSeparator } from "./Separator";
 import { CommunityChat } from "./useCommunities";
 
