@@ -146,7 +146,6 @@ export const useCommunities = () => {
     selectedCommunityDraft,
     selectedCommunityChat,
     updateCommunity,
-    setSelectedCommunityId,
     setNotificationSettings,
     updateCommunityDraft,
     updateCommunityChat,

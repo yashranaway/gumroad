@@ -121,7 +121,6 @@ export const CommunityView = () => {
     selectedCommunity,
     selectedCommunityDraft,
     selectedCommunityChat,
-    setSelectedCommunityId,
     setNotificationSettings,
     updateCommunity,
     updateCommunityDraft,
