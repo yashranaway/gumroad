@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe Api::Internal::Communities::NotificationSettingsController do
+describe Communities::NotificationSettingsController do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, community_chat_enabled: true) }
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }
@@ -32,11 +32,10 @@ describe Api::Internal::Communities::NotificationSettingsController do
       expect(flash[:alert]).to eq("Your current role as Admin cannot perform this action.")
     end
 
-    it "returns 404 when community is not found" do
-      put :update, params: { community_id: "nonexistent" }
-
-      expect(response).to have_http_status(:not_found)
-      expect(response.parsed_body).to eq({ "success" => false, "error" => "Not found" })
+    it "raises routing error when community is not found" do
+      expect do
+        put :update, params: { community_id: "nonexistent" }
+      end.to raise_error(ActionController::RoutingError)
     end
 
     context "when seller is logged in" do
@@ -44,7 +43,7 @@ describe Api::Internal::Communities::NotificationSettingsController do
         sign_in seller
       end
 
-      it "creates notification settings when they don't exist" do
+      it "creates notification settings and redirects" do
         expect do
           put :update, params: {
             community_id: community.external_id,
@@ -52,10 +51,7 @@ describe Api::Internal::Communities::NotificationSettingsController do
           }
         end.to change { CommunityNotificationSetting.count }.by(1)
 
-        expect(response).to be_successful
-        expect(response.parsed_body["settings"]).to include(
-          "recap_frequency" => "daily"
-        )
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         notification_setting = CommunityNotificationSetting.last
         expect(notification_setting.seller).to eq(community.seller)
         expect(notification_setting.user).to eq(seller)
@@ -71,23 +67,20 @@ describe Api::Internal::Communities::NotificationSettingsController do
           }
         end.to_not change { CommunityNotificationSetting.count }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["settings"]).to include(
-          "recap_frequency" => "weekly"
-        )
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         expect(settings.reload.recap_frequency).to eq("weekly")
       end
     end
 
     context "when buyer is logged in" do
       let(:buyer) { create(:user) }
-      let!(:purchase) { create(:purchase, purchaser: buyer, link: product) }
+      let!(:purchase) { create(:free_purchase, seller:, purchaser: buyer, link: product) }
 
       before do
         sign_in buyer
       end
 
-      it "creates notification settings when they don't exist" do
+      it "creates notification settings and redirects" do
         expect do
           put :update, params: {
             community_id: community.external_id,
@@ -95,10 +88,7 @@ describe Api::Internal::Communities::NotificationSettingsController do
           }
         end.to change { CommunityNotificationSetting.count }.by(1)
 
-        expect(response).to be_successful
-        expect(response.parsed_body["settings"]).to include(
-          "recap_frequency" => "daily"
-        )
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         notification_setting = CommunityNotificationSetting.last
         expect(notification_setting.seller).to eq(community.seller)
         expect(notification_setting.user).to eq(buyer)
@@ -114,10 +104,7 @@ describe Api::Internal::Communities::NotificationSettingsController do
           }
         end.to_not change { CommunityNotificationSetting.count }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["settings"]).to include(
-          "recap_frequency" => "weekly"
-        )
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         expect(settings.reload.recap_frequency).to eq("weekly")
       end
     end

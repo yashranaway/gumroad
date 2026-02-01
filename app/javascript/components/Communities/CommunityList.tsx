@@ -23,7 +23,7 @@ export const CommunityList = ({
       return (
         <Link
           key={community.id}
-          href={Routes.community_path({ seller_id: community.seller.id, community_id: community.id })}
+          href={Routes.community_path(community.seller.id, community.id)}
           preserveScroll
           aria-selected={isCommunitySelected}
           onClick={(e) => {

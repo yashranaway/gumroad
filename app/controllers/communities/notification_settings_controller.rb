@@ -1,21 +1,24 @@
 # frozen_string_literal: true
 
-class Api::Internal::Communities::NotificationSettingsController < Api::Internal::BaseController
+class Communities::NotificationSettingsController < ApplicationController
   before_action :authenticate_user!
   before_action :set_community
   after_action :verify_authorized
+
+  layout "inertia"
 
   def update
     settings = current_seller.community_notification_settings.find_or_initialize_by(seller: @community.seller)
     settings.update!(permitted_params)
 
-    render json: { settings: CommunityNotificationSettingPresenter.new(settings:).props }
+    redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id)
   end
 
   private
     def set_community
       @community = Community.find_by_external_id(params[:community_id])
-      return e404_json unless @community
+      return e404 unless @community
+
       authorize @community, :show?
     end
 

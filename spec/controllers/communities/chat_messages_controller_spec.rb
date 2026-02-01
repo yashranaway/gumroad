@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe Api::Internal::Communities::ChatMessagesController do
+describe Communities::ChatMessagesController do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, community_chat_enabled: true) }
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }
@@ -14,85 +14,6 @@ describe Api::Internal::Communities::ChatMessagesController do
 
   before do
     Feature.activate_user(:communities, seller)
-  end
-
-  describe "GET index" do
-    it_behaves_like "authorize called for action", :get, :index do
-      let(:record) { community }
-      let(:policy_method) { :show? }
-      let(:request_params) { { community_id: community.external_id } }
-    end
-
-    it "returns unauthorized response if the :communities feature flag is disabled" do
-      Feature.deactivate_user(:communities, seller)
-
-      get :index, params: { community_id: community.external_id }
-
-      expect(response).to redirect_to dashboard_path
-      expect(flash[:alert]).to eq("Your current role as Admin cannot perform this action.")
-    end
-
-    it "returns 404 when community is not found" do
-      get :index, params: { community_id: "nonexistent" }
-
-      expect(response).to have_http_status(:not_found)
-      expect(response.parsed_body).to eq({ "success" => false, "error" => "Not found" })
-    end
-
-    context "when seller is logged in" do
-      before do
-        sign_in seller
-      end
-
-      it "returns paginated messages" do
-        message1 = create(:community_chat_message, community:, user: seller, created_at: 30.minutes.ago)
-        message2 = create(:community_chat_message, community:, user: seller, created_at: 20.minutes.ago)
-        message3 = create(:community_chat_message, community:, user: seller, created_at: 10.minutes.ago)
-
-        get :index, params: {
-          community_id: community.external_id,
-          timestamp: 15.minutes.ago.iso8601,
-          fetch_type: "older"
-        }
-
-        expect(response).to be_successful
-        expect(response.parsed_body["messages"]).to match_array([
-                                                                  CommunityChatMessagePresenter.new(message: message1).props,
-                                                                  CommunityChatMessagePresenter.new(message: message2).props
-                                                                ])
-        expect(response.parsed_body["next_older_timestamp"]).to be_nil
-        expect(response.parsed_body["next_newer_timestamp"]).to eq(message3.created_at.iso8601)
-      end
-    end
-
-    context "when buyer is logged in" do
-      let(:buyer) { create(:user) }
-      let!(:purchase) { create(:purchase, purchaser: buyer, link: product) }
-
-      before do
-        sign_in buyer
-      end
-
-      it "returns paginated messages" do
-        message1 = create(:community_chat_message, community:, user: seller, created_at: 30.minutes.ago)
-        message2 = create(:community_chat_message, community:, user: seller, created_at: 20.minutes.ago)
-        message3 = create(:community_chat_message, community:, user: seller, created_at: 10.minutes.ago)
-
-        get :index, params: {
-          community_id: community.external_id,
-          timestamp: 15.minutes.ago.iso8601,
-          fetch_type: "older"
-        }
-
-        expect(response).to be_successful
-        expect(response.parsed_body["messages"]).to match_array([
-                                                                  CommunityChatMessagePresenter.new(message: message1).props,
-                                                                  CommunityChatMessagePresenter.new(message: message2).props
-                                                                ])
-        expect(response.parsed_body["next_older_timestamp"]).to be_nil
-        expect(response.parsed_body["next_newer_timestamp"]).to eq(message3.created_at.iso8601)
-      end
-    end
   end
 
   describe "POST create" do
@@ -111,11 +32,10 @@ describe Api::Internal::Communities::ChatMessagesController do
       expect(flash[:alert]).to eq("Your current role as Admin cannot perform this action.")
     end
 
-    it "returns 404 when community is not found" do
-      post :create, params: { community_id: "nonexistent", community_chat_message: { content: "Hello" } }
-
-      expect(response).to have_http_status(:not_found)
-      expect(response.parsed_body).to eq({ "success" => false, "error" => "Not found" })
+    it "raises routing error when community is not found" do
+      expect do
+        post :create, params: { community_id: "nonexistent", community_chat_message: { content: "Hello" } }
+      end.to raise_error(ActionController::RoutingError)
     end
 
     context "when seller is logged in" do
@@ -123,7 +43,7 @@ describe Api::Internal::Communities::ChatMessagesController do
         sign_in seller
       end
 
-      it "creates a new message" do
+      it "creates a new message and redirects" do
         expect do
           post :create, params: {
             community_id: community.external_id,
@@ -131,9 +51,8 @@ describe Api::Internal::Communities::ChatMessagesController do
           }
         end.to change { CommunityChatMessage.count }.by(1)
 
-        expect(response).to be_successful
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         message = CommunityChatMessage.last
-        expect(response.parsed_body["message"]).to eq(CommunityChatMessagePresenter.new(message:).props.as_json)
         expect(message.content).to eq("Hello, community!")
         expect(message.user).to eq(seller)
         expect(message.community).to eq(community)
@@ -166,26 +85,25 @@ describe Api::Internal::Communities::ChatMessagesController do
         }
       end
 
-      it "returns error when content is invalid" do
+      it "redirects with error when content is invalid" do
         post :create, params: {
           community_id: community.external_id,
           community_chat_message: { content: "" }
         }
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["error"]).to eq("Content can't be blank")
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
       end
     end
 
     context "when buyer is logged in" do
       let(:buyer) { create(:user) }
-      let!(:purchase) { create(:purchase, purchaser: buyer, link: product) }
+      let!(:purchase) { create(:free_purchase, seller:, purchaser: buyer, link: product) }
 
       before do
         sign_in buyer
       end
 
-      it "creates a new message" do
+      it "creates a new message and redirects" do
         expect do
           post :create, params: {
             community_id: community.external_id,
@@ -193,9 +111,8 @@ describe Api::Internal::Communities::ChatMessagesController do
           }
         end.to change { CommunityChatMessage.count }.by(1)
 
-        expect(response).to be_successful
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         message = CommunityChatMessage.last
-        expect(response.parsed_body["message"]).to eq(CommunityChatMessagePresenter.new(message:).props.as_json)
         expect(message.content).to eq("Hello, community!")
         expect(message.user).to eq(buyer)
         expect(message.community).to eq(community)
@@ -225,14 +142,13 @@ describe Api::Internal::Communities::ChatMessagesController do
         )
       end
 
-      it "returns error when content is invalid" do
+      it "redirects with error when content is invalid" do
         post :create, params: {
           community_id: community.external_id,
           community_chat_message: { content: "" }
         }
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["error"]).to eq("Content can't be blank")
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
       end
     end
   end
@@ -260,22 +176,20 @@ describe Api::Internal::Communities::ChatMessagesController do
         expect(flash[:alert]).to eq("You are not allowed to perform this action.")
       end
 
-      it "returns 404 when message is not found" do
-        put :update, params: { community_id: community.external_id, id: "nonexistent", community_chat_message: { content: "Updated" } }
-
-        expect(response).to have_http_status(:not_found)
-        expect(response.parsed_body).to eq({ "success" => false, "error" => "Not found" })
+      it "raises routing error when message is not found" do
+        expect do
+          put :update, params: { community_id: community.external_id, id: "nonexistent", community_chat_message: { content: "Updated" } }
+        end.to raise_error(ActionController::RoutingError)
       end
 
-      it "updates the message" do
+      it "updates the message and redirects" do
         put :update, params: {
           community_id: community.external_id,
           id: message.external_id,
           community_chat_message: { content: "Updated content" }
         }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["message"]).to eq(CommunityChatMessagePresenter.new(message: message.reload).props.as_json)
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         expect(message.reload.content).to eq("Updated content")
       end
 
@@ -304,7 +218,7 @@ describe Api::Internal::Communities::ChatMessagesController do
         )
       end
 
-      it "returns error when content is invalid" do
+      it "redirects with error when content is invalid" do
         expect do
           put :update, params: {
             community_id: community.external_id,
@@ -313,13 +227,12 @@ describe Api::Internal::Communities::ChatMessagesController do
           }
         end.not_to change { message.reload }
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["error"]).to eq("Content can't be blank")
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
       end
 
       it "does not allow updating other's message" do
         buyer = create(:user)
-        create(:purchase, purchaser: buyer, link: product)
+        create(:free_purchase, seller:, purchaser: buyer, link: product)
         buyer_message = create(:community_chat_message, community:, user: buyer)
 
         expect do
@@ -334,31 +247,30 @@ describe Api::Internal::Communities::ChatMessagesController do
         expect(flash[:alert]).to eq("You are not allowed to perform this action.")
       end
     end
+
     context "when buyer is logged in" do
       let(:buyer) { create(:user) }
-      let!(:purchase) { create(:purchase, purchaser: buyer, link: product) }
+      let!(:purchase) { create(:free_purchase, seller:, purchaser: buyer, link: product) }
       let(:message) { create(:community_chat_message, community:, user: buyer) }
 
       before do
         sign_in buyer
       end
 
-      it "returns 404 when message is not found" do
-        put :update, params: { community_id: community.external_id, id: "nonexistent", community_chat_message: { content: "Updated" } }
-
-        expect(response).to have_http_status(:not_found)
-        expect(response.parsed_body).to eq({ "success" => false, "error" => "Not found" })
+      it "raises routing error when message is not found" do
+        expect do
+          put :update, params: { community_id: community.external_id, id: "nonexistent", community_chat_message: { content: "Updated" } }
+        end.to raise_error(ActionController::RoutingError)
       end
 
-      it "updates the message" do
+      it "updates the message and redirects" do
         put :update, params: {
           community_id: community.external_id,
           id: message.external_id,
           community_chat_message: { content: "Updated content" }
         }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["message"]).to eq(CommunityChatMessagePresenter.new(message: message.reload).props.as_json)
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         expect(message.reload.content).to eq("Updated content")
       end
 
@@ -378,15 +290,14 @@ describe Api::Internal::Communities::ChatMessagesController do
         }
       end
 
-      it "returns error when content is invalid" do
+      it "redirects with error when content is invalid" do
         put :update, params: {
           community_id: community.external_id,
           id: message.external_id,
           community_chat_message: { content: "" }
         }
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["error"]).to eq("Content can't be blank")
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
       end
 
       it "does not allow updating other's message" do
@@ -428,19 +339,18 @@ describe Api::Internal::Communities::ChatMessagesController do
         expect(flash[:alert]).to eq("You are not allowed to perform this action.")
       end
 
-      it "returns 404 when message is not found" do
-        delete :destroy, params: { community_id: community.external_id, id: "nonexistent" }
-
-        expect(response).to have_http_status(:not_found)
-        expect(response.parsed_body).to eq({ "success" => false, "error" => "Not found" })
+      it "raises routing error when message is not found" do
+        expect do
+          delete :destroy, params: { community_id: community.external_id, id: "nonexistent" }
+        end.to raise_error(ActionController::RoutingError)
       end
 
-      it "destroys the message" do
+      it "destroys the message and redirects" do
         expect do
           delete :destroy, params: { community_id: community.external_id, id: message.external_id }
         end.to change { CommunityChatMessage.alive.count }.by(-1)
 
-        expect(response).to have_http_status(:ok)
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         expect(message.reload).to be_deleted
       end
 
@@ -458,33 +368,33 @@ describe Api::Internal::Communities::ChatMessagesController do
 
       it "allows deleting member messages" do
         member = create(:user)
-        create(:purchase, purchaser: member, link: product)
+        create(:free_purchase, seller:, purchaser: member, link: product)
         message = create(:community_chat_message, community:, user: member)
 
         expect do
           delete :destroy, params: { community_id: community.external_id, id: message.external_id }
         end.to change { CommunityChatMessage.alive.count }.by(-1)
 
-        expect(response).to have_http_status(:ok)
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         expect(message.reload).to be_deleted
       end
     end
 
     context "when buyer is logged in" do
       let(:buyer) { create(:user) }
-      let!(:purchase) { create(:purchase, purchaser: buyer, link: product) }
+      let!(:purchase) { create(:free_purchase, seller:, purchaser: buyer, link: product) }
       let(:message) { create(:community_chat_message, community:, user: buyer) }
 
       before do
         sign_in buyer
       end
 
-      it "destroys the message" do
+      it "destroys the message and redirects" do
         expect do
           delete :destroy, params: { community_id: community.external_id, id: message.external_id }
         end.to change { CommunityChatMessage.alive.count }.by(-1)
 
-        expect(response).to have_http_status(:ok)
+        expect(response).to redirect_to community_path(seller_id: seller.external_id, community_id: community.external_id)
         expect(message.reload).to be_deleted
       end
 

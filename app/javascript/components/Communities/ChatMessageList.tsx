@@ -6,18 +6,17 @@ import { scrollTo } from "$app/pages/Communities/Index";
 
 import { ChatMessage } from "./ChatMessage";
 import { DateSeparator, UnreadSeparator } from "./Separator";
-import { CommunityChat } from "./useCommunities";
 
 type ChatMessageListProps = {
   community: Community;
-  data: CommunityChat;
+  messages: CommunityChatMessage[];
   setStickyDate: (date: string | null) => void;
   unreadSeparatorVisibility: boolean;
 };
 
 export const ChatMessageList = ({
   community,
-  data,
+  messages,
   setStickyDate,
   unreadSeparatorVisibility,
 }: ChatMessageListProps) => {
@@ -33,16 +32,16 @@ export const ChatMessageList = ({
   const lastReadMessageCreatedAt = community.last_read_community_chat_message_created_at;
   let lastReadMessageIndex = -1;
   if (lastReadMessageCreatedAt) {
-    lastReadMessageIndex = data.messages.findIndex((message) => message.created_at === lastReadMessageCreatedAt);
+    lastReadMessageIndex = messages.findIndex((message) => message.created_at === lastReadMessageCreatedAt);
     if (lastReadMessageIndex === -1) {
-      lastReadMessageIndex = data.messages.findIndex(
+      lastReadMessageIndex = messages.findIndex(
         (message) => new Date(message.created_at) < new Date(lastReadMessageCreatedAt),
       );
     }
   }
 
   React.useEffect(() => {
-    if (initialScrollDone || data.messages.length <= 0) return;
+    if (initialScrollDone || messages.length <= 0) return;
     if (community.unread_count > 0) {
       if (lastReadMessageIndex !== -1) {
         scrollTo({ target: "unread-separator" });
@@ -53,7 +52,7 @@ export const ChatMessageList = ({
       scrollTo({ target: "bottom" });
     }
     setInitialScrollDone(true);
-  }, [community, data.messages, initialScrollDone, lastReadMessageIndex]);
+  }, [community, messages, initialScrollDone, lastReadMessageIndex]);
 
   React.useEffect(() => {
     setIsVisible(true);
@@ -61,9 +60,8 @@ export const ChatMessageList = ({
 
   const messagesByDate = React.useMemo(() => {
     const messagesByDate: Record<string, CommunityChatMessage[]> = {};
-    data.messages.forEach((message) => {
+    messages.forEach((message) => {
       const messageDate = new Date(message.created_at);
-      // Create date string based on local time components instead of UTC
       const dateString = `${messageDate.getFullYear()}-${String(messageDate.getMonth() + 1).padStart(2, "0")}-${String(messageDate.getDate()).padStart(2, "0")}`;
       if (!messagesByDate[dateString]) {
         messagesByDate[dateString] = [];
@@ -71,12 +69,11 @@ export const ChatMessageList = ({
       messagesByDate[dateString].push(message);
     });
     return messagesByDate;
-  }, [data.messages]);
+  }, [messages]);
 
   const sortedDates = Object.keys(messagesByDate).sort();
-  const lastMessageId = React.useMemo(() => data.messages[data.messages.length - 1]?.id, [data.messages]);
+  const lastMessageId = React.useMemo(() => messages[messages.length - 1]?.id, [messages]);
 
-  // Determine which date groups are visible and which are not
   React.useEffect(() => {
     dateObserversRef.current.forEach((observer) => observer.disconnect());
     dateObserversRef.current.clear();
@@ -86,7 +83,6 @@ export const ChatMessageList = ({
       if (element) {
         const dateSeparator = element.querySelector("[data-separator='date']");
 
-        // Observer for the date separator visibility
         const separatorObserver = new IntersectionObserver(([entry]) => {
           if (entry?.isIntersecting) {
             setInvisibleDateGroups((prev) => prev.filter((d) => d !== date));
@@ -96,12 +92,8 @@ export const ChatMessageList = ({
         });
         if (dateSeparator) separatorObserver.observe(dateSeparator);
 
-        // Observer for the date group content visibility
         const groupObserver = new IntersectionObserver(([entry]) => {
           setVisibleDateGroups((prev) => {
-            // Safari has issues with rapid IntersectionObserver callbacks,
-            // causing the UI to jump around when scrolling.
-            // So we skip updating the visible date groups in Safari.
             if (isSafari) return prev;
 
             if (entry?.isIntersecting && !prev.includes(date)) {
@@ -124,7 +116,6 @@ export const ChatMessageList = ({
   }, [sortedDates]);
 
   React.useEffect(() => {
-    // Find the oldest visible date group which has an invisible date separator
     let oldestVisibleDate = null;
     for (const date of [...visibleDateGroups].sort()) {
       if (invisibleDateGroups.includes(date)) {
@@ -136,7 +127,7 @@ export const ChatMessageList = ({
   }, [visibleDateGroups, invisibleDateGroups]);
 
   return (
-    <div className="flex min-h-full w-full flex-col" aria-label="Chat messages">
+    <div className="flex min-h-full w-full flex-col">
       <div data-id="top"></div>
       <div
         className={cx(
@@ -146,15 +137,7 @@ export const ChatMessageList = ({
           },
         )}
       >
-        {data.nextOlderTimestamp === null ? (
-          <div className="px-6 pt-8">
-            <div className="mb-2 text-3xl">👋</div>
-            <h2 className="mb-2 text-xl font-bold">Welcome to {community.name}</h2>
-            <p className="text-sm text-gray-500">This is the start of this community chat.</p>
-          </div>
-        ) : null}
-
-        {community.unread_count > 0 && lastReadMessageIndex === -1 && data.messages.length > 0 && (
+        {community.unread_count > 0 && lastReadMessageIndex === -1 && messages.length > 0 && (
           <UnreadSeparator visible={unreadSeparatorVisibility} />
         )}
         {sortedDates.map((date) => (
