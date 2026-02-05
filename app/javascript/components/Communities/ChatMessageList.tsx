@@ -62,6 +62,7 @@ export const ChatMessageList = ({
     const messagesByDate: Record<string, CommunityChatMessage[]> = {};
     messages.forEach((message) => {
       const messageDate = new Date(message.created_at);
+      // Create date string based on local time components instead of UTC
       const dateString = `${messageDate.getFullYear()}-${String(messageDate.getMonth() + 1).padStart(2, "0")}-${String(messageDate.getDate()).padStart(2, "0")}`;
       if (!messagesByDate[dateString]) {
         messagesByDate[dateString] = [];
@@ -74,6 +75,7 @@ export const ChatMessageList = ({
   const sortedDates = Object.keys(messagesByDate).sort();
   const lastMessageId = React.useMemo(() => messages[messages.length - 1]?.id, [messages]);
 
+  // Determine which date groups are visible and which are not
   React.useEffect(() => {
     dateObserversRef.current.forEach((observer) => observer.disconnect());
     dateObserversRef.current.clear();
@@ -83,6 +85,7 @@ export const ChatMessageList = ({
       if (element) {
         const dateSeparator = element.querySelector("[data-separator='date']");
 
+        // Observer for the date separator visibility
         const separatorObserver = new IntersectionObserver(([entry]) => {
           if (entry?.isIntersecting) {
             setInvisibleDateGroups((prev) => prev.filter((d) => d !== date));
@@ -92,8 +95,12 @@ export const ChatMessageList = ({
         });
         if (dateSeparator) separatorObserver.observe(dateSeparator);
 
+        // Observer for the date group content visibility
         const groupObserver = new IntersectionObserver(([entry]) => {
           setVisibleDateGroups((prev) => {
+            // Safari has issues with rapid IntersectionObserver callbacks,
+            // causing the UI to jump around when scrolling.
+            // So we skip updating the visible date groups in Safari.
             if (isSafari) return prev;
 
             if (entry?.isIntersecting && !prev.includes(date)) {
@@ -116,6 +123,7 @@ export const ChatMessageList = ({
   }, [sortedDates]);
 
   React.useEffect(() => {
+    // Find the oldest visible date group which has an invisible date separator
     let oldestVisibleDate = null;
     for (const date of [...visibleDateGroups].sort()) {
       if (invisibleDateGroups.includes(date)) {
