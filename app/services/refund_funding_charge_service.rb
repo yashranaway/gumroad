@@ -24,7 +24,6 @@ class RefundFundingChargeService
     return error(charge_result[:error]) if charge_result[:error].present?
 
     credit = create_credit(charge_result)
-    send_confirmation_email(credit)
 
     Result.new(success?: true, credit: credit)
   rescue StandardError => e
@@ -50,11 +49,11 @@ class RefundFundingChargeService
         metadata: {
           user_id: user.id,
           user_email: user.email,
-          purchase_id: purchase&.id,
+          purchase_id: purchase.id,
           type: "refund_funding"
         }
       },
-      { idempotency_key: "refund_funding_#{user.id}_#{purchase&.id}_#{Time.current.to_i}" }
+      { idempotency_key: "refund_funding_#{user.id}_#{purchase.id}" }
     )
 
     if payment_intent.status == "succeeded"
@@ -64,7 +63,11 @@ class RefundFundingChargeService
         charge_id: payment_intent.latest_charge
       }
     else
-      { success: false, error: "Payment was not successful. Status: #{payment_intent.status}" }
+      if payment_intent.status == "requires_action"
+        { success: false, error: "Your backup card requires additional authentication and can't be charged automatically. Please update your backup payment method with a card that doesn't require 3D Secure verification." }
+      else
+        { success: false, error: "Payment was not successful. Status: #{payment_intent.status}" }
+      end
     end
   rescue Stripe::CardError => e
     { success: false, error: e.message }
@@ -85,13 +88,6 @@ class RefundFundingChargeService
       processor_transaction_id: charge_result[:charge_id],
       processor_payment_intent_id: charge_result[:payment_intent_id]
     )
-  end
-
-  def send_confirmation_email(credit)
-    ContactingCreatorMailer.refund_funding_charge_confirmation(credit_id: credit.id).deliver_later(queue: "critical")
-  rescue StandardError => e
-    Bugsnag.notify(e)
-    Rails.logger.error("RefundFundingChargeService email error: #{e.message}")
   end
 
   def error(message)

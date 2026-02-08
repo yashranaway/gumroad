@@ -48,14 +48,14 @@ class Purchase
           if seller.refund_funding_credit_card.present?
             shortfall = amount_cents_to_refund - seller.unpaid_balance_cents
             charge_amount = [shortfall, RefundFundingChargeService::MINIMUM_CHARGE_CENTS].max
-            result = RefundFundingChargeService.new(
+            funding_result = RefundFundingChargeService.new(
               user: seller,
               amount_cents: charge_amount,
               purchase: self
             ).perform
 
-            if !result.success?
-              errors.add :base, result.error_message || "Could not charge your backup card to cover the refund shortfall."
+            if !funding_result.success?
+              errors.add :base, funding_result.error_message || "Could not charge your backup card to cover the refund shortfall."
               return false
             end
 
@@ -114,7 +114,11 @@ class Purchase
         if charge_refund.flow_of_funds.nil? && StripeChargeProcessor.charge_processor_id != charge_processor_id
           charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -(gross_amount_cents.presence || gross_amount_refundable_cents))
         end
-        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud)
+        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud).tap do
+          if defined?(funding_result) && funding_result&.credit.present?
+            ContactingCreatorMailer.refund_funding_charge_confirmation(credit_id: funding_result.credit.id).deliver_later(queue: "critical")
+          end
+        end
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
         false

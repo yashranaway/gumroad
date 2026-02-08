@@ -87,14 +87,6 @@ describe RefundFundingChargeService, :vcr do
         expect(credit.balance).to be_present
       end
 
-      it "sends a confirmation email" do
-        expect(ContactingCreatorMailer).to receive(:refund_funding_charge_confirmation)
-          .with(credit_id: instance_of(Integer))
-          .and_return(double(deliver_later: true))
-
-        result
-      end
-
       it "calls Stripe with correct parameters" do
         expect(Stripe::PaymentIntent).to receive(:create).with(
           hash_including(
@@ -179,9 +171,9 @@ describe RefundFundingChargeService, :vcr do
         )
       end
 
-      it "returns failure" do
+      it "returns failure with SCA message" do
         expect(result.success?).to be false
-        expect(result.error_message).to include("Payment was not successful")
+        expect(result.error_message).to include("requires additional authentication")
       end
 
       it "does not create a credit" do
@@ -189,27 +181,6 @@ describe RefundFundingChargeService, :vcr do
       end
     end
 
-    context "when email sending fails" do
-      before do
-        allow(Stripe::PaymentIntent).to receive(:create).and_return(
-          OpenStruct.new(
-            status: "succeeded",
-            id: "pi_test_123",
-            latest_charge: "ch_test_123"
-          )
-        )
-        allow(ContactingCreatorMailer).to receive(:refund_funding_charge_confirmation)
-          .and_raise(StandardError.new("SMTP error"))
-      end
-
-      it "still returns success" do
-        expect(result.success?).to be true
-      end
-
-      it "still creates the credit" do
-        expect { result }.to change(Credit, :count).by(1)
-      end
-    end
   end
 
 end
