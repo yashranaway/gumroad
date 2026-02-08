@@ -1,10 +1,10 @@
-import { PaymentRequestPaymentMethodEvent, StripeCardElement } from "@stripe/stripe-js";
+import { StripeCardElement, PaymentRequestPaymentMethodEvent } from "@stripe/stripe-js";
 import { cast } from "ts-safe-cast";
 
 import {
   CardPaymentMethodParams,
-  PaymentRequestPaymentMethodParams,
   ReusableCardPaymentMethodParams,
+  PaymentRequestPaymentMethodParams,
   ReusablePaymentRequestPaymentMethodParams,
   StripeErrorParams,
 } from "$app/data/payment_method_params";
@@ -23,6 +23,7 @@ type ReusableCCVariation<CardParams extends CardPaymentMethodParams | PaymentReq
 type CardData = {
   cardElement: StripeCardElement | { token: string };
   email: string;
+  name: string;
   zipCode?: string;
 };
 export const prepareCardPaymentMethodData = async (
@@ -33,7 +34,7 @@ export const prepareCardPaymentMethodData = async (
   const paymentMethodResult = await stripe.createPaymentMethod({
     type: "card",
     card: cardData.cardElement,
-    billing_details: { address: { postal_code: cardData.zipCode ?? "" }, email: cardData.email },
+    billing_details: { address: { postal_code: cardData.zipCode ?? "" }, email: cardData.email, name: cardData.name },
   });
 
   if (paymentMethodResult.error) {

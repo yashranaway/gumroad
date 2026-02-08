@@ -2,19 +2,19 @@ import { StripeCardElement } from "@stripe/stripe-js";
 
 import { prepareBraintreePaymentMethodData } from "$app/data/braintree_payment_method_data";
 import {
-  confirmCardIfNeeded,
   prepareCardPaymentMethodData,
   prepareFutureCharges,
+  confirmCardIfNeeded,
 } from "$app/data/card_payment_method_data";
 import {
-  AnyPayPalMethodParams,
   CardPaymentMethodParams,
-  PaymentRequestPaymentMethodParams,
   ReusableCardPaymentMethodParams,
+  PaymentRequestPaymentMethodParams,
   ReusablePaymentRequestPaymentMethodParams,
   StripeErrorParams,
+  AnyPayPalMethodParams,
 } from "$app/data/payment_method_params";
-import { PayPalNativeResultInfo, preparePaypalPaymentMethodData } from "$app/data/paypal_payment_method_data";
+import { preparePaypalPaymentMethodData, PayPalNativeResultInfo } from "$app/data/paypal_payment_method_data";
 
 import { Product } from "$app/components/Checkout/payment";
 
@@ -26,6 +26,7 @@ export type SavedSelectedPaymentMethod = { type: "saved" };
 export type NewCardSelectedPaymentMethod = {
   type: "card";
   element: StripeCardElement;
+  fullName: string;
   email: string;
   keepOnFile: null | boolean;
   zipCode: null | string;
@@ -53,6 +54,7 @@ type OneOffNewCardPaymentMethodResult = {
     | {
         type: "cc";
         cardParams: CardPaymentMethodParams;
+        fullName: string;
         keepOnFile: null | boolean;
         zipCode: null | string;
       }
@@ -64,6 +66,7 @@ type ReusableNewCardPaymentMethodResult = {
     | {
         type: "cc";
         cardParams: ReusableCardPaymentMethodParams;
+        fullName: string;
         keepOnFile: null | boolean;
         zipCode: null | string;
       }
@@ -162,6 +165,7 @@ export async function getPaymentMethodResult(
       const paymentMethodData = await prepareCardPaymentMethodData({
         cardElement: selected.element,
         email: selected.email,
+        name: selected.fullName,
       });
       if (paymentMethodData.status === "success") {
         return {
@@ -169,6 +173,7 @@ export async function getPaymentMethodResult(
           cardParamsResult: {
             type: "cc",
             cardParams: paymentMethodData,
+            fullName: selected.fullName,
             keepOnFile: selected.keepOnFile,
             zipCode: selected.zipCode,
           },
@@ -234,6 +239,7 @@ export async function getReusablePaymentMethodResult(
           cardParamsResult: {
             type: "cc",
             cardParams,
+            fullName: cardParamsResult.fullName,
             keepOnFile: cardParamsResult.keepOnFile,
             zipCode: cardParamsResult.zipCode,
           },

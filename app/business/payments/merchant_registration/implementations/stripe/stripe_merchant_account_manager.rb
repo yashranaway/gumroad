@@ -458,16 +458,12 @@ module StripeMerchantAccountManager
                            last_name_kana: user_compliance_info.last_name_kana,
                            address_kanji: {
                              line1: user_compliance_info.building_number,
-                             town: user_compliance_info.street_address_kanji,
-                             state: user_compliance_info.state,
-                             country: "JP",
+                             line2: user_compliance_info.street_address_kanji,
                              postal_code: user_compliance_info.zip_code
                            },
                            address_kana: {
-                             line1: user_compliance_info.building_number_kana,
-                             town: user_compliance_info.street_address_kana,
-                             state: prefecture_kana(user_compliance_info.state),
-                             country: "JP",
+                             line1: user_compliance_info.building_number,
+                             line2: user_compliance_info.street_address_kana,
                              postal_code: user_compliance_info.zip_code
                            }
                          })
@@ -536,16 +532,12 @@ module StripeMerchantAccountManager
                            name_kana: user_compliance_info.business_name_kana,
                            address_kanji: {
                              line1: user_compliance_info.business_building_number,
-                             town: user_compliance_info.business_street_address_kanji,
-                             state: user_compliance_info.business_state,
-                             country: "JP",
+                             line2: user_compliance_info.business_street_address_kanji,
                              postal_code: user_compliance_info.legal_entity_zip_code
                            },
                            address_kana: {
-                             line1: user_compliance_info.business_building_number_kana,
-                             town: user_compliance_info.business_street_address_kana,
-                             state: prefecture_kana(user_compliance_info.business_state),
-                             country: "JP",
+                             line1: user_compliance_info.business_building_number,
+                             line2: user_compliance_info.business_street_address_kana,
                              postal_code: user_compliance_info.legal_entity_zip_code
                            }
                          }
@@ -818,10 +810,6 @@ module StripeMerchantAccountManager
       email_sent_at = Time.current
       new_requests.each { |request| request.record_email_sent!(email_sent_at) }
     end
-  end
-
-  def self.prefecture_kana(kanji)
-    Compliance::Countries.japan_prefecture_kana(kanji)
   end
 
   def self.handle_new_user_compliance_info(user_compliance_info)

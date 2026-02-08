@@ -532,6 +532,13 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Webhook ping endpoint delivery failed"
   end
 
+  def refund_funding_charge_confirmation(credit_id:)
+    @credit = Credit.find(credit_id)
+    @seller = @credit.user
+    @amount = Money.new(@credit.amount_cents, :usd).format(no_cents_if_whole: true, symbol: true)
+    @subject = "Your backup card was charged #{@amount}"
+  end
+
   private
     def do_not_send
       @do_not_send = true

@@ -189,6 +189,7 @@ class SettingsPresenter
 
   def payments_props(remote_ip: nil)
     user_compliance_info = seller.fetch_or_build_user_compliance_info
+    funding_card = seller.refund_funding_credit_card
     {
       settings_pages: pages,
       is_form_disabled: !Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?,
@@ -222,6 +223,15 @@ class SettingsPresenter
       payout_country_name: Compliance::Countries.for_select.to_h[seller.alive_user_compliance_info&.legal_entity_country_code],
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
+      refund_payment_method: {
+        enabled: funding_card.present?,
+        credit_card: funding_card.present? ? {
+          visual: funding_card.visual,
+          card_type: funding_card.card_type,
+          expiry_month: funding_card.expiry_month,
+          expiry_year: funding_card.expiry_year
+        } : nil
+      }
     }
   end
 
@@ -287,7 +297,6 @@ class SettingsPresenter
         business_type: user_compliance_info.business_type,
         business_street_address: user_compliance_info.business_street_address,
         business_building_number: user_compliance_info.business_building_number,
-        business_building_number_kana: user_compliance_info.business_building_number_kana,
         business_street_address_kanji: user_compliance_info.business_street_address_kanji,
         business_street_address_kana: user_compliance_info.business_street_address_kana,
         business_city: user_compliance_info.business_city,
@@ -304,7 +313,6 @@ class SettingsPresenter
         last_name_kana: user_compliance_info.last_name_kana,
         street_address: user_compliance_info.street_address,
         building_number: user_compliance_info.building_number,
-        building_number_kana: user_compliance_info.building_number_kana,
         street_address_kanji: user_compliance_info.street_address_kanji,
         street_address_kana: user_compliance_info.street_address_kana,
         city: user_compliance_info.city,
@@ -396,7 +404,6 @@ class SettingsPresenter
         ae: Compliance::Countries.subdivisions_for_select(Compliance::Countries::ARE.alpha2).map { |code, name| { code:, name: } },
         ir: Compliance::Countries.subdivisions_for_select(Compliance::Countries::IRL.alpha2).map { |code, name| { code:, name: } },
         br: Compliance::Countries.subdivisions_for_select(Compliance::Countries::BRA.alpha2).map { |code, name| { code:, name: } },
-        jp: Compliance::Countries.japan_prefectures_for_select,
       }
     end
 

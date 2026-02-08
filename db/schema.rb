@@ -655,8 +655,12 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.integer "fee_retention_refund_id"
     t.bigint "backtax_agreement_id"
     t.text "json_data"
+    t.bigint "refund_funding_purchase_id"
+    t.bigint "credit_card_id"
     t.index ["balance_id"], name: "index_credits_on_balance_id"
+    t.index ["credit_card_id"], name: "index_credits_on_credit_card_id"
     t.index ["dispute_id"], name: "index_credits_on_dispute_id"
+    t.index ["refund_funding_purchase_id"], name: "index_credits_on_refund_funding_purchase_id"
   end
 
   create_table "custom_domains", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2535,6 +2539,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.string "notification_content_type", default: "application/x-www-form-urlencoded"
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
+    t.integer "refund_funding_credit_card_id"
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"
@@ -2546,6 +2551,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.index ["last_sign_in_ip"], name: "index_users_on_last_sign_in_ip"
     t.index ["name"], name: "index_users_on_name"
     t.index ["payment_address", "user_risk_state"], name: "index_users_on_payment_address_and_user_risk_state"
+    t.index ["refund_funding_credit_card_id"], name: "index_users_on_refund_funding_credit_card_id"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token"
     t.index ["support_email"], name: "index_users_on_support_email"
     t.index ["tos_violation_reason"], name: "index_users_on_tos_violation_reason"

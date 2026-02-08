@@ -2,9 +2,8 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
-require "inertia_rails/rspec"
 
-describe GumroadBlog::PostsController, inertia: true do
+describe GumroadBlog::PostsController do
   let(:blog_owner) { create(:user, username: "gumroad") }
 
   describe "GET index" do
@@ -58,10 +57,10 @@ describe GumroadBlog::PostsController, inertia: true do
       get :index
 
       expect(response).to have_http_status(:ok)
-      expect(inertia.props[:posts]).to eq(
+      expect(assigns[:props][:posts]).to eq(
         [
           {
-            slug: published_post_2.slug,
+            url: gumroad_blog_post_path(published_post_2.slug),
             subject: published_post_2.subject,
             published_at: published_post_2.published_at,
             featured_image_url: published_post_2.featured_image_url,
@@ -69,7 +68,7 @@ describe GumroadBlog::PostsController, inertia: true do
             tags: published_post_2.tags,
           },
           {
-            slug: published_post_1.slug,
+            url: gumroad_blog_post_path(published_post_1.slug),
             subject: published_post_1.subject,
             published_at: published_post_1.published_at,
             featured_image_url: published_post_1.featured_image_url,
@@ -102,13 +101,7 @@ describe GumroadBlog::PostsController, inertia: true do
     it "sets @props correctly" do
       get :show, params: { slug: post.slug }
 
-      post_props = PostPresenter.new(pundit_user: controller.pundit_user, post: post, purchase_id_param: nil).post_component_props
-
-      expect(inertia.props[:external_id]).to eq(post_props[:external_id])
-      expect(inertia.props[:subject]).to eq(post_props[:subject])
-      expect(inertia.props[:published_at]).to eq(post_props[:published_at])
-      expect(inertia.props[:message]).to eq(post_props[:message])
-      expect(inertia.props[:call_to_action]).to eq(post_props[:call_to_action])
+      expect(assigns[:props]).to eq(PostPresenter.new(pundit_user: controller.pundit_user, post: post, purchase_id_param: nil).post_component_props)
     end
 
     context "when post is not found" do

@@ -1260,12 +1260,11 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     describe "all info provided of a Japanese individual" do
-      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "渋谷区", phone: "+81987654321",
+      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "Tokyo", phone: "+81987654321",
                                                                   first_name_kanji: "日本語", last_name_kanji: "創造者",
                                                                   first_name_kana: "ニホンゴ", last_name_kana: "ソウゾウシャ",
-                                                                  building_number: "1-1", building_number_kana: "1-1",
-                                                                  street_address_kanji: "神宮前", street_address_kana: "ジングウマエ",
-                                                                  street_address: "address_full_match", state: "東京都", zip_code: "100-0000",
+                                                                  building_number: "1-1", street_address_kanji: "日本語", street_address_kana: "ニホンゴ",
+                                                                  street_address: "address_full_match", state: nil, zip_code: "100-0000",
                                                                   country: "Japan") end
       let(:bank_account) { create(:japan_bank_account, user:) }
       let(:tos_agreement) { create(:tos_agreement, user:) }
@@ -1299,16 +1298,12 @@ describe StripeMerchantAccountManager, :vcr do
           individual: {
             address_kanji: {
               line1: "1-1",
-              town: "神宮前",
-              state: "東京都",
-              country: "JP",
+              line2: "日本語",
               postal_code: "100-0000",
             },
             address_kana: {
               line1: "1-1",
-              town: "ジングウマエ",
-              state: "トウキョウト",
-              country: "JP",
+              line2: "ニホンゴ",
               postal_code: "100-0000",
             },
             id_number: "000000000",

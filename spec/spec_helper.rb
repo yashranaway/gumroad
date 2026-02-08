@@ -483,6 +483,7 @@ RSpec.configure do |config|
   config.include ProductVariantsHelpers, type: :system
   config.include PreviewBoxHelpers, type: :system
   config.include ProductWantThisHelpers, type: :system
+  config.include PayWorkflowHelpers, type: :system
   config.include CheckoutHelpers, type: :system
   config.include RichTextEditorHelpers, type: :system
   config.include DiscoverHelpers, type: :system
