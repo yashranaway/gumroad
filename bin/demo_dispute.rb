@@ -76,11 +76,27 @@ puts "4. Structured notes for PayPal (#{notes.length}/2000 chars, type: #{eviden
 puts notes
 puts "\n"
 
-puts "5. Would submit via API"
-puts "   POST /v1/customer/disputes/#{dispute.charge_processor_dispute_id}/provide-evidence"
-puts "   FightDisputeJob.perform_async(#{dispute.id})\n\n"
+# Stub PayPal API to return success so the full job runs end-to-end
+successful_response = OpenStruct.new(status_code: 200, result: OpenStruct.new(name: "SUCCESS"), headers: {})
+PayPal::PayPalHttpClient.class_eval do
+  define_method(:execute) { |_request| successful_response }
+end
+
+# Set a demo merchant ID so fight_chargeback passes validation
+original_merchant_id = merchant_account.charge_processor_merchant_id
+merchant_account.update_column(:charge_processor_merchant_id, "DEMO_MERCHANT_ID") unless merchant_account.charge_processor_merchant_id.present?
+
+puts "5. Running FightDisputeJob..."
+dispute_evidence.update!(seller_contacted_at: nil)
+FightDisputeJob.new.perform(dispute.id)
+dispute_evidence.reload
+
+puts "   Status: #{dispute_evidence.resolved? ? 'resolved' : dispute_evidence.state}"
+puts "   Resolution: #{dispute_evidence.resolution}"
+puts "   Evidence submitted successfully!\n\n"
 
 # Cleanup
+merchant_account.update_column(:charge_processor_merchant_id, original_merchant_id)
 dispute_evidence.destroy!
 dispute.destroy!
 purchase.destroy!
