@@ -4,6 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
+import { getCssVariable } from "$app/utils/styles";
 
 import { Button } from "$app/components/Button";
 import { StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
@@ -38,6 +39,7 @@ const RefundPaymentMethodForm = ({
   const [savedCard, setSavedCard] = React.useState(refundPaymentMethod.credit_card);
   const [isEditing, setIsEditing] = React.useState(!refundPaymentMethod.enabled);
   const [confirmingRemove, setConfirmingRemove] = React.useState(false);
+  const [stripeStyle, setStripeStyle] = React.useState<Record<string, unknown> | null>(null);
 
   const handleSubmit = asyncVoid(async () => {
     if (!stripe || !elements) return;
@@ -178,13 +180,26 @@ const RefundPaymentMethodForm = ({
               <InputGroup disabled={isFormDisabled || isSubmitting}>
                 <Icon name="outline-credit-card" />
                 <div style={{ flex: 1 }}>
+                  {stripeStyle == null ? (
+                    <input
+                      ref={(el) => {
+                        if (el == null) return;
+                        const inputStyle = window.getComputedStyle(el);
+                        const color = getCssVariable("color").split(" ").join(",");
+                        const placeholderColor = `rgb(${color}, ${getCssVariable("gray-3")})`;
+                        setStripeStyle({
+                          fontSize: "16px",
+                          fontFamily: inputStyle.fontFamily,
+                          color: inputStyle.color,
+                          iconColor: placeholderColor,
+                          "::placeholder": { color: placeholderColor },
+                        });
+                      }}
+                    />
+                  ) : null}
                   <CardElement
                     options={{
-                      style: {
-                        base: {
-                          fontSize: "16px",
-                        },
-                      },
+                      style: { base: stripeStyle ?? {} },
                       hideIcon: true,
                       hidePostalCode: true,
                       disabled: isFormDisabled || isSubmitting,
