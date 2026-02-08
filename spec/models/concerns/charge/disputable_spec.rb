@@ -1169,7 +1169,7 @@ describe Charge::Disputable, :vcr do
 
     context "when the purchase is made via a Stripe Connect account" do
       before do
-        expect_any_instance_of(MerchantAccount).to receive(:is_a_stripe_connect_account?).and_return(true)
+        allow_any_instance_of(MerchantAccount).to receive(:is_a_stripe_connect_account?).and_return(true)
       end
 
       it "returns false" do

@@ -1751,9 +1751,10 @@ describe PaypalChargeProcessor, :vcr do
         processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence)
       end
 
-      it "returns nil if no purchase found for transaction" do
-        result = processor.fight_chargeback("UNKNOWN_TRANSACTION", dispute_evidence)
-        expect(result).to be_nil
+      it "raises error if no purchase found for transaction" do
+        expect do
+          processor.fight_chargeback("UNKNOWN_TRANSACTION", dispute_evidence)
+        end.to raise_error(ChargeProcessorInvalidRequestError, /No merchant account found/)
       end
     end
 

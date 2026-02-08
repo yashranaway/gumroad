@@ -627,9 +627,10 @@ class PaypalChargeProcessor
   def fight_chargeback(paypal_transaction_id, dispute_evidence, merchant_account: nil)
     dispute = dispute_evidence.dispute
     dispute_id = dispute.charge_processor_dispute_id
+    raise ChargeProcessorInvalidRequestError, "Dispute #{dispute.id} has no charge_processor_dispute_id" if dispute_id.blank?
 
     merchant_account ||= find_merchant_account_for_transaction(paypal_transaction_id)
-    return unless merchant_account&.charge_processor_merchant_id.present?
+    raise ChargeProcessorInvalidRequestError, "No merchant account found for PayPal transaction #{paypal_transaction_id}" unless merchant_account&.charge_processor_merchant_id.present?
 
     tracking_info = build_tracking_info(dispute_evidence)
     evidence_type = determine_evidence_type_for_dispute(dispute)
@@ -743,7 +744,7 @@ class PaypalChargeProcessor
       statement_info = build_merchant_statement_section(dispute_evidence)
       sections << statement_info if statement_info.present?
 
-      sections.join("\n\n")[0...2000]
+      sections.join("\n\n")
     end
 
     def build_transaction_section(dispute)

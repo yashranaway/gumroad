@@ -59,7 +59,7 @@ class PaypalDisputesApi
     end
 
     def generate_idempotency_key(dispute_id)
-      "gumroad-dispute-evidence-#{dispute_id}-#{Time.current.to_i}"
+      "gumroad-dispute-evidence-#{dispute_id}"
     end
 
     def determine_evidence_type(evidence_type, tracking_info)
@@ -68,7 +68,7 @@ class PaypalDisputesApi
     end
 
     def execute_request
-      Rails.logger.info "Making PayPal Disputes API request:: #{@request.inspect}"
+      Rails.logger.info "Making PayPal Disputes API request:: #{LogRedactor.redact(@request)}"
       @paypal_client.execute(@request)
     rescue PayPalHttp::HttpError => e
       Rails.logger.error "PayPal Disputes API request failed:: Status code: #{e.status_code}, Result: #{e.result.inspect}"

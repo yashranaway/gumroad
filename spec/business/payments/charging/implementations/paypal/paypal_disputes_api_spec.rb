@@ -116,8 +116,7 @@ describe PaypalDisputesApi do
 
       it "includes PayPal-Request-Id header for idempotency" do
         expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
-          expect(request.headers["PayPal-Request-Id"]).to be_present
-          expect(request.headers["PayPal-Request-Id"]).to start_with("gumroad-dispute-evidence-#{dispute_id}-")
+          expect(request.headers["PayPal-Request-Id"]).to eq("gumroad-dispute-evidence-#{dispute_id}")
           successful_response
         end.and_return(successful_response)
 
