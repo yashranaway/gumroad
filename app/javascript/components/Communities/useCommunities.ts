@@ -127,11 +127,9 @@ export const useCommunities = () => {
     [],
   );
 
-  // Initialize community chat from Inertia props when navigating to a community
   React.useEffect(() => {
     if (initialSelectedCommunityId && initial_messages) {
       setCommunityChats((prev) => {
-        // Only initialize if not already loaded (avoid overwriting pagination state on Inertia revisits)
         if (prev[initialSelectedCommunityId]?.messages.length) return prev;
         return {
           ...prev,

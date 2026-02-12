@@ -172,7 +172,6 @@ function CommunitiesIndex() {
     [selectedCommunity, debouncedMarkAsRead],
   );
 
-  // Scroll to a message after it appears in the DOM
   React.useEffect(() => {
     if (!selectedCommunityChat || !scrollToMessage) return;
     const exists = selectedCommunityChat.messages.findIndex((message) => message.id === scrollToMessage.id) !== -1;
@@ -280,7 +279,6 @@ function CommunitiesIndex() {
     const isNearBottom = scrollHeight - scrollPosition < 50;
     setShowScrollToBottomButton(!isNearBottom);
 
-    // When scrolling near the top, load older messages
     if (scrollTop < 100) {
       if (selectedCommunityChat.nextOlderTimestamp && !selectedCommunityChat.isLoading) {
         fetchMessages(selectedCommunity.id, {
@@ -292,7 +290,6 @@ function CommunitiesIndex() {
       }
     }
 
-    // When scrolling near the bottom, load newer messages
     if (scrollHeight - scrollTop - clientHeight < 100) {
       if (selectedCommunityChat.nextNewerTimestamp && !selectedCommunityChat.isLoading) {
         fetchMessages(selectedCommunity.id, {
