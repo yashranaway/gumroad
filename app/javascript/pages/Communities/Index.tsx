@@ -1,13 +1,14 @@
 import { Channel } from "@anycable/web";
-import { InfiniteScroll, router } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 import { is } from "ts-safe-cast";
 
 import cable from "$app/channels/consumer";
-import { Community, CommunityChatMessage, NotificationSettings, Seller } from "$app/data/communities";
+import { Community, CommunityChatMessage, getCommunityChatMessages, NotificationSettings, Seller } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
+import { AbortError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { ChatMessageInput } from "$app/components/Communities/ChatMessageInput";
@@ -73,6 +74,26 @@ export const scrollTo = (
   el?.scrollIntoView({ behavior: "auto", block: position });
 };
 
+const getComparedTimestamp = (
+  prevTimestamp: string | null,
+  newTimestamp: string | null,
+  comparisonFn: (a: number, b: number) => number,
+): string | null => {
+  if (!prevTimestamp || !newTimestamp) {
+    return newTimestamp === null ? null : newTimestamp;
+  }
+
+  const timestampToISOString = new Map<number, string>();
+  const prevTime = new Date(prevTimestamp).getTime();
+  const newTime = new Date(newTimestamp).getTime();
+
+  timestampToISOString.set(prevTime, prevTimestamp);
+  timestampToISOString.set(newTime, newTimestamp);
+
+  const resultTime = comparisonFn(prevTime, newTime);
+  return assertDefined(timestampToISOString.get(resultTime));
+};
+
 function CommunitiesIndex() {
   const currentSeller = useCurrentSeller();
   const isAboveBreakpoint = useIsAboveBreakpoint("lg");
@@ -82,13 +103,19 @@ function CommunitiesIndex() {
     notificationSettings,
     selectedCommunity,
     selectedCommunityDraft,
-    pageMessages,
+    selectedCommunityChat,
     updateCommunity,
     updateCommunityDraft,
+    updateCommunityChat,
   } = useCommunities();
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const activeFetchMessageRequest = React.useRef<{ cancel: () => void } | null>(null);
   const chatContainerRef = React.useRef<HTMLDivElement>(null);
+  const [scrollToMessage, setScrollToMessage] = React.useState<{
+    id: string;
+    position?: ScrollLogicalPosition;
+  } | null>(null);
   const [stickyDate, setStickyDate] = React.useState<string | null>(null);
   const chatMessageInputRef = React.useRef<HTMLTextAreaElement>(null);
   const [showScrollToBottomButton, setShowScrollToBottomButton] = React.useState(false);
@@ -96,30 +123,6 @@ function CommunitiesIndex() {
   const userChannelRef = React.useRef<Channel | null>(null);
   const [chatMessageInputHeight, setChatMessageInputHeight] = React.useState(0);
   const [showNotificationsSettings, setShowNotificationsSettings] = React.useState(false);
-
-  // Local state overlay for ActionCable real-time updates
-  const [localMessages, setLocalMessages] = React.useState<CommunityChatMessage[]>([]);
-  const [deletedMessageIds, setDeletedMessageIds] = React.useState<Set<string>>(new Set());
-
-  // Reset local overlay when switching communities
-  React.useEffect(() => {
-    setLocalMessages([]);
-    setDeletedMessageIds(new Set());
-  }, [selectedCommunity?.id]);
-
-  // Combine InfiniteScroll page messages with local ActionCable overlay
-  const allMessages = React.useMemo(() => {
-    const merged = new Map<string, CommunityChatMessage>();
-    pageMessages.forEach((m) => merged.set(m.id, m));
-    localMessages.forEach((m) => {
-      const existing = merged.get(m.id);
-      if (!existing || new Date(existing.updated_at) < new Date(m.updated_at)) {
-        merged.set(m.id, m);
-      }
-    });
-    deletedMessageIds.forEach((id) => merged.delete(id));
-    return [...merged.values()].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  }, [pageMessages, localMessages, deletedMessageIds]);
 
   React.useEffect(() => {
     if (selectedCommunity) {
@@ -163,24 +166,138 @@ function CommunitiesIndex() {
     [selectedCommunity, debouncedMarkAsRead],
   );
 
+  // Scroll to a message after it appears in the DOM
+  React.useEffect(() => {
+    if (!selectedCommunityChat || !scrollToMessage) return;
+    const exists = selectedCommunityChat.messages.findIndex((message) => message.id === scrollToMessage.id) !== -1;
+    if (exists && chatContainerRef.current) {
+      scrollTo({
+        target: "message",
+        messageId: scrollToMessage.id,
+        position: scrollToMessage.position ?? "nearest",
+      });
+      setScrollToMessage(null);
+    }
+  }, [scrollToMessage, selectedCommunityChat]);
+
   React.useEffect(() => {
     if (!sidebarOpen) setSidebarOpen(true);
   }, [isAboveBreakpoint]);
 
-  const handleScroll = React.useCallback(() => {
-    if (!chatContainerRef.current) return;
+  const fetchMessages = async (
+    communityId: string,
+    { timestamp, fetchType }: { timestamp: string; fetchType: "older" | "newer" | "around" },
+    replace = false,
+  ) => {
+    activeFetchMessageRequest.current?.cancel();
+    if (selectedCommunityChat?.isLoading) return;
+    updateCommunityChat(communityId, { isLoading: true }, { messagesUpdateStrategy: "merge" });
+
+    try {
+      const request = getCommunityChatMessages({ communityId, timestamp, fetchType });
+      activeFetchMessageRequest.current = request;
+      const data = await request.response;
+
+      if (replace) {
+        updateCommunityChat(
+          communityId,
+          {
+            messages: data.messages,
+            nextOlderTimestamp: data.next_older_timestamp,
+            nextNewerTimestamp: data.next_newer_timestamp,
+            isLoading: false,
+          },
+          { messagesUpdateStrategy: "replace" },
+        );
+      } else {
+        updateCommunityChat(
+          communityId,
+          (prev) => {
+            let nextOlderTimestamp = prev.nextOlderTimestamp;
+            let nextNewerTimestamp = prev.nextNewerTimestamp;
+            if (fetchType === "older" || fetchType === "around") {
+              nextOlderTimestamp = getComparedTimestamp(nextOlderTimestamp, data.next_older_timestamp, Math.min);
+            }
+            if (fetchType === "newer" || fetchType === "around") {
+              nextNewerTimestamp = getComparedTimestamp(nextNewerTimestamp, data.next_newer_timestamp, Math.max);
+            }
+
+            return {
+              messages: data.messages,
+              nextOlderTimestamp,
+              nextNewerTimestamp,
+              isLoading: false,
+            };
+          },
+          { messagesUpdateStrategy: "merge" },
+        );
+      }
+
+      if (data.messages.length > 0 && (fetchType === "older" || fetchType === "newer")) {
+        if (selectedCommunityChat) {
+          const messages = (replace ? data.messages : selectedCommunityChat.messages).sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          );
+          let id;
+          let position: ScrollLogicalPosition = "nearest";
+          if (fetchType === "older") {
+            if (replace) {
+              id = messages[messages.length - 1]?.id;
+              position = "end";
+            } else {
+              id = messages[0]?.id;
+              position = "start";
+            }
+          } else {
+            id = messages[messages.length - 1]?.id;
+            position = "end";
+          }
+          setScrollToMessage(id ? { id, position } : null);
+        }
+      }
+
+      return data;
+    } catch (_error: unknown) {
+      updateCommunityChat(communityId, { isLoading: false }, { messagesUpdateStrategy: "merge" });
+    }
+  };
+
+  const handleScroll = useDebouncedCallback(() => {
+    if (!chatContainerRef.current || !selectedCommunity) return;
 
     const container = chatContainerRef.current;
     const { scrollTop, scrollHeight, clientHeight } = container;
 
+    if (!selectedCommunityChat) return;
+
     const scrollPosition = scrollTop + clientHeight;
     const isNearBottom = scrollHeight - scrollPosition < 50;
     setShowScrollToBottomButton(!isNearBottom);
-  }, []);
 
-  React.useEffect(() => {
-    chatContainerRef.current?.setAttribute("scroll-region", "");
-  }, []);
+    // When scrolling near the top, load older messages
+    if (scrollTop < 100) {
+      if (selectedCommunityChat.nextOlderTimestamp && !selectedCommunityChat.isLoading) {
+        fetchMessages(selectedCommunity.id, {
+          timestamp: selectedCommunityChat.nextOlderTimestamp,
+          fetchType: "older",
+        }).catch((e: unknown) => {
+          if (!(e instanceof AbortError)) showAlert("Failed to load older messages. Please try again later.", "error");
+        });
+      }
+    }
+
+    // When scrolling near the bottom, load newer messages
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      if (selectedCommunityChat.nextNewerTimestamp && !selectedCommunityChat.isLoading) {
+        fetchMessages(selectedCommunity.id, {
+          timestamp: selectedCommunityChat.nextNewerTimestamp,
+          fetchType: "newer",
+        }).catch((e: unknown) => {
+          if (!(e instanceof AbortError)) showAlert("Failed to load newer messages. Please try again later.", "error");
+        });
+      }
+    }
+  }, 100);
 
   React.useEffect(() => {
     const chatContainer = chatContainerRef.current;
@@ -194,11 +311,7 @@ function CommunitiesIndex() {
 
   const insertOrUpdateMessage = React.useCallback(
     (message: CommunityChatMessage, isUpdate = false) => {
-      setLocalMessages((prev) => {
-        const existing = prev.find((m) => m.id === message.id);
-        if (existing && new Date(existing.updated_at) >= new Date(message.updated_at)) return prev;
-        return [...prev.filter((m) => m.id !== message.id), message];
-      });
+      updateCommunityChat(message.community_id, { messages: [message] }, { messagesUpdateStrategy: "merge" });
 
       if (selectedCommunity?.id !== message.community_id || isUpdate) return;
 
@@ -208,16 +321,26 @@ function CommunitiesIndex() {
         const isNearBottom = scrollHeight - scrollPosition < 200;
 
         if (isNearBottom) {
-          requestAnimationFrame(() => scrollTo({ target: "bottom" }));
+          setScrollToMessage({ id: message.id, position: "start" });
         }
       }
     },
-    [selectedCommunity?.id],
+    [selectedCommunity?.id, updateCommunityChat],
   );
 
-  const removeMessage = React.useCallback((messageId: string) => {
-    setDeletedMessageIds((prev) => new Set([...prev, messageId]));
-  }, []);
+  const removeMessage = React.useCallback(
+    (messageId: string, communityId: string) => {
+      updateCommunityChat(
+        communityId,
+        (prev) => ({
+          ...prev,
+          messages: prev.messages.filter((message) => message.id !== messageId),
+        }),
+        { messagesUpdateStrategy: "replace" },
+      );
+    },
+    [updateCommunityChat],
+  );
 
   const sendMessage = React.useCallback(() => {
     if (!selectedCommunity) return;
@@ -237,8 +360,10 @@ function CommunitiesIndex() {
           updateCommunityDraft(selectedCommunity.id, { content: "", isSending: false });
         },
         onError: () => {
-          updateCommunityDraft(selectedCommunity.id, { isSending: false });
           showAlert("Failed to send message. Please try again.", "error");
+        },
+        onFinish: () => {
+          updateCommunityDraft(selectedCommunity.id, { isSending: false });
         },
       },
     );
@@ -300,7 +425,7 @@ function CommunitiesIndex() {
             }
           } else if (msg.message.community_id === community.id) {
             if (community.id === selectedCommunity?.id) {
-              removeMessage(msg.message.id);
+              removeMessage(msg.message.id, community.id);
             }
             sendMessageToUserChannel({ type: "latest_community_info", community_id: community.id });
           }
@@ -533,41 +658,13 @@ function CommunitiesIndex() {
                     {stickyDate ? <DateSeparator date={stickyDate} showDividerLine={false} /> : null}
                   </div>
 
-                  <InfiniteScroll
-                    data="messages"
-                    reverse
-                    preserveUrl
-                    next={({ hasMore, loading }) =>
-                      hasMore ? (
-                        loading ? (
-                          <div className="flex justify-center py-4">
-                            <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-black dark:border-t-white" />
-                          </div>
-                        ) : null
-                      ) : (
-                        <div className="px-6 pt-8">
-                          <div className="mb-2 text-3xl">👋</div>
-                          <h2 className="mb-2 text-xl font-bold">Welcome to {selectedCommunity.name}</h2>
-                          <p className="text-sm text-gray-500">This is the start of this community chat.</p>
-                        </div>
-                      )
-                    }
-                    previous={({ hasMore, loading }) =>
-                      hasMore && loading ? (
-                        <div className="flex justify-center py-4">
-                          <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-black dark:border-t-white" />
-                        </div>
-                      ) : null
-                    }
-                  >
-                    <ChatMessageList
-                      key={selectedCommunity.id}
-                      community={selectedCommunity}
-                      messages={allMessages}
-                      setStickyDate={setStickyDate}
-                      unreadSeparatorVisibility={showScrollToBottomButton}
-                    />
-                  </InfiniteScroll>
+                  <ChatMessageList
+                    key={selectedCommunity.id}
+                    community={selectedCommunity}
+                    messages={selectedCommunityChat?.messages ?? []}
+                    setStickyDate={setStickyDate}
+                    unreadSeparatorVisibility={showScrollToBottomButton}
+                  />
 
                   {showScrollToBottomButton ? (
                     <ScrollToBottomButton

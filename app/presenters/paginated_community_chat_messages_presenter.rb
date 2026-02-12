@@ -3,7 +3,7 @@
 class PaginatedCommunityChatMessagesPresenter
   include Pagy::Backend
 
-  MESSAGES_PER_PAGE = 100
+  MESSAGES_PER_PAGE = 25
 
   def initialize(community:, timestamp:, fetch_type:)
     @community = community

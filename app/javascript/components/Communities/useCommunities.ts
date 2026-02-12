@@ -9,13 +9,25 @@ export type CommunityDraft = {
   isSending: boolean;
 };
 
+export type CommunityChat = {
+  messages: CommunityChatMessage[];
+  nextOlderTimestamp: string | null;
+  nextNewerTimestamp: string | null;
+  isLoading: boolean;
+};
+
 interface PageProps {
   has_products: boolean;
   communities: Community[];
   notification_settings: CommunityNotificationSettings;
   selectedCommunityId?: string;
-  messages?: CommunityChatMessage[];
+  initial_messages?: CommunityChatMessage[];
+  next_older_timestamp?: string | null;
+  next_newer_timestamp?: string | null;
 }
+
+const sortByCreatedAt = <T extends { created_at: string }>(items: readonly T[]) =>
+  [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
 const sortByName = <T extends { name: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
@@ -26,7 +38,9 @@ export const useCommunities = () => {
     communities: initialCommunities,
     notification_settings,
     selectedCommunityId: initialSelectedCommunityId,
-    messages: pageMessages,
+    initial_messages,
+    next_older_timestamp,
+    next_newer_timestamp,
   } = cast<PageProps>(usePage().props);
   const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialCommunities));
   const [notificationSettings, setNotificationSettings] =
@@ -35,6 +49,7 @@ export const useCommunities = () => {
     initialSelectedCommunityId ?? null,
   );
   const [communityDrafts, setCommunityDrafts] = React.useState<Record<string, CommunityDraft>>({});
+  const [communityChats, setCommunityChats] = React.useState<Record<string, CommunityChat>>({});
 
   const updateCommunity = React.useCallback(
     (communityId: string, value: Partial<Omit<Community, "id" | "seller">>) =>
@@ -61,6 +76,76 @@ export const useCommunities = () => {
     [],
   );
 
+  const updateCommunityChat = React.useCallback(
+    (
+      communityId: string,
+      value: Partial<CommunityChat> | ((prev: CommunityChat) => Partial<CommunityChat>),
+      { messagesUpdateStrategy }: { messagesUpdateStrategy: "replace" | "merge" },
+    ) =>
+      setCommunityChats((prev) => {
+        const obj = { ...prev };
+        const prevChat = obj[communityId] ?? {
+          messages: [],
+          nextOlderTimestamp: null,
+          nextNewerTimestamp: null,
+          isLoading: false,
+        };
+        const { messages: newChatMessages = [], ...newChatExceptMessages } =
+          typeof value === "function" ? value(prevChat) : value;
+
+        if (messagesUpdateStrategy === "merge") {
+          let messages: CommunityChatMessage[] = [];
+          const { messages: prevChatMessages, ...prevChatExceptMessages } = prevChat;
+
+          if (prevChatMessages.length > 0 && newChatMessages.length > 0) {
+            const map = new Map<string, CommunityChatMessage>(prevChatMessages.map((message) => [message.id, message]));
+            newChatMessages.forEach((newMessage) => {
+              const prevMessage = map.get(newMessage.id);
+              if (!prevMessage || new Date(prevMessage.updated_at) < new Date(newMessage.updated_at)) {
+                map.set(newMessage.id, newMessage);
+              }
+            });
+            messages = [...map.values()];
+          } else {
+            messages = [...prevChatMessages, ...newChatMessages];
+          }
+
+          obj[communityId] = {
+            ...prevChatExceptMessages,
+            ...newChatExceptMessages,
+            messages: sortByCreatedAt(messages),
+          };
+        } else {
+          obj[communityId] = {
+            ...prevChat,
+            ...newChatExceptMessages,
+            messages: sortByCreatedAt(newChatMessages),
+          };
+        }
+        return obj;
+      }),
+    [],
+  );
+
+  // Initialize community chat from Inertia props when navigating to a community
+  React.useEffect(() => {
+    if (initialSelectedCommunityId && initial_messages) {
+      setCommunityChats((prev) => {
+        // Only initialize if not already loaded (avoid overwriting pagination state on Inertia revisits)
+        if (prev[initialSelectedCommunityId]?.messages.length) return prev;
+        return {
+          ...prev,
+          [initialSelectedCommunityId]: {
+            messages: sortByCreatedAt(initial_messages),
+            nextOlderTimestamp: next_older_timestamp ?? null,
+            nextNewerTimestamp: next_newer_timestamp ?? null,
+            isLoading: false,
+          },
+        };
+      });
+    }
+  }, [initialSelectedCommunityId, initial_messages, next_older_timestamp, next_newer_timestamp]);
+
   React.useEffect(() => {
     setSelectedCommunityId(initialSelectedCommunityId ?? null);
     setCommunities(sortByName(initialCommunities));
@@ -77,14 +162,20 @@ export const useCommunities = () => {
     [communityDrafts, selectedCommunity],
   );
 
+  const selectedCommunityChat = React.useMemo(
+    () => (selectedCommunity ? communityChats[selectedCommunity.id] : null),
+    [communityChats, selectedCommunity],
+  );
+
   return {
     hasProducts: has_products,
     communities,
     notificationSettings,
     selectedCommunity,
     selectedCommunityDraft,
-    pageMessages: pageMessages ?? [],
+    selectedCommunityChat,
     updateCommunity,
     updateCommunityDraft,
+    updateCommunityChat,
   };
 };

@@ -807,7 +807,7 @@ Rails.application.routes.draw do
     # communities
     get "/communities", to: "communities#index", as: :communities
     resources :communities, only: [] do
-      resources :chat_messages, only: [:create, :update, :destroy], controller: "communities/chat_messages"
+      resources :chat_messages, only: [:index, :create, :update, :destroy], controller: "communities/chat_messages"
       resource :last_read_chat_message, only: [:create], controller: "communities/last_read_chat_messages"
       resource :notification_setting, only: [:update], controller: "communities/notification_settings"
     end

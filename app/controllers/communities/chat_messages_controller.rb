@@ -8,6 +8,14 @@ class Communities::ChatMessagesController < ApplicationController
 
   layout "inertia"
 
+  def index
+    render json: PaginatedCommunityChatMessagesPresenter.new(
+      community: @community,
+      timestamp: params[:timestamp],
+      fetch_type: params[:fetch_type],
+    ).props
+  end
+
   def create
     message = @community.community_chat_messages.build(permitted_params)
     message.user = current_seller
