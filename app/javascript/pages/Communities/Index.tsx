@@ -535,11 +535,7 @@ function CommunitiesIndex() {
               />
 
               <div className="flex flex-1 overflow-auto">
-                <div
-                  ref={chatContainerRef}
-                  className="relative flex-1 overflow-y-auto"
-                  aria-label="Chat messages"
-                >
+                <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto" aria-label="Chat messages">
                   <div
                     className={cx("sticky top-0 z-20 flex justify-center transition-opacity duration-300", {
                       "opacity-100": stickyDate,
