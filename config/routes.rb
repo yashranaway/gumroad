@@ -67,13 +67,30 @@ Rails.application.routes.draw do
           post :resend_receipt
         end
       end
-      resources :payouts, only: [:index, :show]
+      resources :payouts, only: [:index, :show] do
+        collection do
+          get :upcoming
+        end
+      end
       resources :subscribers, only: [:show]
 
       put "/resource_subscriptions", to: "resource_subscriptions#create"
       delete "/resource_subscriptions/:id", to: "resource_subscriptions#destroy"
       get "/resource_subscriptions", to: "resource_subscriptions#index"
     end
+  end
+
+  def purchases_invoice_routes
+    scope module: :purchases do
+      resources :purchases, only: [] do
+        resource :invoice, only: [:create, :new] do
+          get :confirm
+          post :confirm, action: :confirm_email
+        end
+      end
+    end
+
+    get "/purchases/:purchase_id/generate_invoice", to: redirect { |path_params, request| "/purchases/#{path_params[:purchase_id]}/invoice/new#{request.query_string.present? ? "?#{request.query_string}" : ""}" }
   end
 
   def product_tracking_routes(named_routes: true)
@@ -94,20 +111,15 @@ Rails.application.routes.draw do
 
   def product_info_and_purchase_routes(named_routes: true)
     product_tracking_routes(named_routes:)
+    purchases_invoice_routes
 
     get "/offer_codes/compute_discount", to: "offer_codes#compute_discount"
     get "/products/search", to: "links#search"
 
     if named_routes
       get "/braintree/client_token", to: "braintree#client_token", as: :braintree_client_token
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice", as: :generate_invoice_by_buyer
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice", as: :confirm_generate_invoice
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice", as: :send_invoice
     else
       get "/braintree/client_token", to: "braintree#client_token"
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice"
     end
 
     post "/braintree/generate_transient_customer_token", to: "braintree#generate_transient_customer_token"
@@ -279,6 +291,8 @@ Rails.application.routes.draw do
 
   constraints GumroadDomainConstraint do
     get "/about", to: "home#about"
+    get "/careers", to: "careers#index"
+    get "/careers/:slug", to: "careers#show", as: :career
     get "/features", to: "home#features"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
@@ -504,7 +518,6 @@ Rails.application.routes.draw do
         post :confirm
         post :change_can_contact
         post :resend_receipt
-        post :send_invoice
         put :refund
         put :revoke_access
         put :undo_revoke_access
@@ -516,7 +529,9 @@ Rails.application.routes.draw do
       resources :pings, controller: "purchases/pings", only: [:create]
       resource :product, controller: "purchases/product", only: [:show]
       resources :variants, controller: "purchases/variants", param: :variant_id, only: [:update]
-      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update]
+      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update] do
+        get :success
+      end
     end
 
     resources :orders, only: [:create] do
@@ -573,7 +588,7 @@ Rails.application.routes.draw do
     get "/purchases" => redirect("/library")
     get "/purchases/search", to: "purchases#search"
 
-    resources :checkout, only: [:index]
+    resource :checkout, only: [:show, :update], controller: :checkout
 
     resources :licenses, only: [:update]
 
@@ -764,8 +779,7 @@ Rails.application.routes.draw do
     get "/dashboard/consumption" => redirect("/dashboard/audience")
 
     # invoices
-    get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-    get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
+    purchases_invoice_routes
 
     # preorder
     post "/purchases/:id/cancel_preorder_by_seller", to: "purchases#cancel_preorder_by_seller", as: :cancel_preorder_by_seller
@@ -777,11 +791,12 @@ Rails.application.routes.draw do
     resources :subscriptions, only: [] do
       member do
         get :manage
-        get :magic_link
-        post :send_magic_link
         post :unsubscribe_by_user
         post :unsubscribe_by_seller
         put :update, to: "purchases#update_subscription"
+      end
+      scope module: "subscriptions" do
+        resource :magic_link, only: %i[new create]
       end
     end
 
@@ -911,7 +926,6 @@ Rails.application.routes.draw do
             resource :recipient_count, only: [:show], controller: "installments/recipient_counts", as: :installment_recipient_count
           end
         end
-        resource :cart, only: [:update]
         resources :products, only: [:show] do
           resources :product_posts, only: [:index]
           resources :existing_product_files, only: [:index]
