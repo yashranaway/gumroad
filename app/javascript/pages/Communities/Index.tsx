@@ -5,7 +5,13 @@ import * as React from "react";
 import { is } from "ts-safe-cast";
 
 import cable from "$app/channels/consumer";
-import { Community, CommunityChatMessage, getCommunityChatMessages, NotificationSettings, Seller } from "$app/data/communities";
+import {
+  Community,
+  CommunityChatMessage,
+  getCommunityChatMessages,
+  NotificationSettings,
+  Seller,
+} from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError } from "$app/utils/request";
@@ -17,7 +23,6 @@ import { CommunityList } from "$app/components/Communities/CommunityList";
 import { ScrollToBottomButton } from "$app/components/Communities/ScrollToBottomButton";
 import { DateSeparator } from "$app/components/Communities/Separator";
 import { useCommunities } from "$app/components/Communities/useCommunities";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { UserAvatar } from "$app/components/Communities/UserAvatar";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
@@ -26,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRunOnce } from "$app/components/useRunOnce";
 
