@@ -15,10 +15,10 @@ class Communities::ChatMessagesController < ApplicationController
     if message.save
       message_props = CommunityChatMessagePresenter.new(message:).props
       broadcast_message(message_props, CommunityChannel::CREATE_CHAT_MESSAGE_TYPE)
-      redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id)
+      redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id), status: :see_other
     else
       redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id),
-                  inertia: { errors: { content: message.errors.full_messages.first } }
+                  inertia: { errors: { content: message.errors.full_messages.first } }, status: :see_other
     end
   end
 
@@ -26,10 +26,10 @@ class Communities::ChatMessagesController < ApplicationController
     if @message.update(permitted_params)
       message_props = CommunityChatMessagePresenter.new(message: @message).props
       broadcast_message(message_props, CommunityChannel::UPDATE_CHAT_MESSAGE_TYPE)
-      redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id)
+      redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id), status: :see_other
     else
       redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id),
-                  inertia: { errors: { content: @message.errors.full_messages.first } }
+                  inertia: { errors: { content: @message.errors.full_messages.first } }, status: :see_other
     end
   end
 
@@ -37,7 +37,7 @@ class Communities::ChatMessagesController < ApplicationController
     @message.mark_deleted!
     message_props = CommunityChatMessagePresenter.new(message: @message).props
     broadcast_message(message_props, CommunityChannel::DELETE_CHAT_MESSAGE_TYPE)
-    redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id)
+    redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id), status: :see_other
   end
 
   private

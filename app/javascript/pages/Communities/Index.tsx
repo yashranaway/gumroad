@@ -1,7 +1,6 @@
 import { Channel } from "@anycable/web";
 import { InfiniteScroll, router } from "@inertiajs/react";
 import cx from "classnames";
-import { debounce } from "lodash-es";
 import * as React from "react";
 import { is } from "ts-safe-cast";
 
@@ -17,6 +16,7 @@ import { CommunityList } from "$app/components/Communities/CommunityList";
 import { ScrollToBottomButton } from "$app/components/Communities/ScrollToBottomButton";
 import { DateSeparator } from "$app/components/Communities/Separator";
 import { useCommunities } from "$app/components/Communities/useCommunities";
+import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { UserAvatar } from "$app/components/Communities/UserAvatar";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
@@ -127,7 +127,7 @@ function CommunitiesIndex() {
       if (searchParams.has("notifications")) {
         const url = new URL(window.location.href);
         url.searchParams.delete("notifications");
-        window.history.replaceState({}, "", url.toString());
+        router.replace({ url: url.toString(), preserveState: true });
         setShowNotificationsSettings(true);
       }
     }
@@ -135,26 +135,21 @@ function CommunitiesIndex() {
 
   const markAsReadCancelRef = React.useRef<{ cancel: () => void } | null>(null);
 
-  const debouncedMarkAsRead = React.useMemo(
-    () =>
-      debounce((communityId: string, messageId: string) => {
-        if (!communityId || !messageId) return;
-        markAsReadCancelRef.current?.cancel();
-        router.post(
-          Routes.community_last_read_chat_message_path(communityId),
-          { message_id: messageId },
-          {
-            preserveState: true,
-            preserveScroll: true,
-            only: ["communities"],
-            onCancelToken: (token) => {
-              markAsReadCancelRef.current = token;
-            },
-          },
-        );
-      }, 500),
-    [],
-  );
+  const debouncedMarkAsRead = useDebouncedCallback((communityId: string, messageId: string) => {
+    if (!communityId || !messageId) return;
+    markAsReadCancelRef.current?.cancel();
+    router.post(
+      Routes.community_last_read_chat_message_path(communityId),
+      { message_id: messageId },
+      {
+        preserveScroll: true,
+        only: ["communities"],
+        onCancelToken: (token) => {
+          markAsReadCancelRef.current = token;
+        },
+      },
+    );
+  }, 500);
 
   const markMessageAsRead = React.useCallback(
     (message: CommunityChatMessage) => {
@@ -236,7 +231,6 @@ function CommunitiesIndex() {
       Routes.community_chat_messages_path(selectedCommunity.id),
       { community_chat_message: { content: selectedCommunityDraft.content } },
       {
-        preserveState: true,
         preserveScroll: true,
         only: [],
         onSuccess: () => {
@@ -273,18 +267,15 @@ function CommunitiesIndex() {
     return () => channel.disconnect();
   }, [cable, loggedInUser]);
 
-  const sendMessageToUserChannel = React.useCallback(
-    debounce((msg: OutgoingUserChannelMessage) => {
-      const userChannelState = userChannelRef.current?.state;
-      if (userChannelState === "connected" || userChannelState === "idle") {
-        userChannelRef.current?.send(msg).catch((e: unknown) => {
-          // eslint-disable-next-line no-console
-          console.error(e);
-        });
-      }
-    }, 100),
-    [],
-  );
+  const sendMessageToUserChannel = useDebouncedCallback((msg: OutgoingUserChannelMessage) => {
+    const userChannelState = userChannelRef.current?.state;
+    if (userChannelState === "connected" || userChannelState === "idle") {
+      userChannelRef.current?.send(msg).catch((e: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error(e);
+      });
+    }
+  }, 100);
 
   React.useEffect(() => {
     communities.forEach((community) => {
@@ -387,7 +378,6 @@ function CommunitiesIndex() {
           Routes.community_chat_message_path(communityId, messageId),
           { community_chat_message: { content } },
           {
-            preserveState: true,
             preserveScroll: true,
             only: [],
             onSuccess: () => resolve(),
@@ -402,7 +392,6 @@ function CommunitiesIndex() {
     (messageId: string, communityId: string) =>
       new Promise<void>((resolve, reject) => {
         router.delete(Routes.community_chat_message_path(communityId, messageId), {
-          preserveState: true,
           preserveScroll: true,
           only: [],
           onSuccess: () => resolve(),
@@ -418,7 +407,6 @@ function CommunitiesIndex() {
         Routes.community_notification_setting_path(community.id),
         { settings },
         {
-          preserveState: true,
           preserveScroll: true,
           only: ["notification_settings"],
           onSuccess: () => {

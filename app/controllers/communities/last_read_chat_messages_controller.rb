@@ -17,7 +17,7 @@ class Communities::LastReadChatMessagesController < ApplicationController
       community_chat_message_id: message.id,
     )
 
-    redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id)
+    redirect_to community_path(seller_id: @community.seller.external_id, community_id: @community.external_id), status: :see_other
   end
 
   private
