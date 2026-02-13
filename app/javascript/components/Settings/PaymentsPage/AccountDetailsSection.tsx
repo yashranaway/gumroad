@@ -31,6 +31,9 @@ type TaxIdConfig = {
   minLength?: number;
   maxLength?: number;
   idSuffix: string;
+  description?: string;
+  pattern?: RegExp;
+  formatter?: (value: string) => string;
 };
 
 const AccountDetailsSection = ({
@@ -227,7 +230,20 @@ const AccountDetailsSection = ({
         maxLength: 13,
         idSuffix: "argentina-id-number",
       },
-      PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
+      PE: {
+        label: "DNI number",
+        placeholder: "12345678-9",
+        minLength: 10,
+        maxLength: 10,
+        idSuffix: "peru-id-number",
+        description: "Enter all 10 characters, e.g. 12345678-9",
+        pattern: /^\d{8}-\d$/u,
+        formatter: (value: string) => {
+          const digits = value.replace(/\D/gu, "");
+          if (digits.length <= 8) return digits;
+          return `${digits.slice(0, 8)}-${digits.slice(8, 9)}`;
+        },
+      },
       PK: {
         label: "National Identity Card Number (SNIC or CNIC)",
         placeholder: "•••••••••",
@@ -364,6 +380,8 @@ const AccountDetailsSection = ({
       </Fieldset>
     );
   };
+
+  const [taxIdFormatError, setTaxIdFormatError] = React.useState(false);
 
   const businessTypes = getBusinessTypes();
   const businessStateConfig = getBusinessStateConfig();
@@ -1182,7 +1200,7 @@ const AccountDetailsSection = ({
         </Fieldset>
       ) : null}
       {needsIndividualTaxId && individualTaxIdConfig ? (
-        <Fieldset state={errorFieldNames.has("individual_tax_id") ? "danger" : undefined}>
+        <Fieldset state={errorFieldNames.has("individual_tax_id") || taxIdFormatError ? "danger" : undefined}>
           <div>
             <FieldsetTitle>
               <Label htmlFor={`${uid}-${individualTaxIdConfig.idSuffix}`}>{individualTaxIdConfig.label}</Label>
@@ -1195,9 +1213,30 @@ const AccountDetailsSection = ({
               placeholder={user.individual_tax_id_entered ? "Hidden for security" : individualTaxIdConfig.placeholder}
               required
               disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("individual_tax_id")}
-              onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
+              aria-invalid={errorFieldNames.has("individual_tax_id") || taxIdFormatError}
+              onChange={(evt) => {
+                const formatted = individualTaxIdConfig.formatter
+                  ? individualTaxIdConfig.formatter(evt.target.value)
+                  : evt.target.value;
+                if (individualTaxIdConfig.formatter) {
+                  evt.target.value = formatted;
+                }
+                setTaxIdFormatError(false);
+                updateComplianceInfo({ individual_tax_id: formatted });
+              }}
+              onBlur={(evt) => {
+                if (
+                  individualTaxIdConfig.pattern &&
+                  evt.target.value &&
+                  !individualTaxIdConfig.pattern.test(evt.target.value)
+                ) {
+                  setTaxIdFormatError(true);
+                }
+              }}
             />
+            {individualTaxIdConfig.description ? (
+              <FieldsetDescription>{individualTaxIdConfig.description}</FieldsetDescription>
+            ) : null}
           </div>
         </Fieldset>
       ) : null}

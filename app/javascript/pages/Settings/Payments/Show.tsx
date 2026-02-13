@@ -565,6 +565,13 @@ export default function PaymentsPage() {
     ) {
       markFieldInvalid("individual_tax_id");
     }
+    if (
+      (form.data.user.country === "PE" || form.data.user.business_country === "PE") &&
+      form.data.user.individual_tax_id &&
+      !/^\d{8}-\d$/u.test(form.data.user.individual_tax_id)
+    ) {
+      markFieldInvalid("individual_tax_id");
+    }
     if (form.data.user.is_business) {
       if (!form.data.user.business_type) {
         markFieldInvalid("business_type");

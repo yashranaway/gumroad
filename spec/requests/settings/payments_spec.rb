@@ -2433,6 +2433,47 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("99934500012345670024")
       end
+
+      it "displays help text for DNI field" do
+        visit settings_payments_path
+
+        expect(page).to have_content("Enter all 10 characters, e.g. 12345678-9")
+      end
+
+      it "auto-formats DNI with hyphen after 8th digit" do
+        visit settings_payments_path
+
+        dni_field = find_field("DNI number")
+        dni_field.native.clear
+        dni_field.send_keys("123456789")
+
+        expect(dni_field.value).to eq("12345678-9")
+      end
+
+      it "rejects incomplete DNI on form submission" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "barnabasville")
+        fill_in("Phone number", with: "14213365")
+        fill_in("Postal code", with: "1001")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+        fill_in("DNI number", with: "12345678")
+
+        fill_in("Pay to the order of", with: "barnabas ngagy")
+        fill_in("Account number", with: "99934500012345670024")
+        fill_in("Confirm account number", with: "99934500012345670024")
+
+        click_on("Update settings")
+
+        expect(page).not_to have_alert(text: "Thanks! You're all set.")
+        expect(find_field("DNI number")["aria-invalid"]).to eq("true")
+      end
     end
 
     describe "Norwegian creator" do
