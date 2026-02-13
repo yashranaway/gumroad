@@ -2,11 +2,22 @@
 
 require "spec_helper"
 
-describe "Refund with backup card", :vcr, type: :model do
+describe "Purchase::Refundable - backup card funding", type: :model do
   let(:seller) { create(:user) }
   let(:buyer) { create(:user) }
   let(:product) { create(:product, user: seller) }
-  let(:credit_card) { create(:credit_card, user: seller) }
+  let(:credit_card) do
+    CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      stripe_customer_id: "cus_test_123",
+      processor_payment_method_id: "pm_test_123",
+      stripe_fingerprint: "fp_test_123",
+      visual: "4242",
+      card_type: "visa",
+      expiry_month: 12,
+      expiry_year: 2030
+    )
+  end
   let(:purchase) do
     create(:purchase_in_progress,
            link: product,
@@ -102,6 +113,12 @@ describe "Refund with backup card", :vcr, type: :model do
       it "processes the refund successfully" do
         expect(purchase.refund_and_save!(nil)).to be true
         expect(purchase.stripe_refunded?).to be true
+      end
+
+      it "enqueues a confirmation email" do
+        expect {
+          purchase.refund_and_save!(nil)
+        }.to have_enqueued_mail(ContactingCreatorMailer, :refund_funding_charge_confirmation)
       end
     end
 

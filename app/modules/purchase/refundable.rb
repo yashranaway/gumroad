@@ -44,6 +44,7 @@ class Purchase
         end
 
         amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
+        funding_result = nil
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
           if seller.refund_funding_credit_card.present?
             shortfall = amount_cents_to_refund - seller.unpaid_balance_cents
@@ -114,11 +115,11 @@ class Purchase
         if charge_refund.flow_of_funds.nil? && StripeChargeProcessor.charge_processor_id != charge_processor_id
           charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -(gross_amount_cents.presence || gross_amount_refundable_cents))
         end
-        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud).tap do
-          if defined?(funding_result) && funding_result&.credit.present?
-            ContactingCreatorMailer.refund_funding_charge_confirmation(credit_id: funding_result.credit.id).deliver_later(queue: "critical")
-          end
+        result = refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud)
+        if result && funding_result&.credit.present?
+          ContactingCreatorMailer.refund_funding_charge_confirmation(credit_id: funding_result.credit.id).deliver_later(queue: "critical")
         end
+        result
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
         false

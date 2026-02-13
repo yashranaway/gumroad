@@ -2,9 +2,20 @@
 
 require "spec_helper"
 
-describe RefundFundingChargeService, :vcr do
+describe RefundFundingChargeService do
   let(:seller) { create(:user) }
-  let(:credit_card) { create(:credit_card, user: seller) }
+  let(:credit_card) do
+    CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      stripe_customer_id: "cus_test_123",
+      processor_payment_method_id: "pm_test_123",
+      stripe_fingerprint: "fp_test_123",
+      visual: "4242",
+      card_type: "visa",
+      expiry_month: 12,
+      expiry_year: 2030
+    )
+  end
   let(:product) { create(:product, user: seller) }
   let(:purchase) do
     create(:purchase_in_progress,

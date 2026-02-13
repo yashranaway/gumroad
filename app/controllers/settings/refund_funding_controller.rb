@@ -52,7 +52,6 @@ class Settings::RefundFundingController < Settings::BaseController
     {
       enabled: funding_card.present?,
       credit_card: funding_card.present? ? {
-        id: funding_card.id,
         visual: funding_card.visual,
         card_type: funding_card.card_type,
         expiry_month: funding_card.expiry_month,

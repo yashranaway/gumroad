@@ -67,6 +67,7 @@ describe CustomersPresenter do
           currency_type: "usd",
           can_ping: true,
           show_refund_fee_notice: false,
+          show_refund_payment_method_banner: true,
         }
       )
     end

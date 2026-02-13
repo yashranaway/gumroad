@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -46,7 +47,7 @@ export const RefundPaymentMethodBanner = ({ show }: Props) => {
         <strong>New:</strong> Refund customers instantly, even when your balance is low. Add a backup payment method to
         cover refunds automatically if your balance can't.
         <div style={{ marginTop: "0.25rem" }}>
-          <a href={`${Routes.settings_payments_path()}#refund-payment-method`}>Set up backup method</a>
+          <Link href={`${Routes.settings_payments_path()}#refund-payment-method`}>Set up backup method</Link>
         </div>
       </div>
       <button
@@ -62,4 +63,4 @@ export const RefundPaymentMethodBanner = ({ show }: Props) => {
   );
 };
 
-export default RefundPaymentMethodBanner;
+

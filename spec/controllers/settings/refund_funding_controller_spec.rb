@@ -3,9 +3,20 @@
 require "spec_helper"
 require "shared_examples/authentication_required"
 
-describe Settings::RefundFundingController, :vcr do
+describe Settings::RefundFundingController do
   let(:seller) { create(:user) }
-  let(:credit_card) { create(:credit_card, user: seller) }
+  let(:credit_card) do
+    CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      stripe_customer_id: "cus_test_123",
+      processor_payment_method_id: "pm_test_123",
+      stripe_fingerprint: "fp_test_123",
+      visual: "4242",
+      card_type: "visa",
+      expiry_month: 12,
+      expiry_year: 2030
+    )
+  end
 
   before { sign_in seller }
 
@@ -58,25 +69,35 @@ describe Settings::RefundFundingController, :vcr do
     end
 
     context "when chargeable is valid" do
-      let(:chargeable) { build(:chargeable) }
+      let(:new_card) do
+        CreditCard.create!(
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          stripe_customer_id: "cus_new_123",
+          processor_payment_method_id: "pm_new_123",
+          stripe_fingerprint: "fp_new_123",
+          visual: "1234",
+          card_type: "visa",
+          expiry_month: 6,
+          expiry_year: 2031
+        )
+      end
 
       before do
         allow(CardParamsHelper).to receive(:get_card_data_handling_mode).and_return("stripejs.0")
         allow(CardParamsHelper).to receive(:check_for_errors).and_return(nil)
-        allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable)
+        allow(CardParamsHelper).to receive(:build_chargeable).and_return(double("chargeable"))
+        allow(CreditCard).to receive(:create).and_return(new_card)
       end
 
       it "creates the card and associates it with the seller" do
-        expect {
-          post :create, params: { stripe_payment_method_id: "pm_test", card_data_handling_mode: "stripejs.0" }, format: :json
-        }.to change(CreditCard, :count).by(1)
+        post :create, params: { stripe_payment_method_id: "pm_test", card_data_handling_mode: "stripejs.0" }, format: :json
 
         expect(response).to be_successful
         json = JSON.parse(response.body)
         expect(json["success"]).to be true
         expect(json["enabled"]).to be true
         expect(json["credit_card"]).to be_present
-        expect(seller.reload.refund_funding_credit_card).to be_present
+        expect(seller.reload.refund_funding_credit_card).to eq(new_card)
       end
     end
   end

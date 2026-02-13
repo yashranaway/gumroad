@@ -268,4 +268,4 @@ export const RefundPaymentMethodSection = ({
   </StripeElementsProvider>
 );
 
-export default RefundPaymentMethodSection;
+
