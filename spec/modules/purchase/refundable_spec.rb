@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Purchase::Refundable - backup card funding", type: :model do
+describe Purchase::Refundable do
   let(:seller) { create(:user) }
   let(:buyer) { create(:user) }
   let(:product) { create(:product, user: seller) }
