@@ -88,9 +88,9 @@ describe "Purchase::Refundable - backup card funding", type: :model do
       end
 
       it "charges the credit card for the shortfall and creates a credit" do
-        expect {
+        expect do
           purchase.refund_and_save!(nil)
-        }.to change { Credit.where.not(refund_funding_purchase_id: nil).count }.by(1)
+        end.to change { Credit.where.not(refund_funding_purchase_id: nil).count }.by(1)
 
         credit = Credit.find_by(refund_funding_purchase: purchase)
         expect(credit.amount_cents).to eq(1500) # 2000 - 500 = 1500 shortfall
@@ -101,9 +101,9 @@ describe "Purchase::Refundable - backup card funding", type: :model do
       end
 
       it "updates the seller balance" do
-        expect {
+        expect do
           purchase.refund_and_save!(nil)
-        }.to change { seller.reload.unpaid_balance_cents }
+        end.to change { seller.reload.unpaid_balance_cents }
 
         # Balance should have the credit amount added
         credit = Credit.find_by(refund_funding_purchase: purchase)
@@ -116,9 +116,9 @@ describe "Purchase::Refundable - backup card funding", type: :model do
       end
 
       it "enqueues a confirmation email" do
-        expect {
+        expect do
           purchase.refund_and_save!(nil)
-        }.to have_enqueued_mail(ContactingCreatorMailer, :refund_funding_charge_confirmation)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :refund_funding_charge_confirmation)
       end
     end
 
@@ -165,9 +165,9 @@ describe "Purchase::Refundable - backup card funding", type: :model do
       end
 
       it "does not create a credit" do
-        expect {
+        expect do
           purchase.refund_and_save!(nil)
-        }.not_to change(Credit, :count)
+        end.not_to change(Credit, :count)
       end
     end
 

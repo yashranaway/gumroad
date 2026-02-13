@@ -45,22 +45,21 @@ class Settings::RefundFundingController < Settings::BaseController
   end
 
   private
+    def refund_funding_data
+      funding_card = current_seller.refund_funding_credit_card
 
-  def refund_funding_data
-    funding_card = current_seller.refund_funding_credit_card
+      {
+        enabled: funding_card.present?,
+        credit_card: funding_card.present? ? {
+          visual: funding_card.visual,
+          card_type: funding_card.card_type,
+          expiry_month: funding_card.expiry_month,
+          expiry_year: funding_card.expiry_year
+        } : nil
+      }
+    end
 
-    {
-      enabled: funding_card.present?,
-      credit_card: funding_card.present? ? {
-        visual: funding_card.visual,
-        card_type: funding_card.card_type,
-        expiry_month: funding_card.expiry_month,
-        expiry_year: funding_card.expiry_year
-      } : nil
-    }
-  end
-
-  def authorize
-    super([:settings, :refund_funding, current_seller])
-  end
+    def authorize
+      super([:settings, :refund_funding, current_seller])
+    end
 end

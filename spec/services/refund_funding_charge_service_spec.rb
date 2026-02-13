@@ -191,7 +191,5 @@ describe RefundFundingChargeService do
         expect { result }.not_to change(Credit, :count)
       end
     end
-
   end
-
 end
