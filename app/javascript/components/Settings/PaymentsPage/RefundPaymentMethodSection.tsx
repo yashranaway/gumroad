@@ -139,7 +139,7 @@ const RefundPaymentMethodForm = ({
         {savedCard && !isEditing ? (
           <div className="flex flex-col gap-4">
             <Fieldset>
-              <FieldsetTitle>Card information</FieldsetTitle>
+              <FieldsetTitle>Card details</FieldsetTitle>
               <InputGroup readOnly>
                 <Icon name="outline-credit-card" />
                 <Input
@@ -176,7 +176,7 @@ const RefundPaymentMethodForm = ({
               />
             </Fieldset>
             <Fieldset>
-              <FieldsetTitle>Card information</FieldsetTitle>
+              <FieldsetTitle>Card details</FieldsetTitle>
               <InputGroup disabled={isFormDisabled || isSubmitting}>
                 <Icon name="outline-credit-card" />
                 <div style={{ flex: 1 }}>
