@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 ActiveRecord::Base.logger = nil
 ActiveSupport::Deprecation.silenced = true rescue nil
 Searchkick.disable_callbacks if defined?(Searchkick)

@@ -17,6 +17,17 @@ class PaypalMerchantAccountManager
   ].map(&:alpha2).freeze
 
   MIN_SALES_CENTS_REQ_FOR_PCP = 100_00 # $100
+  REQUIRED_DISPUTE_SCOPES = [
+    "https://uri.paypal.com/services/disputes/read-seller",
+    "https://uri.paypal.com/services/disputes/update-seller"
+  ].freeze
+
+  def self.paypal_disputes_scopes_granted?(parsed_response)
+    scopes = parsed_response&.dig("oauth_integrations", 0, "oauth_third_party", 0, "scopes")
+    return false if scopes.blank?
+
+    REQUIRED_DISPUTE_SCOPES.all? { |scope| scopes.include?(scope) }
+  end
 
   def create_partner_referral(user, return_url)
     payment_integration_api = PaypalIntegrationRestApi.new(user, authorization_header:)
@@ -89,12 +100,16 @@ class PaypalMerchantAccountManager
         return "There was an error connecting your PayPal account with Gumroad." unless merchant_account.save
       end
 
-      oauth_integration = parsed_response["oauth_integrations"][0]
+      oauth_integration = parsed_response["oauth_integrations"]&.first
+
+      oauth_third_party_integration = oauth_integration&.[]("oauth_third_party")&.first
+      has_required_dispute_scopes = self.class.paypal_disputes_scopes_granted?(parsed_response)
 
       if parsed_response["primary_email_confirmed"] && parsed_response["payments_receivable"] &&
-          oauth_integration["integration_type"] == "OAUTH_THIRD_PARTY" &&
-          oauth_integration["integration_method"] == "PAYPAL"
-        oauth_integration["oauth_third_party"][0]["partner_client_id"] == PAYPAL_PARTNER_CLIENT_ID
+          oauth_integration&.[]("integration_type") == "OAUTH_THIRD_PARTY" &&
+          oauth_integration&.[]("integration_method") == "PAYPAL" &&
+          oauth_third_party_integration&.[]("partner_client_id") == PAYPAL_PARTNER_CLIENT_ID &&
+          has_required_dispute_scopes
         merchant_account.charge_processor_alive_at = Time.current
         merchant_account.mark_charge_processor_verified!
         MerchantRegistrationMailer.paypal_account_updated(user.id).deliver_later(queue: "default")

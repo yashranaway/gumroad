@@ -368,11 +368,13 @@ class SettingsPresenter
 
     def paypal_connect
       paypal_merchant_account = seller.merchant_accounts.alive.paypal.first
+      dispute_permissions_granted = true
       if paypal_merchant_account
         payment_integration_api = PaypalIntegrationRestApi.new(seller, authorization_header: PaypalPartnerRestCredentials.new.auth_token)
         merchant_account_response = payment_integration_api.get_merchant_account_by_merchant_id(paypal_merchant_account.charge_processor_merchant_id)
-        parsed_response = merchant_account_response.parsed_response
+        parsed_response = merchant_account_response.parsed_response || {}
         paypal_merchant_account_email = parsed_response["primary_email"]
+        dispute_permissions_granted = PaypalMerchantAccountManager.paypal_disputes_scopes_granted?(parsed_response) if merchant_account_response.success?
       end
 
       {
@@ -381,7 +383,7 @@ class SettingsPresenter
         unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
         email: paypal_merchant_account_email,
         charge_processor_merchant_id: paypal_merchant_account&.charge_processor_merchant_id,
-        charge_processor_verified: paypal_merchant_account.present? && paypal_merchant_account.charge_processor_verified?,
+        charge_processor_verified: paypal_merchant_account.present? && paypal_merchant_account.charge_processor_verified? && dispute_permissions_granted,
         needs_email_confirmation: paypal_merchant_account.present? && paypal_merchant_account.meta.present? && paypal_merchant_account.meta["isEmailConfirmed"] == "false",
         paypal_disconnect_allowed: seller.paypal_disconnect_allowed?,
       }

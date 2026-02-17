@@ -1,6 +1,45 @@
 # frozen_string_literal: true
 
 describe PaypalMerchantAccountManager, :vcr do
+  describe ".paypal_disputes_scopes_granted?" do
+    it "returns true when both dispute scopes are present" do
+      parsed_response = {
+        "oauth_integrations" => [
+          {
+            "oauth_third_party" => [
+              {
+                "scopes" => [
+                  "https://uri.paypal.com/services/disputes/read-seller",
+                  "https://uri.paypal.com/services/disputes/update-seller"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      expect(described_class.paypal_disputes_scopes_granted?(parsed_response)).to eq(true)
+    end
+
+    it "returns false when one dispute scope is missing" do
+      parsed_response = {
+        "oauth_integrations" => [
+          {
+            "oauth_third_party" => [
+              {
+                "scopes" => [
+                  "https://uri.paypal.com/services/disputes/read-seller"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      expect(described_class.paypal_disputes_scopes_granted?(parsed_response)).to eq(false)
+    end
+  end
+
   describe "#create_partner_referral" do
     let(:user) { create(:user) }
 
@@ -248,6 +287,58 @@ describe PaypalMerchantAccountManager, :vcr do
 
       expect(old_records.count).to eq(0)
       expect(creator.merchant_account("paypal").charge_processor_merchant_id).to eq(new_paypal_merchant_id)
+    end
+
+    it "marks the account as unverified when dispute scopes are missing" do
+      creator = create(:user)
+      creator.mark_compliant!(author_name: "Iffy")
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
+      create(:payment_completed, user: creator)
+
+      parsed_response = {
+        "primary_email_confirmed" => true,
+        "payments_receivable" => true,
+        "oauth_integrations" => [
+          {
+            "integration_type" => "OAUTH_THIRD_PARTY",
+            "integration_method" => "PAYPAL",
+            "oauth_third_party" => [
+              {
+                "partner_client_id" => PAYPAL_PARTNER_CLIENT_ID,
+                "scopes" => ["https://uri.paypal.com/services/disputes/read-seller"]
+              }
+            ]
+          }
+        ]
+      }
+      allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(parsed_response)
+
+      message = subject.update_merchant_account(user: creator, paypal_merchant_id: "GSQ5PDPXZCWGW")
+
+      merchant_account = creator.merchant_accounts.paypal.find_by(charge_processor_merchant_id: "GSQ5PDPXZCWGW")
+      expect(merchant_account.charge_processor_alive?).to be(false)
+      expect(merchant_account.charge_processor_verified?).to be(false)
+      expect(message).to eq("Your PayPal account connect with Gumroad is incomplete because of missing permissions. Please try connecting again and grant the requested permissions.")
+    end
+
+    it "does not raise when oauth integrations are missing and marks account as unverified" do
+      creator = create(:user)
+      creator.mark_compliant!(author_name: "Iffy")
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
+      create(:payment_completed, user: creator)
+
+      parsed_response = {
+        "primary_email_confirmed" => true,
+        "payments_receivable" => true
+      }
+      allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(parsed_response)
+
+      message = subject.update_merchant_account(user: creator, paypal_merchant_id: "GSQ5PDPXZCWGW")
+
+      merchant_account = creator.merchant_accounts.paypal.find_by(charge_processor_merchant_id: "GSQ5PDPXZCWGW")
+      expect(merchant_account.charge_processor_alive?).to be(false)
+      expect(merchant_account.charge_processor_verified?).to be(false)
+      expect(message).to eq("Your PayPal account connect with Gumroad is incomplete because of missing permissions. Please try connecting again and grant the requested permissions.")
     end
   end
 end

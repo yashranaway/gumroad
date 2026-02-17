@@ -1690,6 +1690,15 @@ describe PaypalChargeProcessor, :vcr do
         processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
       end
 
+      it "uses PROOF_OF_REFUND for uppercase PayPal credit_not_processed reason" do
+        dispute.update!(reason: "CREDIT_NOT_PROCESSED")
+        expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(
+          hash_including(evidence_type: "PROOF_OF_REFUND")
+        ).and_return(successful_response)
+
+        processor.fight_chargeback("PAYPAL_CAPTURE_123", dispute_evidence, merchant_account:)
+      end
+
       it "uses OTHER for fraudulent disputes" do
         dispute.update!(reason: Dispute::REASON_FRAUDULENT)
         expect_any_instance_of(PaypalDisputesApi).to receive(:provide_evidence).with(

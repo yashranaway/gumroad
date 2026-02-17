@@ -34,12 +34,14 @@ class PaypalDisputesApi
 
   private
     def new_request(path:, verb:)
-      OpenStruct.new({
-        path:,
-        verb:,
-        headers: rest_api_headers,
-        body: {},
-      })
+      OpenStruct.new(
+        {
+          path:,
+          verb:,
+          headers: rest_api_headers,
+          body: {},
+        }
+      )
     end
 
     def rest_api_headers

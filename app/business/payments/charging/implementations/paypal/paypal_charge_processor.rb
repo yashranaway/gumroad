@@ -714,7 +714,9 @@ class PaypalChargeProcessor
 
     def determine_evidence_type_for_dispute(dispute)
       return "OTHER" unless dispute&.reason.present?
-      DISPUTE_REASON_TO_EVIDENCE_TYPE[dispute.reason] || "OTHER"
+
+      normalized_reason = dispute.reason.to_s.downcase
+      DISPUTE_REASON_TO_EVIDENCE_TYPE[normalized_reason] || "OTHER"
     end
 
     def build_structured_evidence_notes(dispute_evidence, dispute)

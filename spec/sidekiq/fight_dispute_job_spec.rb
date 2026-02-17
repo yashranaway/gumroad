@@ -147,6 +147,31 @@ describe FightDisputeJob do
             expect(dispute_evidence.error_message).to eq(error_message)
           end
         end
+
+        context "when a non-PayPal error contains NOT_AUTHORIZED" do
+          let(:error_message) { "Gateway error: NOT_AUTHORIZED for upstream request" }
+          let(:dispute_evidence) do
+            instance_double(
+              DisputeEvidence,
+              update_as_not_seller_contacted!: true,
+              resolved?: false,
+              not_seller_submitted?: false,
+              hours_left_to_submit_evidence: 0
+            )
+          end
+          let(:disputable) { instance_double(Purchase) }
+          let(:dispute) { instance_double(Dispute, id: 123, dispute_evidence:, disputable:) }
+
+          before do
+            allow(Dispute).to receive(:find).with(dispute.id).and_return(dispute)
+            allow(disputable).to receive(:fight_chargeback)
+              .and_raise(ChargeProcessorInvalidRequestError.new(error_message))
+          end
+
+          it "re-raises the error so Sidekiq retries" do
+            expect { described_class.new.perform(dispute.id) }.to raise_error(ChargeProcessorInvalidRequestError, error_message)
+          end
+        end
       end
 
       context "when the seller has been contacted" do

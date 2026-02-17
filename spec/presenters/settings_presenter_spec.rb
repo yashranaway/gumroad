@@ -706,6 +706,7 @@ describe SettingsPresenter do
         allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
         create(:payment_completed, user: seller)
         paypal_connect_account = create(:merchant_account_paypal, user: seller, charge_processor_merchant_id: "B66YJBBNCRW6L", charge_processor_verified_at: Time.current)
+        payments_props = presenter.payments_props
 
         bank_account_details = @base_us_props[:bank_account_details].merge({
                                                                              show_bank_account: true,
@@ -720,17 +721,44 @@ describe SettingsPresenter do
         paypal_connect_details = @base_us_props[:paypal_connect].merge({
                                                                          show_paypal_connect: true,
                                                                          allow_paypal_connect: true,
-                                                                         email: paypal_connect_account.paypal_account_details["primary_email"],
+                                                                         email: payments_props.dig(:paypal_connect, :email),
                                                                          charge_processor_merchant_id: paypal_connect_account.charge_processor_merchant_id,
-                                                                         charge_processor_verified: true,
+                                                                         charge_processor_verified: false,
                                                                          needs_email_confirmation: false,
                                                                          paypal_disconnect_allowed: true,
                                                                        })
 
-        expect(presenter.payments_props).to eq(@base_us_props.merge!({
-                                                                       bank_account_details:,
-                                                                       paypal_connect: paypal_connect_details,
-                                                                     }))
+        expect(payments_props).to eq(@base_us_props.merge!({ bank_account_details:, paypal_connect: paypal_connect_details }))
+      end
+
+      it "marks PayPal connect as unverified when required dispute scopes are missing" do
+        seller.mark_compliant!(author_name: "Iffy")
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
+        create(:payment_completed, user: seller)
+        create(:merchant_account_paypal, user: seller, charge_processor_merchant_id: "B66YJBBNCRW6L", charge_processor_verified_at: Time.current)
+
+        parsed_response = {
+          "primary_email" => "seller@example.com",
+          "oauth_integrations" => [
+            {
+              "oauth_third_party" => [
+                {
+                  "scopes" => [
+                    "https://uri.paypal.com/services/disputes/read-seller"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        api_response = OpenStruct.new(success?: true, parsed_response:)
+        payment_integration_api = instance_double(PaypalIntegrationRestApi, get_merchant_account_by_merchant_id: api_response)
+        allow_any_instance_of(PaypalPartnerRestCredentials).to receive(:auth_token).and_return("Bearer test_token")
+        allow(PaypalIntegrationRestApi).to receive(:new).and_return(payment_integration_api)
+
+        paypal_connect_details = presenter.payments_props[:paypal_connect]
+        expect(paypal_connect_details[:charge_processor_merchant_id]).to eq("B66YJBBNCRW6L")
+        expect(paypal_connect_details[:charge_processor_verified]).to eq(false)
       end
 
       it "returns correct props when seller has a Stripe Connect account" do

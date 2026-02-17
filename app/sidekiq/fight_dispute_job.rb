@@ -4,8 +4,11 @@ class FightDisputeJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
-  REJECTION_PATTERNS = [
+  LEGACY_REJECTION_PATTERNS = [
     "This dispute is already closed",
+  ].freeze
+
+  PAYPAL_REJECTED_ERROR_NAMES = [
     "DISPUTE_NOT_ELIGIBLE_FOR_EVIDENCE",
     "DISPUTE_ALREADY_RESOLVED",
     "EVIDENCE_ALREADY_PROVIDED",
@@ -35,6 +38,16 @@ class FightDisputeJob
 
   private
     def rejected?(message)
-      REJECTION_PATTERNS.any? { |pattern| message.include?(pattern) }
+      return true if LEGACY_REJECTION_PATTERNS.any? { |pattern| message.include?(pattern) }
+
+      paypal_error_name = extract_paypal_error_name(message)
+      return false unless paypal_error_name.present?
+
+      PAYPAL_REJECTED_ERROR_NAMES.include?(paypal_error_name)
+    end
+
+    def extract_paypal_error_name(message)
+      match = message.match(/\APayPal Disputes API Error: ([A-Z_]+)\b/)
+      match&.captures&.first
     end
 end
