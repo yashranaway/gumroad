@@ -142,10 +142,7 @@ const RefundPaymentMethodForm = ({
               <FieldsetTitle>Card details</FieldsetTitle>
               <InputGroup readOnly>
                 <Icon name="outline-credit-card" />
-                <Input
-                  readOnly
-                  value={`•••• •••• •••• ${savedCard.visual}`}
-                />
+                <Input readOnly value={`•••• •••• •••• ${savedCard.visual}`} />
                 <span className="text-muted">
                   {savedCard.expiry_month.toString().padStart(2, "0")}/{savedCard.expiry_year.toString().slice(-2)}
                 </span>
@@ -237,7 +234,7 @@ const RefundPaymentMethodForm = ({
                 color="danger"
                 onClick={() => {
                   setConfirmingRemove(false);
-                  void handleRemove();
+                  handleRemove();
                 }}
                 disabled={isSubmitting}
               >
@@ -247,8 +244,8 @@ const RefundPaymentMethodForm = ({
           }
         >
           <h4>
-            Are you sure you want to remove your refund payment method? Refunds that exceed your balance will no longer be
-            covered automatically.
+            Are you sure you want to remove your refund payment method? Refunds that exceed your balance will no longer
+            be covered automatically.
           </h4>
         </Modal>
       ) : null}
@@ -267,5 +264,3 @@ export const RefundPaymentMethodSection = ({
     <RefundPaymentMethodForm refundPaymentMethod={refundPaymentMethod} isFormDisabled={isFormDisabled} />
   </StripeElementsProvider>
 );
-
-

@@ -50,17 +50,9 @@ export const RefundPaymentMethodBanner = ({ show }: Props) => {
           <Link href={`${Routes.settings_payments_path()}#refund-payment-method`}>Set up backup method</Link>
         </div>
       </div>
-      <button
-        type="button"
-        className="link"
-        onClick={handleDismiss}
-        disabled={isDismissing}
-        aria-label="Dismiss"
-      >
+      <button type="button" className="link" onClick={handleDismiss} disabled={isDismissing} aria-label="Dismiss">
         close
       </button>
     </Alert>
   );
 };
-
-
