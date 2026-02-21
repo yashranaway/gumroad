@@ -13,7 +13,8 @@ import { Icon } from "$app/components/Icons";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
-import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
+import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 declare module "@tiptap/core" {
@@ -36,6 +37,7 @@ type Product = {
   review_count: number;
   average_rating: number;
   native_type: ProductNativeType;
+  thumbnail_url: string | null;
   permalink: string;
   options: ProductOption[];
 };
@@ -111,7 +113,7 @@ export const UpsellCard = TiptapNode.create({
 });
 
 const getUpsellUrl = (id: string, permalink: string) => {
-  const url = new URL(Routes.checkout_index_url());
+  const url = new URL(Routes.checkout_url());
   const searchParams = new URLSearchParams();
   searchParams.append("product", permalink);
   searchParams.append("accepted_offer_id", id);
@@ -175,15 +177,15 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         ) : product ? (
           <ProductCard className="lg:h-32 lg:flex-row">
             <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0">
-              <Thumbnail url={null} nativeType={product.native_type} />
+              <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
             </ProductCardFigure>
             <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">
               {isEditable ? (
                 <UpsellCardHeader product={product} variant={variant} />
               ) : (
-                <a href={getUpsellUrl(id ?? "", product.permalink)} className="stretched-link">
+                <StretchedLink href={getUpsellUrl(id ?? "", product.permalink)}>
                   <UpsellCardHeader product={product} variant={variant} />
-                </a>
+                </StretchedLink>
               )}
               <ProductCardFooter className="lg:divide-x-0">
                 {product.review_count > 0 ? (
