@@ -5,6 +5,7 @@ module Subscription::Restartable
     return nil unless product.is_recurring_billing
 
     where(link_id: product.id)
+      .not_is_test_subscription
       .where(ended_at: nil)
       .where(user_id: buyer.id)
       .where.not(deactivated_at: nil)
@@ -17,6 +18,7 @@ module Subscription::Restartable
     return nil unless product.is_recurring_billing
 
     where(link_id: product.id)
+      .not_is_test_subscription
       .where(ended_at: nil)
       .joins(:original_purchase)
       .where(purchases: { email: email.to_s.downcase.strip })
@@ -30,6 +32,7 @@ module Subscription::Restartable
     return nil unless product.is_recurring_billing
 
     where(link_id: product.id)
+      .not_is_test_subscription
       .where(ended_at: nil)
       .where(failed_at: nil)
       .where("cancelled_at IS NULL OR cancelled_at > ?", Time.current)
@@ -42,6 +45,7 @@ module Subscription::Restartable
     return nil unless product.is_recurring_billing
 
     where(link_id: product.id)
+      .not_is_test_subscription
       .where(ended_at: nil)
       .where(failed_at: nil)
       .where("cancelled_at IS NULL OR cancelled_at > ?", Time.current)
