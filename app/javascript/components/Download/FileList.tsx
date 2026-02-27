@@ -449,7 +449,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
     }
   });
 
-  useReactNativeMessage<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>((data) => {
+  useReactNativeMessage((data) => {
     if (data.type === "mobileAppAudioPlayerInfo" && data.payload.fileId === file.id) {
       setIsPlaying(data.payload.isPlaying);
       setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));

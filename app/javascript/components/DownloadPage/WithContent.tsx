@@ -183,7 +183,7 @@ export const WithContent = ({
     );
   }, [showPageList, activePageIndex, pages]);
 
-  useReactNativeMessage<{ type: "mobileAppPageChange"; payload: { pageIndex: number } }>((data) => {
+  useReactNativeMessage((data) => {
     if (data.type === "mobileAppPageChange") {
       handlePageChange(data.payload.pageIndex);
     }
