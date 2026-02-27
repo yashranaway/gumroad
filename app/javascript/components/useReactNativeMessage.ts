@@ -5,14 +5,11 @@ import Mobile from "$app/utils/mobile";
 
 import { useRefToLatest } from "./useRefToLatest";
 
-export const useReactNativeMessage = <T extends Record<string, unknown>>(
-  enabled: boolean,
-  handler: (data: T) => void,
-) => {
+export const useReactNativeMessage = <T extends Record<string, unknown>>(handler: (data: T) => void) => {
   const handlerRef = useRefToLatest(handler);
 
   React.useEffect(() => {
-    if (!enabled) return;
+    if (!window.ReactNativeWebView) return;
     const target = Mobile.isOnAndroidDevice() ? document : window;
     const listener = (event: MessageEvent) => {
       if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
@@ -30,5 +27,5 @@ export const useReactNativeMessage = <T extends Record<string, unknown>>(
     target.addEventListener("message", listener);
     // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
     return () => target.removeEventListener("message", listener);
-  }, [enabled]);
+  }, []);
 };

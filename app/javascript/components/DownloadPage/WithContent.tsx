@@ -171,8 +171,8 @@ export const WithContent = ({
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
 
   React.useEffect(() => {
-    if (!props.is_expo_app || !showPageList) return;
-    window.ReactNativeWebView?.postMessage(
+    if (!window.ReactNativeWebView || !showPageList) return;
+    window.ReactNativeWebView.postMessage(
       JSON.stringify({
         type: "tocData",
         payload: {
@@ -181,16 +181,13 @@ export const WithContent = ({
         },
       }),
     );
-  }, [props.is_expo_app, showPageList, activePageIndex, pages]);
+  }, [showPageList, activePageIndex, pages]);
 
-  useReactNativeMessage<{ type: "mobileAppPageChange"; payload: { pageIndex: number } }>(
-    props.is_expo_app,
-    (data) => {
-      if (data.type === "mobileAppPageChange") {
-        handlePageChange(data.payload.pageIndex);
-      }
-    },
-  );
+  useReactNativeMessage<{ type: "mobileAppPageChange"; payload: { pageIndex: number } }>((data) => {
+    if (data.type === "mobileAppPageChange") {
+      handlePageChange(data.payload.pageIndex);
+    }
+  });
 
   const hasPreviousPage = activePageIndex > 0;
   const hasNextPage = activePageIndex < pages.length - 1;
@@ -312,7 +309,8 @@ export const WithContent = ({
         </MediaUrlsProvider>
       </PurchaseInfoProvider>
 
-      {showPageList && !props.is_expo_app ? (
+      {showPageList &&
+      (!props.is_mobile_app_web_view || (typeof window !== "undefined" && !window.ReactNativeWebView)) ? (
         <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
             <Popover>

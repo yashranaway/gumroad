@@ -449,15 +449,12 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
     }
   });
 
-  useReactNativeMessage<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>(
-    isMobileAppWebView,
-    (data) => {
-      if (data.type === "mobileAppAudioPlayerInfo" && data.payload.fileId === file.id) {
-        setIsPlaying(data.payload.isPlaying);
-        setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));
-      }
-    },
-  );
+  useReactNativeMessage<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>((data) => {
+    if (data.type === "mobileAppAudioPlayerInfo" && data.payload.fileId === file.id) {
+      setIsPlaying(data.payload.isPlaying);
+      setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));
+    }
+  });
 
   const [showTooltip, setShowTooltip] = React.useState(false);
   const touchAndHoldEventListeners = useTouchAndHold({

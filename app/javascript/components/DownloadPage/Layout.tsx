@@ -36,7 +36,6 @@ type Call = { start_time: string; end_time: string; url: string | null };
 export type LayoutProps = {
   content_unavailability_reason_code: ContentUnavailabilityReasonCode;
   is_mobile_app_web_view: boolean;
-  is_expo_app: boolean;
   terms_page_url: string;
   token: string;
   redirect_id: string;
