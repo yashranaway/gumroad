@@ -26,7 +26,11 @@ export const Fieldset = React.forwardRef<
   const contextValue = React.useMemo(() => ({ state: state ?? "default" }), [state]);
   return (
     <FieldsetContext.Provider value={contextValue}>
-      <fieldset ref={ref} className={classNames(fieldsetStyles, className)} {...props}>
+      <fieldset
+        ref={ref}
+        className={classNames(fieldsetStyles, state && state !== "default" ? state : undefined, className)}
+        {...props}
+      >
         {children}
       </fieldset>
     </FieldsetContext.Provider>
@@ -41,7 +45,7 @@ export const FieldsetTitle = React.forwardRef<
   <legend
     ref={ref}
     className={classNames(
-      "relative mb-2 flex w-full items-center justify-between text-base leading-[1.4] font-bold",
+      "relative mb-2 flex w-full items-center justify-between text-base leading-snug font-bold",
       "[&_a]:font-normal",
       className,
     )}

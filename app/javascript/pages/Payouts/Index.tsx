@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf, Calendar, CheckCircle, ChevronDown, Clock, Cog } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
@@ -8,14 +9,14 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import {
-  type PayoutsProps,
+  type BankAccount,
   type CurrentPayoutsDataAndPaymentMethodWithUserPayable,
   type PastPayoutsDataAndPaymentMethod,
-  type BankAccount,
+  type PayoutsProps,
   type PaypalAccount,
 } from "$app/components/Payouts";
 import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopover";
@@ -25,7 +26,7 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import useRouteLoading from "$app/components/useRouteLoading";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -102,12 +103,13 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {payoutPeriodData.status === "completed" && payoutPeriodData.payment_external_id ? (
           <WithTooltip position="top" tip="Export" className="shrink-0">
             <Button
+              size="icon"
               color="primary"
               disabled={isCSVDownloadInProgress}
               onClick={handleRequestPayoutCSV}
               aria-label="Export"
             >
-              <Icon name="download" />
+              <ArrowInDownSquareHalf className="size-5" />
             </Button>
           </WithTooltip>
         ) : null}
@@ -349,7 +351,11 @@ const PeriodBankAccount = ({
   <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacer-2)" }}>
     <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
       {bankAccount.arrival_date ? (
-        <Icon name={bankAccount.status === "completed" ? "solid-check-circle" : "outline-clock"} />
+        bankAccount.status === "completed" ? (
+          <CheckCircle pack="filled" className="size-5" />
+        ) : (
+          <Clock className="size-5" />
+        )
       ) : null}
       <h4>
         {bankAccount.arrival_date ? (
@@ -491,10 +497,10 @@ export default function PayoutsIndex() {
   if (!loggedInUser) return null;
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
-    <NavigationButton href={Routes.settings_payments_path()}>
-      <Icon name="gear-fill" />
+    <NavigationButtonInertia href={Routes.settings_payments_path()}>
+      <Cog pack="filled" className="size-5" />
       Settings
-    </NavigationButton>
+    </NavigationButtonInertia>
   ) : null;
 
   const bulkExportAction = loggedInUser.policies.balance.export ? <ExportPayoutsPopover /> : null;
@@ -556,7 +562,7 @@ export default function PayoutsIndex() {
                   <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
                 ) : (
                   <Button
-                    small
+                    size="sm"
                     color="primary"
                     aria-label="Get paid now"
                     onClick={() => setIsInstantPayoutModalOpen(true)}
@@ -586,7 +592,7 @@ export default function PayoutsIndex() {
               <fieldset>
                 <label htmlFor="instant-payout-date">Pay out balance up to</label>
                 <div className="input cursor-pointer">
-                  <Icon name="calendar-all" />
+                  <Calendar className="size-5" />
                   <select
                     id="instant-payout-date"
                     value={instantPayoutId}
@@ -602,7 +608,7 @@ export default function PayoutsIndex() {
                       </option>
                     ))}
                   </select>
-                  <Icon name="outline-cheveron-down" />
+                  <ChevronDown className="size-5" />
                 </div>
               </fieldset>
               <fieldset>

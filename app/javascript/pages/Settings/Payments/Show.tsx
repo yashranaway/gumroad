@@ -1,3 +1,4 @@
+import { Bank, CreditCard, Paypal, Stripe } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
@@ -13,7 +14,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { Button } from "$app/components/Button";
 import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
 import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
-import { Icon } from "$app/components/Icons";
 import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { PriceInput } from "$app/components/PriceInput";
 import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
@@ -101,7 +101,6 @@ type PaymentsPageProps = {
   payout_frequency_daily_supported: boolean;
   errors?: {
     base?: string[];
-    error_code?: string[];
   };
 };
 
@@ -113,7 +112,7 @@ type ErrorMessageInfo = {
 export default function PaymentsPage() {
   const page = usePage();
   const props = cast<PaymentsPageProps>(page.props);
-  const errors = cast<{ base?: string[]; error_code?: string[] } | undefined>(page.props.errors);
+  const errors = cast<{ base?: string[] } | undefined>(page.props.errors);
 
   const userAgentInfo = useUserAgentInfo();
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
@@ -930,15 +929,7 @@ export default function PaymentsPage() {
         {(errors?.base && errors.base.length > 0) || clientErrorMessage ? (
           <div className="mb-12 px-8">
             <Alert variant="danger" role="status">
-              {errors?.base && errors.base.length > 0 ? (
-                errors.error_code?.[0] === "stripe_error" ? (
-                  <div>Your account could not be updated due to an error with Stripe.</div>
-                ) : (
-                  errors.base[0]
-                )
-              ) : clientErrorMessage ? (
-                clientErrorMessage.message
-              ) : null}
+              {errors?.base?.[0] ?? clientErrorMessage?.message}
             </Alert>
           </div>
         ) : null}
@@ -1053,7 +1044,7 @@ export default function PaymentsPage() {
                       disabled={props.is_form_disabled}
                       className="items-start justify-start text-left"
                     >
-                      <Icon name="bank" />
+                      <Bank className="size-5" />
                       <div>
                         <h4 className="font-bold">Bank Account</h4>
                       </div>
@@ -1068,7 +1059,7 @@ export default function PaymentsPage() {
                         disabled={props.is_form_disabled}
                         className="items-start justify-start text-left"
                       >
-                        <Icon name="card" />
+                        <CreditCard className="size-5" />
                         <div>
                           <h4 className="font-bold">Debit Card</h4>
                         </div>
@@ -1086,7 +1077,7 @@ export default function PaymentsPage() {
                     disabled={props.is_form_disabled}
                     className="items-start justify-start text-left"
                   >
-                    <Icon name="shop-window" />
+                    <Paypal pack="brands" className="size-5" />
                     <div>
                       <h4 className="font-bold">PayPal</h4>
                     </div>
@@ -1104,7 +1095,7 @@ export default function PaymentsPage() {
                     disabled={props.is_form_disabled}
                     className="items-start justify-start text-left"
                   >
-                    <Icon name="stripe" />
+                    <Stripe pack="brands" className="size-5" />
                     <div>
                       <h4 className="font-bold">Connect to Stripe</h4>
                     </div>
