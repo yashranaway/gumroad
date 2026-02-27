@@ -1,7 +1,7 @@
 import cx from "classnames";
 import { throttle } from "lodash-es";
 import * as React from "react";
-import { cast, is } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
@@ -9,7 +9,6 @@ import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
-import Mobile from "$app/utils/mobile";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -24,6 +23,7 @@ import { ProgressPie } from "$app/components/ProgressPie";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
+import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -437,29 +437,15 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
     }
   });
 
-  const messageListener = useRefToLatest((event: MessageEvent) => {
-    if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
-    let data: unknown;
-    try {
-      data = JSON.parse(event.data);
-    } catch {
-      return;
-    }
-    if (is<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>(data)) {
-      if (data.payload.fileId !== file.id) return;
-      setIsPlaying(data.payload.isPlaying);
-      setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));
-    }
-  });
-
-  React.useEffect(() => {
-    const target = Mobile.isOnAndroidDevice() ? document : window;
-    const listener = (e: MessageEvent) => messageListener.current(e);
-    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
-    target.addEventListener("message", listener);
-    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
-    return () => target.removeEventListener("message", listener);
-  }, []);
+  useReactNativeMessage<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>(
+    isMobileAppWebView,
+    (data) => {
+      if (data.type === "mobileAppAudioPlayerInfo" && data.payload.fileId === file.id) {
+        setIsPlaying(data.payload.isPlaying);
+        setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));
+      }
+    },
+  );
 
   const [showTooltip, setShowTooltip] = React.useState(false);
   const touchAndHoldEventListeners = useTouchAndHold({

@@ -1,11 +1,10 @@
 import * as React from "react";
-import { cast, is } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
-import Mobile from "$app/utils/mobile";
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { Button } from "$app/components/Button";
@@ -30,7 +29,7 @@ import { PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { useRefToLatest } from "$app/components/useRefToLatest";
+import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -167,7 +166,7 @@ export const WithContent = ({
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
 
   React.useEffect(() => {
-    if (!props.is_mobile_app_web_view || !showPageList) return;
+    if (!props.is_expo_app || !showPageList) return;
     window.ReactNativeWebView?.postMessage(
       JSON.stringify({
         type: "tocData",
@@ -177,32 +176,16 @@ export const WithContent = ({
         },
       }),
     );
-  }, [props.is_mobile_app_web_view, showPageList, activePageIndex, pages]);
+  }, [props.is_expo_app, showPageList, activePageIndex, pages]);
 
-  const handlePageChangeRef = useRefToLatest(handlePageChange);
-  React.useEffect(() => {
-    if (!props.is_mobile_app_web_view) return;
-    const target = Mobile.isOnAndroidDevice() ? document : window;
-    const listener = (event: MessageEvent) => {
-      if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
-      let data: unknown;
-      try {
-        data = JSON.parse(event.data);
-      } catch {
-        return;
+  useReactNativeMessage<{ type: "mobileAppPageChange"; payload: { pageIndex: number } }>(
+    props.is_expo_app,
+    (data) => {
+      if (data.type === "mobileAppPageChange") {
+        handlePageChange(data.payload.pageIndex);
       }
-      if (
-        is<{ type: "mobileAppPageChange"; payload: { pageIndex: number } }>(data) &&
-        data.type === "mobileAppPageChange"
-      ) {
-        handlePageChangeRef.current(data.payload.pageIndex);
-      }
-    };
-    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
-    target.addEventListener("message", listener);
-    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
-    return () => target.removeEventListener("message", listener);
-  }, [props.is_mobile_app_web_view]);
+    },
+  );
 
   const hasPreviousPage = activePageIndex > 0;
   const hasNextPage = activePageIndex < pages.length - 1;
@@ -327,7 +310,7 @@ export const WithContent = ({
         </MediaUrlsProvider>
       </PurchaseInfoProvider>
 
-      {showPageList && !props.is_mobile_app_web_view ? (
+      {showPageList && !props.is_expo_app ? (
         <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
             <Popover>
