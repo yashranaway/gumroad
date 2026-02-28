@@ -6,7 +6,12 @@ import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastConte
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
-import { generatePageIcon, PAGE_ICON_COMPONENTS, type PageIconKey } from "$app/utils/rich_content_page";
+import {
+  generatePageIcon,
+  PAGE_ICON_COMPONENTS,
+  PAGE_ICON_LABELS,
+  type PageIconType,
+} from "$app/utils/rich_content_page";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -37,17 +42,9 @@ import { Layout, LayoutProps, PurchaseCustomField } from "./Layout";
 
 export type { PurchaseCustomField };
 
-const PAGE_ICON_LABEL: Record<PageIconKey, string> = {
-  "file-arrow-down": "Page has various types of files",
-  "file-music": "Page has audio files",
-  "file-play": "Page has videos",
-  "file-text": "Page has no files",
-  "outline-key": "Page has license key",
-};
-
-const PageIcon = ({ iconKey }: { iconKey: PageIconKey }) => {
+const PageIcon = ({ iconKey }: { iconKey: PageIconType }) => {
   const Component = PAGE_ICON_COMPONENTS[iconKey];
-  return <Component className="size-5" aria-label={PAGE_ICON_LABEL[iconKey]} />;
+  return <Component className="size-5" aria-label={PAGE_ICON_LABELS[iconKey]} />;
 };
 
 const ContentFilesContext = React.createContext<FileItem[] | null>(null);
@@ -170,18 +167,30 @@ export const WithContent = ({
   );
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
 
+  const pageIcons = React.useMemo(
+    () =>
+      pages.map(({ description }) =>
+        generatePageIcon({
+          hasLicense: description ? nodeHasLicense(description) : false,
+          fileIds: description ? findFileEmbeds(description) : [],
+          allFiles: contentFiles,
+        }),
+      ),
+    [pages, contentFiles],
+  );
+
   React.useEffect(() => {
     if (!window.ReactNativeWebView || !showPageList) return;
     window.ReactNativeWebView.postMessage(
       JSON.stringify({
         type: "tocData",
         payload: {
-          pages: pages.map((p) => ({ page_id: p.page_id, title: p.title })),
+          pages: pages.map((page, index) => ({ page_id: page.page_id, title: page.title, icon: pageIcons[index] })),
           activePageIndex,
         },
       }),
     );
-  }, [showPageList, activePageIndex, pages]);
+  }, [showPageList, activePageIndex, pages, pageIcons]);
 
   useReactNativeMessage((data) => {
     if (data.type === "mobileAppPageChange") {
@@ -221,17 +230,6 @@ export const WithContent = ({
     total: content.rich_content_pages ? content.posts.length : 0,
   };
 
-  const pageIcons = React.useMemo(
-    () =>
-      pages.map(({ description }) =>
-        generatePageIcon({
-          hasLicense: description ? nodeHasLicense(description) : false,
-          fileIds: description ? findFileEmbeds(description) : [],
-          allFiles: contentFiles,
-        }),
-      ),
-    [pages, contentFiles],
-  );
   const purchaseInfo = { purchaseId: props.purchase?.id ?? null, redirectId: props.redirect_id, token: props.token };
 
   return (
@@ -266,7 +264,7 @@ export const WithContent = ({
                 onClick={() => handlePageChange(index)}
                 role="tab"
               >
-                <PageIcon iconKey={pageIcons[index] ?? "file-text"} />
+                <PageIcon iconKey={pageIcons[index] ?? "text-only"} />
                 <span className="flex-1">{page.title ?? "Untitled"}</span>
               </PageListItem>
             ))}
@@ -332,7 +330,7 @@ export const WithContent = ({
                           handlePageChange(index);
                         }}
                       >
-                        <PageIcon iconKey={pageIcons[index] ?? "file-text"} />
+                        <PageIcon iconKey={pageIcons[index] ?? "text-only"} />
                         &ensp;
                         {page.title ?? "Untitled"}
                       </div>

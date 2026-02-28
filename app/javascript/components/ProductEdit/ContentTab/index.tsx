@@ -837,7 +837,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               key={page.id}
                               page={page}
                               selected={page === selectedPage}
-                              icon={pageIcons.get(page.id) ?? "file-text"}
+                              icon={pageIcons.get(page.id) ?? "text-only"}
                               dragging={!!page.chosen}
                               renaming={page.id === renamingPageId}
                               setRenaming={(renaming) => setRenamingPageId(renaming ? page.id : null)}
@@ -871,7 +871,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                   updated_at: pages[0]?.updated_at ?? new Date().toString(),
                                 }}
                                 selected={false}
-                                icon="file-arrow-down"
+                                icon="mixed-files"
                                 dragging={false}
                                 renaming={false}
                                 onClick={() => {}}

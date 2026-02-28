@@ -451,7 +451,7 @@ class UrlRedirectsController < ApplicationController
       end
 
       {
-        is_mobile_app_web_view: params[:display].in?(%w[mobile_app expo_app]),
+        is_mobile_app_web_view: params[:display] == "mobile_app",
         content_unavailability_reason_code: @content_unavailability_reason_code,
         add_to_library_option:,
       }
