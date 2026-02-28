@@ -252,17 +252,17 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
 
       toc_messages = page.evaluate_script("window._messages.filter(m => m.type === 'tocData')")
       expect(toc_messages).to eq([
-        {
-          type: "tocData",
-          payload: {
-            activePageIndex: 0,
-            pages: [
-              { page_id: product_rich_content.external_id, title: "Page 1", icon: "text-only" },
-              { page_id: page_2.external_id, title: "Page 2", icon: "text-only" },
-            ],
-          },
-        }.as_json,
-      ])
+                                   {
+                                     type: "tocData",
+                                     payload: {
+                                       activePageIndex: 0,
+                                       pages: [
+                                         { page_id: product_rich_content.external_id, title: "Page 1", icon: "text-only" },
+                                         { page_id: page_2.external_id, title: "Page 2", icon: "text-only" },
+                                       ],
+                                     },
+                                   }.as_json,
+                                 ])
 
       page.execute_script <<~JS
         window.postMessage(JSON.stringify({ type: "mobileAppPageChange", payload: { pageIndex: 1 } }), "*");
