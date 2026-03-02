@@ -96,14 +96,15 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     rich_text_editor_input = find("[aria-label='Description']")
 
     # When images are uploading
-    attach_file file_fixture("smilie.png") do
-      click_on "Insert image"
+    fixture_file = file_fixture("smilie.png")
+    with_throttled_network(fixture_file) do
+      attach_file fixture_file do
+        click_on "Insert image"
+      end
+      expect(rich_text_editor_input).to have_selector("img[src^='blob:']")
+      select_tab "Content"
+      expect(page).to have_alert(text: "Some images are still uploading, please wait...")
     end
-    expect(rich_text_editor_input).to have_selector("img[src^='blob:']")
-
-    # TODO(ershad): Enable this once we have a way to slow down the upload process
-    # select_tab "Content"
-    # expect(page).to have_alert(text: "Some images are still uploading, please wait...")
 
     expect(page).to have_current_path(edit_link_path(@product))
     expect(page).to have_tab_button("Product", open: true)
@@ -115,11 +116,14 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
 
     # When files are uploading
     select_tab "Product"
-    attach_file file_fixture("test.mp3") do
-      click_on "Insert audio"
+    fixture_file = file_fixture("test.mp3")
+    with_throttled_network(fixture_file) do
+      attach_file fixture_file do
+        click_on "Insert audio"
+      end
+      select_tab "Content"
+      expect(page).to have_alert(text: "Some files are still uploading, please wait...")
     end
-    select_tab "Content"
-    expect(page).to have_alert(text: "Some files are still uploading, please wait...")
     wait_for_file_embed_to_finish_uploading(name: "test")
     select_tab "Content"
     expect(page).to_not have_alert(text: "Some files are still uploading, please wait...")
@@ -299,8 +303,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       expect(page).to have_link("Google", href: "https://google.com")
       expect(page).to have_text("Visit Google to explore the web", normalize_ws: true)
       expect(page).to have_text("And also visit Gumroad to buy products from indie creators", normalize_ws: true)
+      click_on "Gumroad"
     end
-    click_on "Gumroad"
     within_disclosure "Gumroad" do
       expect(page).to have_field("Enter text", with: "Gumroad")
       expect(page).to have_field("Enter URL", with: "https://gumroad.com")
@@ -382,7 +386,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     visit("/products/#{@product.unique_permalink}/edit")
     rich_text_editor_input = find("[aria-label='Description']")
     select_disclosure "Insert" do
-      click_on "Twitter post"
+      click_on "X post"
     end
     within_modal do
       fill_in "URL", with: "https://twitter.com/gumroad/status/1380521414818557955"
@@ -521,7 +525,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       visit edit_link_path(product) + "/content"
       rich_text_editor_input = find("[aria-label='Content editor']")
       select_disclosure "Insert" do
-        click_on "Twitter post"
+        click_on "X post"
       end
       within_modal do
         fill_in "URL", with: tweet_url
