@@ -13,10 +13,21 @@ class PaypalDisputesApi
     @request.headers["PayPal-Auth-Assertion"] = paypal_auth_assertion_header(merchant_account.charge_processor_merchant_id)
     @request.headers["PayPal-Request-Id"] = generate_idempotency_key(dispute_id)
 
+    evidence = { evidence_type: determine_evidence_type(evidence_type, tracking_info) }
+    evidence[:evidence_info] = { tracking_info: [tracking_info] } if tracking_info.present?
+    evidence[:notes] = notes.to_s[0...2000] if notes.present?
+
+    @request.body = { evidences: [evidence] }
+    execute_request
+  end
+
+  def accept_claim(dispute_id:, merchant_account:, note: nil)
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}/accept-claim", verb: "POST")
+    @request.headers["PayPal-Auth-Assertion"] = paypal_auth_assertion_header(merchant_account.charge_processor_merchant_id)
+    @request.headers["PayPal-Request-Id"] = generate_accept_idempotency_key(dispute_id)
+
     body = {}
-    body[:evidence_type] = determine_evidence_type(evidence_type, tracking_info)
-    body[:evidence_info] = { tracking_info: [tracking_info] } if tracking_info.present?
-    body[:notes] = notes.to_s[0...2000] if notes.present?
+    body[:note] = note.to_s[0...2000] if note.present?
 
     @request.body = body
     execute_request
@@ -62,6 +73,10 @@ class PaypalDisputesApi
 
     def generate_idempotency_key(dispute_id)
       "gumroad-dispute-evidence-#{dispute_id}"
+    end
+
+    def generate_accept_idempotency_key(dispute_id)
+      "gumroad-dispute-accept-#{dispute_id}"
     end
 
     def determine_evidence_type(evidence_type, tracking_info)

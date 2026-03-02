@@ -33,7 +33,8 @@ class DisputeEvidencePagePresenter
       {
         purchase_for_dispute_evidence_id: purchase.external_id,
         formatted_display_price: dispute_evidence.disputable.formatted_disputed_amount,
-        is_subscription: purchase.subscription.present?
+        is_subscription: purchase.subscription.present?,
+        is_paypal: dispute_evidence.disputable.charge_processor == PaypalChargeProcessor.charge_processor_id
       }
     end
 

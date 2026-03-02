@@ -1790,4 +1790,158 @@ describe PaypalChargeProcessor, :vcr do
       end
     end
   end
+
+  describe "#accept_dispute_claim" do
+    let(:processor) { PaypalChargeProcessor.new }
+    let(:purchase) { create(:purchase, charge_processor_id: PaypalChargeProcessor.charge_processor_id, stripe_transaction_id: "PAYPAL_CAPTURE_456") }
+    let(:merchant_account) { create(:merchant_account_paypal, charge_processor_merchant_id: "MERCHANT_456") }
+    let(:dispute) do
+      purchase.update!(merchant_account:)
+      create(:dispute_formalized, purchase:, charge_processor_dispute_id: "PP-D-99999")
+    end
+
+    context "when accept claim succeeds" do
+      before do
+        allow_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute).and_return(
+          OpenStruct.new(status_code: 200, result: OpenStruct.new(name: "SUCCESS"), headers: {})
+        )
+      end
+
+      it "returns the API response" do
+        response = processor.accept_dispute_claim(dispute, merchant_account:)
+        expect(response.status_code).to eq(200)
+      end
+    end
+
+    context "when dispute has no charge_processor_dispute_id" do
+      before { dispute.update!(charge_processor_dispute_id: nil) }
+
+      it "raises ChargeProcessorInvalidRequestError" do
+        expect do
+          processor.accept_dispute_claim(dispute, merchant_account:)
+        end.to raise_error(ChargeProcessorInvalidRequestError, /has no charge_processor_dispute_id/)
+      end
+    end
+
+    context "when API returns error" do
+      before do
+        allow_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute).and_raise(
+          PayPalHttp::HttpError.new(422, OpenStruct.new(name: "DISPUTE_ALREADY_RESOLVED", details: [OpenStruct.new(description: "Dispute already resolved")]), {})
+        )
+      end
+
+      it "raises ChargeProcessorInvalidRequestError" do
+        expect do
+          processor.accept_dispute_claim(dispute, merchant_account:)
+        end.to raise_error(ChargeProcessorInvalidRequestError, /DISPUTE_ALREADY_RESOLVED/)
+      end
+    end
+
+    context "when merchant_account is auto-resolved from purchase" do
+      before do
+        allow_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute).and_return(
+          OpenStruct.new(status_code: 200, result: OpenStruct.new(name: "SUCCESS"), headers: {})
+        )
+      end
+
+      it "finds the merchant account from the purchase transaction" do
+        response = processor.accept_dispute_claim(dispute)
+        expect(response.status_code).to eq(200)
+      end
+    end
+
+    context "when no merchant account exists for the transaction" do
+      it "raises ChargeProcessorInvalidRequestError" do
+        dispute
+        purchase.update_column(:merchant_account_id, nil)
+
+        expect do
+          processor.accept_dispute_claim(dispute)
+        end.to raise_error(ChargeProcessorInvalidRequestError, /No merchant account found/)
+      end
+    end
+  end
+
+  describe ".handle_dispute_updated_event" do
+    let(:purchase) { create(:purchase_with_balance, id: 1001, stripe_transaction_id: "6Y199803HH2987814") }
+
+    before do
+      allow_any_instance_of(Purchase).to receive(:fight_chargeback).and_return(true)
+      allow_any_instance_of(Purchase).to receive(:secure_external_id).and_return("sample-secure-id")
+      allow(Purchase).to receive(:find_by_external_id).and_return(purchase)
+    end
+
+    it "does not raise for non-resolved status updates" do
+      event_info = {
+        "event_type" => PaypalEventType::CUSTOMER_DISPUTE_UPDATED,
+        "resource" => {
+          "dispute_id" => "PP-D-12345",
+          "status" => "UNDER_REVIEW",
+          "reason" => "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+          "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814" }],
+          "create_time" => "2024-01-01T00:00:00Z"
+        }
+      }
+
+      expect { described_class.handle_order_events(event_info) }.not_to raise_error
+    end
+
+    it "delegates to dispute resolved handler when status is RESOLVED" do
+      created_event = {
+        "event_type" => PaypalEventType::CUSTOMER_DISPUTE_CREATED,
+        "resource" => {
+          "dispute_id" => "PP-D-12345",
+          "status" => "OPEN",
+          "reason" => "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+          "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814" }],
+          "create_time" => "2024-01-01T00:00:00Z"
+        }
+      }
+      described_class.handle_order_events(created_event)
+
+      updated_event = {
+        "event_type" => PaypalEventType::CUSTOMER_DISPUTE_UPDATED,
+        "resource" => {
+          "dispute_id" => "PP-D-12345",
+          "status" => "RESOLVED",
+          "reason" => "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+          "dispute_outcome" => { "outcome_code" => "RESOLVED_SELLER_FAVOUR" },
+          "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814" }],
+          "create_time" => "2024-01-02T00:00:00Z"
+        }
+      }
+
+      described_class.handle_order_events(updated_event)
+      expect(purchase.reload.chargeback_reversed).to be(true)
+    end
+
+    it "handles buyer-favour resolution via UPDATED event" do
+      created_event = {
+        "event_type" => PaypalEventType::CUSTOMER_DISPUTE_CREATED,
+        "resource" => {
+          "dispute_id" => "PP-D-12345",
+          "status" => "OPEN",
+          "reason" => "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+          "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814" }],
+          "create_time" => "2024-01-01T00:00:00Z"
+        }
+      }
+      described_class.handle_order_events(created_event)
+
+      updated_event = {
+        "event_type" => PaypalEventType::CUSTOMER_DISPUTE_UPDATED,
+        "resource" => {
+          "dispute_id" => "PP-D-12345",
+          "status" => "RESOLVED",
+          "reason" => "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+          "dispute_outcome" => { "outcome_code" => "RESOLVED_BUYER_FAVOUR" },
+          "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814" }],
+          "create_time" => "2024-01-02T00:00:00Z"
+        }
+      }
+
+      described_class.handle_order_events(updated_event)
+      expect(purchase.reload.dispute.state).to eq("lost")
+    end
+  end
 end

@@ -4,7 +4,7 @@ class Purchases::DisputeEvidenceController < ApplicationController
   layout "inertia"
 
   before_action :set_purchase, :set_dispute_evidence
-  before_action :check_if_needs_redirect, except: [:success]
+  before_action :check_if_needs_redirect, except: [:success, :accept]
 
   def show
     set_meta_tag(title: "Submit additional information")
@@ -18,6 +18,42 @@ class Purchases::DisputeEvidenceController < ApplicationController
     set_noindex_header
 
     render inertia: "Purchases/DisputeEvidence/Success"
+  end
+
+  def accept
+    dispute = @dispute_evidence.dispute
+    disputable = dispute.disputable
+
+    if disputable.charge_processor != PaypalChargeProcessor.charge_processor_id
+      redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: "This action is only available for PayPal disputes."
+      return
+    end
+
+    if @dispute_evidence.not_seller_contacted?
+      redirect_to dashboard_url, alert: "You are not allowed to perform this action."
+      return
+    end
+
+    if @dispute_evidence.seller_submitted?
+      redirect_to dashboard_url, alert: "Evidence has already been submitted for this dispute."
+      return
+    end
+
+    if @dispute_evidence.resolved?
+      redirect_to dashboard_url, alert: "This dispute has already been resolved."
+      return
+    end
+
+    processor = PaypalChargeProcessor.new
+    processor.accept_dispute_claim(dispute)
+    @dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+
+    redirect_to success_purchase_dispute_evidence_path(@purchase.external_id), status: :see_other
+  rescue ChargeProcessorInvalidRequestError => e
+    redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: e.message
+  rescue StandardError => e
+    Rails.logger.error "Unexpected error accepting dispute #{dispute&.id}: #{e.class} #{e.message}"
+    redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: "Something went wrong while accepting the dispute. Please try again."
   end
 
   def update

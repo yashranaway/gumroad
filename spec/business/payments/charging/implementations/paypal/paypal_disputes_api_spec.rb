@@ -60,8 +60,9 @@ describe PaypalDisputesApi do
 
       it "sets evidence_type to PROOF_OF_FULFILLMENT when tracking info is present" do
         expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
-          expect(request.body[:evidence_type]).to eq("PROOF_OF_FULFILLMENT")
-          expect(request.body[:evidence_info]).to eq({ tracking_info: [tracking_info] })
+          evidence = request.body[:evidences].first
+          expect(evidence[:evidence_type]).to eq("PROOF_OF_FULFILLMENT")
+          expect(evidence[:evidence_info]).to eq({ tracking_info: [tracking_info] })
           successful_response
         end.and_return(successful_response)
 
@@ -75,8 +76,9 @@ describe PaypalDisputesApi do
 
       it "sets evidence_type to OTHER when no tracking info" do
         expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
-          expect(request.body[:evidence_type]).to eq("OTHER")
-          expect(request.body[:evidence_info]).to be_nil
+          evidence = request.body[:evidences].first
+          expect(evidence[:evidence_type]).to eq("OTHER")
+          expect(evidence[:evidence_info]).to be_nil
           successful_response
         end.and_return(successful_response)
 
@@ -92,7 +94,8 @@ describe PaypalDisputesApi do
         long_notes = "a" * 3000
 
         expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
-          expect(request.body[:notes].length).to eq(2000)
+          evidence = request.body[:evidences].first
+          expect(evidence[:notes].length).to eq(2000)
           successful_response
         end.and_return(successful_response)
 
@@ -125,7 +128,8 @@ describe PaypalDisputesApi do
 
       it "accepts evidence_type parameter for dispute reason mapping" do
         expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
-          expect(request.body[:evidence_type]).to eq("PROOF_OF_REFUND")
+          evidence = request.body[:evidences].first
+          expect(evidence[:evidence_type]).to eq("PROOF_OF_REFUND")
           successful_response
         end.and_return(successful_response)
 
@@ -140,7 +144,8 @@ describe PaypalDisputesApi do
 
       it "overrides evidence_type to PROOF_OF_FULFILLMENT when tracking info present" do
         expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
-          expect(request.body[:evidence_type]).to eq("PROOF_OF_FULFILLMENT")
+          evidence = request.body[:evidences].first
+          expect(evidence[:evidence_type]).to eq("PROOF_OF_FULFILLMENT")
           successful_response
         end.and_return(successful_response)
 
@@ -215,6 +220,68 @@ describe PaypalDisputesApi do
         response = api.provide_evidence(dispute_id:, merchant_account:, notes:)
 
         expect(response.status_code).to eq(500)
+        expect(api.successful_response?(response)).to be false
+      end
+    end
+  end
+
+  describe "#accept_claim" do
+    context "when accept claim succeeds" do
+      let(:successful_response) do
+        OpenStruct.new(
+          status_code: 200,
+          result: OpenStruct.new(
+            links: [{ rel: "self", href: "https://api.paypal.com/v1/customer/disputes/#{dispute_id}" }]
+          )
+        )
+      end
+
+      before do
+        allow_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute).and_return(successful_response)
+      end
+
+      it "sends POST request to accept-claim endpoint" do
+        expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
+          expect(request.path).to eq("/v1/customer/disputes/#{dispute_id}/accept-claim")
+          expect(request.verb).to eq("POST")
+          successful_response
+        end.and_return(successful_response)
+
+        api.accept_claim(dispute_id:, merchant_account:)
+      end
+
+      it "includes idempotency key header" do
+        expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
+          expect(request.headers["PayPal-Request-Id"]).to eq("gumroad-dispute-accept-#{dispute_id}")
+          successful_response
+        end.and_return(successful_response)
+
+        api.accept_claim(dispute_id:, merchant_account:)
+      end
+
+      it "includes note in body when provided" do
+        expect_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute) do |_client, request|
+          expect(request.body[:note]).to eq("Seller accepted the claim.")
+          successful_response
+        end.and_return(successful_response)
+
+        api.accept_claim(dispute_id:, merchant_account:, note: "Seller accepted the claim.")
+      end
+
+      it "returns successful response" do
+        response = api.accept_claim(dispute_id:, merchant_account:)
+        expect(api.successful_response?(response)).to be true
+      end
+    end
+
+    context "when accept claim fails" do
+      it "handles PayPal HTTP errors gracefully" do
+        allow_any_instance_of(PayPal::PayPalHttpClient).to receive(:execute).and_raise(
+          PayPalHttp::HttpError.new(422, OpenStruct.new(name: "DISPUTE_ALREADY_RESOLVED"), {})
+        )
+
+        response = api.accept_claim(dispute_id:, merchant_account:)
+        expect(response.status_code).to eq(422)
         expect(api.successful_response?(response)).to be false
       end
     end

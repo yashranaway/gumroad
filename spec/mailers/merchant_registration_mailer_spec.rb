@@ -97,4 +97,17 @@ describe MerchantRegistrationMailer do
       expect(mail.body.encoded).to include("Thank you for your patience and understanding.")
     end
   end
+
+  describe "#paypal_dispute_permissions_needed" do
+    let(:user) { create(:user) }
+    let(:mail) { described_class.paypal_dispute_permissions_needed(user.id) }
+
+    it "sends email with correct subject and content" do
+      expect(mail.to).to eq([user.email])
+      expect(mail.subject).to eq("Action required: Reconnect PayPal to enable automatic dispute handling")
+      expect(mail.body.encoded).to include("automatically fight disputes on your PayPal sales")
+      expect(mail.body.encoded).to include("Reconnect PayPal account")
+      expect(mail.body.encoded).to include(settings_payments_url)
+    end
+  end
 end

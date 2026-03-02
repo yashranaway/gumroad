@@ -1,5 +1,5 @@
 import { FileDetail, Paperclip, Trash } from "@boxicons/react";
-import { useForm, usePage } from "@inertiajs/react";
+import { router, useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -16,6 +16,7 @@ import FileUtils from "$app/utils/file";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -37,6 +38,7 @@ type Props = {
     purchase_for_dispute_evidence_id: string;
     formatted_display_price: string;
     is_subscription: boolean;
+    is_paypal: boolean;
   };
   products: {
     url: string;
@@ -81,6 +83,8 @@ export default function Show() {
   );
   const [blobs, setBlobs] = React.useState<Blobs>(dispute_evidence.blobs);
   const [isUploading, setIsUploading] = React.useState(false);
+  const [isAccepting, setIsAccepting] = React.useState(false);
+  const [showAcceptModal, setShowAcceptModal] = React.useState(false);
 
   const form = useForm<FormData>({
     dispute_evidence: {
@@ -139,6 +143,19 @@ export default function Show() {
       },
     }));
     form.put(Routes.purchase_dispute_evidence_path(disputable.purchase_for_dispute_evidence_id));
+  };
+
+  const performAcceptClaim = () => {
+    setShowAcceptModal(false);
+    setIsAccepting(true);
+    router.post(
+      Routes.accept_purchase_dispute_evidence_path(disputable.purchase_for_dispute_evidence_id),
+      {},
+      {
+        onFinish: () => setIsAccepting(false),
+        onError: () => showAlert("Something went wrong. Please try again.", "error"),
+      },
+    );
   };
 
   const handleFileUpload = () => {
@@ -351,7 +368,7 @@ export default function Show() {
       <CardContent>
         <Button
           color="primary"
-          disabled={!isInfoProvided || form.processing}
+          disabled={!isInfoProvided || form.processing || isAccepting}
           onClick={submitDisputeEvidence}
           className="grow basis-0"
         >
@@ -364,6 +381,46 @@ export default function Show() {
           )}
         </Button>
       </CardContent>
+      {disputable.is_paypal ? (
+        <CardContent>
+          <p>
+            If you'd rather resolve this dispute in the buyer's favor, you can accept the claim. This will refund the
+            buyer and close the dispute.
+          </p>
+          <Button
+            color="danger"
+            outline
+            disabled={form.processing || isAccepting}
+            onClick={() => setShowAcceptModal(true)}
+            className="grow basis-0"
+          >
+            {isAccepting ? (
+              <>
+                <LoadingSpinner /> Accepting...
+              </>
+            ) : (
+              "Accept dispute and refund"
+            )}
+          </Button>
+          <Modal
+            open={showAcceptModal}
+            title="Accept dispute and refund"
+            onClose={() => setShowAcceptModal(false)}
+            footer={
+              <>
+                <Button onClick={() => setShowAcceptModal(false)}>Cancel</Button>
+                <Button color="danger" onClick={performAcceptClaim}>
+                  Accept and refund
+                </Button>
+              </>
+            }
+          >
+            <p>
+              This will resolve the dispute in the buyer's favor and refund the payment. This action cannot be undone.
+            </p>
+          </Modal>
+        </CardContent>
+      ) : null}
     </Card>
   );
 }

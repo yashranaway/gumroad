@@ -527,6 +527,7 @@ Rails.application.routes.draw do
       resources :variants, controller: "purchases/variants", param: :variant_id, only: [:update]
       resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update] do
         get :success
+        post :accept
       end
     end
 

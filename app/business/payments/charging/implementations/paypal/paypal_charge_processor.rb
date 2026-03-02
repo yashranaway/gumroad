@@ -108,6 +108,8 @@ class PaypalChargeProcessor
     case event_info["event_type"]
     when PaypalEventType::CUSTOMER_DISPUTE_CREATED
       handle_dispute_created_event(event_info)
+    when PaypalEventType::CUSTOMER_DISPUTE_UPDATED
+      handle_dispute_updated_event(event_info)
     when PaypalEventType::CUSTOMER_DISPUTE_RESOLVED
       handle_dispute_resolved_event(event_info)
     when PaypalEventType::PAYMENT_CAPTURE_COMPLETED
@@ -126,6 +128,21 @@ class PaypalChargeProcessor
     raise ChargeProcessorError, build_error_message(e.message, event_info)
   end
   private_class_method :handle_dispute_created_event
+
+  def self.handle_dispute_updated_event(event_info)
+    dispute_id = event_info.dig("resource", "dispute_id")
+    dispute_status = event_info.dig("resource", "status")
+    Rails.logger.info "PayPal dispute updated: #{dispute_id} status=#{dispute_status}"
+
+    if dispute_status == "RESOLVED"
+      handle_dispute_resolved_event(event_info)
+    else
+      Rails.logger.info "PayPal dispute #{dispute_id}: no action taken for status=#{dispute_status}"
+    end
+  rescue StandardError => e
+    raise ChargeProcessorError, build_error_message(e.message, event_info)
+  end
+  private_class_method :handle_dispute_updated_event
 
   def self.handle_dispute_resolved_event(event_info)
     dispute_outcome = event_info["resource"]["dispute_outcome"]["outcome_code"]
@@ -646,6 +663,31 @@ class PaypalChargeProcessor
     )
 
     PaypalChargeProcessor.log_paypal_api_response("Provide Dispute Evidence", dispute_id, api_response)
+
+    unless api.successful_response?(api_response)
+      error_message = build_dispute_error_message(api_response)
+      raise ChargeProcessorInvalidRequestError, error_message
+    end
+
+    api_response
+  end
+
+  def accept_dispute_claim(dispute, merchant_account: nil)
+    dispute_id = dispute.charge_processor_dispute_id
+    raise ChargeProcessorInvalidRequestError, "Dispute #{dispute.id} has no charge_processor_dispute_id" if dispute_id.blank?
+
+    paypal_transaction_id = dispute.disputable.charge_processor_transaction_id
+    merchant_account ||= find_merchant_account_for_transaction(paypal_transaction_id)
+    raise ChargeProcessorInvalidRequestError, "No merchant account found for PayPal transaction #{paypal_transaction_id}" unless merchant_account&.charge_processor_merchant_id.present?
+
+    api = PaypalDisputesApi.new
+    api_response = api.accept_claim(
+      dispute_id:,
+      merchant_account:,
+      note: "Seller accepted the dispute claim via Gumroad."
+    )
+
+    PaypalChargeProcessor.log_paypal_api_response("Accept Dispute Claim", dispute_id, api_response)
 
     unless api.successful_response?(api_response)
       error_message = build_dispute_error_message(api_response)

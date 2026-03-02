@@ -34,6 +34,12 @@ class MerchantRegistrationMailer < ApplicationMailer
     mail(subject: @subject, from: NOREPLY_EMAIL_WITH_NAME, to: @user.email)
   end
 
+  def paypal_dispute_permissions_needed(user_id)
+    user = User.find(user_id)
+    @subject = "Action required: Reconnect PayPal to enable automatic dispute handling"
+    mail(subject: @subject, from: NOREPLY_EMAIL_WITH_NAME, to: user.email)
+  end
+
   def stripe_charges_disabled(user_id)
     user = User.find(user_id)
     mail(subject: "Action required: Your sales have stopped", from: NOREPLY_EMAIL_WITH_NAME, to: user.email)

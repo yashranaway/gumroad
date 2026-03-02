@@ -87,7 +87,6 @@ class ContactingCreatorMailer < ApplicationMailer
   def chargeback_notice(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
-    @is_paypal = @disputable.charge_processor == PaypalChargeProcessor.charge_processor_id
     @seller = @disputable.seller
 
     dispute_evidence = dispute.dispute_evidence
@@ -108,9 +107,7 @@ class ContactingCreatorMailer < ApplicationMailer
       end
 
     @subject = \
-      if @is_paypal.present?
-        "A PayPal sale has been disputed"
-      elsif dispute_evidence&.seller_contacted?
+      if dispute_evidence&.seller_contacted?
         "🚨 Urgent: Action required for resolving disputed sale"
       else
         "A sale has been disputed"

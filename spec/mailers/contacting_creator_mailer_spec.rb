@@ -88,11 +88,12 @@ describe ContactingCreatorMailer do
           purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
         end
 
-        it "includes copy about PayPal's dispute process" do
+        it "includes the same dispute fighting copy as Stripe disputes" do
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
           expect(mail.body.encoded).to include "A customer of yours (#{purchase.email}) has disputed their purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
-          expect(mail.body.encoded).to include "Unfortunately, we’re unable to fight disputes on purchases via PayPal Connect since we don’t have access to your PayPal account."
+          expect(mail.body.encoded).to include "We fight every dispute."
+          expect(mail.body.encoded).not_to include "Unfortunately, we’re unable to fight disputes"
         end
       end
     end
@@ -145,15 +146,64 @@ describe ContactingCreatorMailer do
           charge.update!(processor: PaypalChargeProcessor.charge_processor_id)
         end
 
-        it "includes copy about PayPal's dispute process" do
+        it "includes the same dispute fighting copy as Stripe disputes" do
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
           expect(mail.body.encoded).to include "A customer of yours (#{charge.customer_email}) has disputed their purchase of the following items for #{charge.formatted_disputed_amount}."
           charge.disputed_purchases.each do |purchase|
             expect(mail.body.encoded).to include purchase.link.name
           end
-          expect(mail.body.encoded).to include "Unfortunately, we’re unable to fight disputes on purchases via PayPal Connect since we don’t have access to your PayPal account."
+          expect(mail.body.encoded).to include "We fight every dispute."
+          expect(mail.body.encoded).not_to include "Unfortunately, we’re unable to fight disputes"
         end
+      end
+    end
+  end
+
+  describe "chargeback_won" do
+    let(:seller) { create(:named_seller) }
+    let(:purchase) { create(:purchase, link: create(:product, user: seller)) }
+    let(:dispute) { create(:dispute_formalized, purchase:) }
+
+    it "sends won notification for Stripe disputes" do
+      mail = ContactingCreatorMailer.chargeback_won(dispute.id)
+      expect(mail.to).to eq([seller.email])
+      expect(mail.subject).to eq("A dispute has been won")
+      expect(mail.body.encoded).to include("We have won a dispute")
+    end
+
+    context "when the purchase was done via PayPal" do
+      before { purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
+
+      it "sends the same won notification" do
+        mail = ContactingCreatorMailer.chargeback_won(dispute.id)
+        expect(mail.to).to eq([seller.email])
+        expect(mail.subject).to eq("A dispute has been won")
+        expect(mail.body.encoded).to include("We have won a dispute")
+      end
+    end
+  end
+
+  describe "chargeback_lost_no_refund_policy" do
+    let(:seller) { create(:named_seller) }
+    let(:purchase) { create(:purchase, link: create(:product, user: seller)) }
+    let(:dispute) { create(:dispute_formalized, purchase:) }
+
+    it "sends lost notification for Stripe disputes" do
+      mail = ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id)
+      expect(mail.to).to eq([seller.email])
+      expect(mail.subject).to eq("A dispute has been lost")
+      expect(mail.body.encoded).to include("we weren't able to win the dispute")
+    end
+
+    context "when the purchase was done via PayPal" do
+      before { purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
+
+      it "sends the same lost notification" do
+        mail = ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id)
+        expect(mail.to).to eq([seller.email])
+        expect(mail.subject).to eq("A dispute has been lost")
+        expect(mail.body.encoded).to include("we weren't able to win the dispute")
       end
     end
   end

@@ -171,4 +171,69 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
     end
   end
+
+  describe "POST accept" do
+    context "when the dispute is a PayPal dispute" do
+      before do
+        purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+      end
+
+      it "calls accept_dispute_claim and redirects to success" do
+        allow_any_instance_of(PaypalChargeProcessor).to receive(:accept_dispute_claim).and_return(
+          OpenStruct.new(status_code: 200)
+        )
+
+        post :accept, params: { purchase_id: purchase.external_id }
+
+        expect(dispute_evidence.reload.resolved?).to be(true)
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+      end
+
+      it "redirects with error when accept_dispute_claim fails" do
+        allow_any_instance_of(PaypalChargeProcessor).to receive(:accept_dispute_claim)
+          .and_raise(ChargeProcessorInvalidRequestError.new("PayPal Disputes API Error: DISPUTE_ALREADY_RESOLVED"))
+
+        post :accept, params: { purchase_id: purchase.external_id }
+
+        expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+        expect(flash[:alert]).to include("DISPUTE_ALREADY_RESOLVED")
+      end
+
+      it "redirects when dispute is already resolved" do
+        dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+
+        post :accept, params: { purchase_id: purchase.external_id }
+
+        expect(response).to redirect_to(dashboard_url)
+        expect(flash[:alert]).to eq("This dispute has already been resolved.")
+      end
+
+      it "redirects when seller has not been contacted" do
+        dispute_evidence.update_as_not_seller_contacted!
+
+        post :accept, params: { purchase_id: purchase.external_id }
+
+        expect(response).to redirect_to(dashboard_url)
+        expect(flash[:alert]).to eq("You are not allowed to perform this action.")
+      end
+
+      it "redirects when evidence has already been submitted" do
+        dispute_evidence.update_as_seller_submitted!
+
+        post :accept, params: { purchase_id: purchase.external_id }
+
+        expect(response).to redirect_to(dashboard_url)
+        expect(flash[:alert]).to eq("Evidence has already been submitted for this dispute.")
+      end
+    end
+
+    context "when the dispute is a Stripe dispute" do
+      it "redirects with error" do
+        post :accept, params: { purchase_id: purchase.external_id }
+
+        expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+        expect(flash[:alert]).to eq("This action is only available for PayPal disputes.")
+      end
+    end
+  end
 end

@@ -7,14 +7,14 @@ export const cancellationRebuttalOptions = {
 export type CancellationRebuttalOption = keyof typeof cancellationRebuttalOptions;
 
 export const reasonForWinningOptions = {
-  cardholder_withdrew_dispute: "The cardholder withdrew the dispute",
-  cardholder_refunded: "The cardholder was refunded",
+  cardholder_withdrew_dispute: "The buyer withdrew the dispute",
+  cardholder_refunded: "The buyer was refunded",
   transaction_non_refundable: "The transaction was non-refundable",
   refund_request_too_late: "The refund or cancellation request was made after the date allowed by your terms",
   product_as_advertised: "The product received was as advertised",
-  cardholder_received_credit: "The cardholder received a credit or voucher",
-  cardholder_received_product: "The cardholder received the product or service",
-  purchase_made_by_cardholder: "The purchase was made by the rightful cardholder",
+  cardholder_received_credit: "The buyer received a credit or voucher",
+  cardholder_received_product: "The buyer received the product or service",
+  purchase_made_by_cardholder: "The purchase was made by the rightful buyer",
   purchase_is_unique: "The purchase is unique",
   product_cancelled_gvnt:
     "The product, service, event or booking was cancelled or delayed due to a government order (COVID-19)",
@@ -24,7 +24,7 @@ export type ReasonForWinningOption = keyof typeof reasonForWinningOptions;
 
 export const disputeReasons = {
   credit_not_processed: {
-    message: "The cardholder claims you have not yet refunded their return or cancellation.",
+    message: "The buyer claims you have not yet refunded their return or cancellation.",
     refusalRequiresExplanation: true,
     reasonsForWinning: [
       "cardholder_withdrew_dispute",
@@ -37,11 +37,11 @@ export const disputeReasons = {
     ],
   },
   duplicate: {
-    message: "The cardholder claims they were charged multiple times for the same product or service.",
+    message: "The buyer claims they were charged multiple times for the same product or service.",
     reasonsForWinning: ["cardholder_withdrew_dispute", "cardholder_refunded", "purchase_is_unique", "other"],
   },
   fraudulent: {
-    message: "The cardholder claims they did not authorize the purchase.",
+    message: "The buyer claims they did not authorize the purchase.",
     reasonsForWinning: ["cardholder_withdrew_dispute", "cardholder_refunded", "purchase_made_by_cardholder", "other"],
   },
   general: {
@@ -63,7 +63,7 @@ export const disputeReasons = {
     refusalRequiresExplanation: true,
   },
   product_not_received: {
-    message: "The cardholder claims they did not receive the product or service.",
+    message: "The buyer claims they did not receive the product or service.",
     reasonsForWinning: [
       "cardholder_withdrew_dispute",
       "cardholder_refunded",
@@ -73,7 +73,7 @@ export const disputeReasons = {
     ],
   },
   product_unacceptable: {
-    message: "The cardholder claims the product or service was defective, damaged, or not as described.",
+    message: "The buyer claims the product or service was defective, damaged, or not as described.",
     reasonsForWinning: [
       "cardholder_withdrew_dispute",
       "cardholder_refunded",
@@ -96,7 +96,7 @@ export const disputeReasons = {
     ],
   },
   unrecognized: {
-    message: "The cardholder doesn't recognize the payment appearing on their account statement.",
+    message: "The buyer doesn't recognize the payment appearing on their account statement.",
     reasonsForWinning: [
       "cardholder_withdrew_dispute",
       "cardholder_refunded",
