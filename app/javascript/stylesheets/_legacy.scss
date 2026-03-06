@@ -122,11 +122,6 @@ form > main section {
   }
 }
 
-// Firefox-specific fix to avoid showing node content as selected text
-.rich-text .selected *::selection {
-  background: none;
-}
-
 article.product-card {
   .thumbnails > * {
     // Firefox doesn't stretch the image to full width without this (even though justify-items should default to stretch)
