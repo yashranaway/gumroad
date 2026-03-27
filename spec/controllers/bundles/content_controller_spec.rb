@@ -114,6 +114,30 @@ describe Bundles::ContentController, inertia: true do
       end
     end
 
+    context "when a stale deleted bundle product's product later gains variants" do
+      let(:product_a) { create(:product, user: seller) }
+
+      it "saves successfully without revalidating the stale deleted row" do
+        bundle_product_a = create(:bundle_product, bundle: bundle, product: product_a)
+        bundle_product_a.mark_deleted!
+
+        category = create(:variant_category, title: "Versions", link: product_a)
+        create(:variant, variant_category: category, name: "Version 1")
+        create(:variant, variant_category: category, name: "Version 2")
+        product_a.reload
+
+        put :update, params: {
+          bundle_id: bundle.external_id,
+          products: [
+            { product_id: product.external_id, quantity: 1 }
+          ]
+        }
+
+        expect(response).to redirect_to(edit_bundle_content_path(bundle.external_id))
+        expect(flash[:notice]).to eq("Changes saved!")
+      end
+    end
+
     context "when there is a validation error" do
       let(:published_bundle) do
         bundle = create(:product, :bundle, user: seller, price_cents: 2000, draft: false)
