@@ -51,6 +51,24 @@ describe("getPagedAffiliatedProducts", () => {
     expect(error).toBeInstanceOf(ResponseError);
     expect(error).not.toBeInstanceOf(AbortError);
   });
+
+  it("rejects an error status with a ResponseError instead of using its body as products", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ success: false, error: "Not allowed" }), {
+            status: 403,
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      ),
+    );
+
+    const { response } = getPagedAffiliatedProducts(1);
+
+    await expect(response).rejects.toBeInstanceOf(ResponseError);
+  });
 });
 
 describe("removeSelfAsAffiliate", () => {
@@ -99,6 +117,25 @@ describe("removeSelfAsAffiliate", () => {
     expect(error).not.toBeInstanceOf(AffiliationAlreadyRemovedError);
     if (!(error instanceof ResponseError)) throw error;
     expect(error.message).toBe("Your role as marketing cannot perform this action.");
+  });
+
+  it("keeps the generic message for a JSON failure without an error string", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ success: false }), {
+            status: 403,
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      ),
+    );
+
+    const error = await send();
+    expect(error).toBeInstanceOf(ResponseError);
+    if (!(error instanceof ResponseError)) throw error;
+    expect(error.message).toBe("Sorry, something went wrong. Please try again.");
   });
 
   it("keeps the generic message for a non-JSON failure that is not a stale row", async () => {

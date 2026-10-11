@@ -1,7 +1,5 @@
-import typia from "typia";
-
 import { CardProduct } from "$app/parsers/product";
-import { request } from "$app/utils/request";
+import { request, readJson } from "$app/utils/request";
 
 type SearchRequestType = {
   from: number;
@@ -41,8 +39,6 @@ export function getSearchResults(data: SearchRequest): { response: Promise<Searc
     abortSignal: abort.signal,
     url: Routes.products_search_path(data),
     accept: "json",
-  })
-    .then((res) => res.json())
-    .then((json) => typia.assert<SearchResults>(json));
+  }).then((res) => readJson<SearchResults>(res));
   return { response: promise, cancel: () => abort.abort() };
 }
