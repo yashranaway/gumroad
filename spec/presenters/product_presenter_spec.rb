@@ -674,9 +674,55 @@ describe ProductPresenter do
           custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
           custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
           ai_generated: false,
+          custom_attribute_name_suggestions: [],
           dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
       )
+    end
+
+    describe "custom_attribute_name_suggestions" do
+      it "offers the detail names the seller uses on their other products" do
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "Format", "value" => "PDF" }, { "name" => "Pages", "value" => "12" }])
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq(["Format", "Pages"])
+      end
+
+      it "suggests a name used on several products once" do
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "Format", "value" => "PDF" }])
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "Format", "value" => "Hardcover" }])
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq(["Format"])
+      end
+
+      it "leaves out the product being edited, other sellers, and blank names" do
+        create(:product).save_custom_attributes([{ "name" => "Format", "value" => "PDF" }])
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "", "value" => "PDF" }])
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq([])
+      end
+
+      it "returns the suggestions in name order, not the order the products were updated" do
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "Pages", "value" => "12" }, { "name" => "Format", "value" => "PDF" }])
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq(["Format", "Pages"])
+      end
+
+      it "caps the list at the first 20 names in order, not an arbitrary 20" do
+        # Inserted in reverse so "insertion order" and "name order" cannot agree by accident.
+        names = (1..25).map { format("Detail %02d", _1) }
+        create(:product, user: product.user).save_custom_attributes(names.reverse.map { { "name" => _1, "value" => "Value" } })
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq(names.first(20))
+      end
+
+      it "suggests a detail name too long for a VARCHAR(255) column to hold" do
+        # JSON_TABLE returns NULL (it does not truncate) for a name wider than the column, and
+        # nothing caps the length of a name the editor stores.
+        long_name = "S" * 300
+        create(:product, user: product.user).save_custom_attributes([{ "name" => long_name, "value" => "PDF" }])
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq([long_name])
+      end
     end
 
     context "when the shared-content flag hides recoverable variant content" do
@@ -1078,6 +1124,7 @@ describe ProductPresenter do
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
             ai_generated: false,
+            custom_attribute_name_suggestions: [],
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
         )
@@ -1338,6 +1385,7 @@ describe ProductPresenter do
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
             ai_generated: false,
+            custom_attribute_name_suggestions: [],
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
         )
