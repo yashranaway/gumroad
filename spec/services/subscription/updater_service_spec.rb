@@ -2812,6 +2812,177 @@ describe Subscription::UpdaterService, :vcr do
       ensure
         Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end
+
+      # Same setup requests as the restart examples, so their cassette replays here.
+      describe "restarting with an Indian card whose mandate is still pending",
+               vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/using_the_existing_card/does_not_send_email_when_charge_user_fails" } do
+        let(:merchant_account) do
+          create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
+        end
+        let(:replacement_card) do
+          create(
+            :indian_stripe_credit_card,
+            stripe_customer_id: "cus_replacement",
+            processor_payment_method_id: "pm_replacement",
+            stripe_fingerprint: "fingerprint_replacement",
+            stripe_setup_intent_id: "seti_replacement"
+          )
+        end
+        let(:stripe_chargeable) do
+          StripeChargeablePaymentMethod.new("pm_replacement", zip_code: "12345", product_permalink: @product.unique_permalink)
+        end
+        let(:restart_params) do
+          same_plan_params.merge(perceived_upgrade_price_cents: @original_tier_quarterly_price.price_cents)
+        end
+        let(:pending_message) { Subscription::UpdaterService::MANDATE_PENDING_RESTART_MESSAGE }
+        let(:rejected_message) { "We could not verify this card for recurring payments. Please try the card again or use a different payment method." }
+
+        # Terms are read when Stripe is asked, so they match whatever plan the updater has applied by then.
+        def stub_stripe_mandate
+          allow(ChargeProcessor).to receive(:get_setup_intent) do
+            terms = @subscription.reload.indian_card_mandate_terms
+            instance_double(
+              StripeSetupIntent,
+              succeeded?: true,
+              mandate: "mandate_pending",
+              payment_method_id: "pm_replacement",
+              customer_id: "cus_replacement",
+              usage: "off_session",
+              metadata: { gumroad_subscription_id: @subscription.external_id },
+              card_mandate_options: Stripe::StripeObject.construct_from(
+                amount_type: "maximum",
+                amount: terms[:amount],
+                currency: terms[:currency],
+                reference: StripeChargeProcessor.indian_card_mandate_reference(@subscription.external_id),
+                interval: terms[:interval],
+                interval_count: terms[:interval_count],
+                supported_types: ["india"]
+              )
+            )
+          end
+          allow(ChargeProcessor).to receive(:get_mandate) do
+            Stripe::Mandate.construct_from(id: "mandate_pending", status: @mandate_status, payment_method: "pm_replacement")
+          end
+        end
+
+        def restart_with_replacement_card(params = restart_params)
+          service = described_class.new(
+            subscription: @subscription,
+            gumroad_guid: @gumroad_guid,
+            params: params.except(:use_existing_card),
+            logged_in_user: @user,
+            remote_ip: @remote_ip,
+          )
+          allow(service).to receive(:get_chargeable) do
+            service.chargeable = instance_double(Chargeable, get_chargeable_for: stripe_chargeable)
+            nil
+          end
+          allow(CreditCard).to receive(:create).and_return(replacement_card)
+          service.perform
+        end
+
+        def restart_with_saved_card
+          described_class.new(
+            subscription: @subscription.reload,
+            gumroad_guid: @gumroad_guid,
+            params: restart_params,
+            logged_in_user: @user,
+            remote_ip: @remote_ip,
+          ).perform
+        end
+
+        before do
+          allow(MerchantAccount).to receive(:gumroad).with(StripeChargeProcessor.charge_processor_id).and_return(merchant_account)
+          Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+          Feature.activate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user)
+          @subscription.update!(cancelled_at: @originally_subscribed_at + 3.months, cancelled_by_buyer: true)
+          travel_to(@originally_subscribed_at + 4.months)
+          @purchase_count_before = @subscription.purchases.count
+          @mandate_status = "pending"
+          stub_stripe_mandate
+          allow_any_instance_of(Subscription).to receive(:send_restart_notifications!)
+          allow(Rails.logger).to receive(:info).and_call_original
+        end
+
+        after do
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+          Feature.deactivate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user)
+        end
+
+        it "keeps the card with renewal stopped, and neither restarts nor charges" do
+          expect_any_instance_of(described_class).not_to receive(:charge_user!)
+          # A fixing here would change the terms a checkout retry's reuse check expects.
+          expect(@subscription).not_to receive(:record_indian_card_mandate_presentment!)
+
+          result = restart_with_replacement_card
+
+          expect(result).to eq(success: false, error_message: pending_message)
+          @subscription.reload
+          expect(@subscription).not_to be_alive(include_pending_cancellation: false)
+          expect(@subscription.credit_card).to eq(replacement_card)
+          expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+          expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+          expect(@subscription.purchases.count).to eq(@purchase_count_before)
+          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending")
+        end
+
+        it "asks the buyer to wait when they retry on the saved card before the bank confirms" do
+          restart_with_replacement_card
+          expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+          result = restart_with_saved_card
+
+          expect(result).to eq(success: false, error_message: pending_message)
+          expect(@subscription.reload).not_to be_alive(include_pending_cancellation: false)
+          expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+        end
+
+        it "restarts on the saved card once the bank confirms the mandate" do
+          restart_with_replacement_card
+          @mandate_status = "active"
+          allow_any_instance_of(described_class).to receive(:charge_user!).and_return(success: true)
+          # The hold skipped the fixing, and an INR renewal fails without one.
+          expect(@subscription).to receive(:record_indian_card_mandate_presentment!).and_call_original
+
+          result = restart_with_saved_card
+
+          expect(result[:success]).to be(true)
+          @subscription.reload
+          expect(@subscription).to be_alive(include_pending_cancellation: false)
+          expect(@subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+          expect(@subscription.credit_card).to eq(replacement_card)
+          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.restarted subscription_id=#{@subscription.id} mandate_id=mandate_pending")
+        end
+
+        it "does not log the restart while the charge still needs card approval" do
+          restart_with_replacement_card
+          @mandate_status = "active"
+          allow_any_instance_of(described_class).to receive(:charge_user!).and_return(success: true, requires_card_action: true)
+
+          restart_with_saved_card
+
+          expect(Rails.logger).not_to have_received(:info).with(a_string_including("indian_card_mandate.pending_restart.restarted"))
+        end
+
+        it "still rejects a pending mandate when the restart also changes the plan" do
+          params = upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents)
+
+          result = restart_with_replacement_card(params)
+
+          expect(result).to eq(success: false, error_message: rejected_message)
+          expect(@subscription.reload.credit_card).to eq(@credit_card)
+          expect(@subscription.stripe_mandate_id).to be_nil
+        end
+
+        it "still rejects a pending mandate when the feature is off" do
+          Feature.deactivate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user)
+
+          result = restart_with_replacement_card
+
+          expect(result).to eq(success: false, error_message: rejected_message)
+          expect(@subscription.reload.credit_card).to eq(@credit_card)
+        end
+      end
     end
 
     context "non-tiered membership subscription" do

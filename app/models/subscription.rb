@@ -39,6 +39,7 @@ class Subscription < ApplicationRecord
   private_constant :AutoRenewalDiscount
 
   AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED = Object.new
+  INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE = :india_card_mandate_pending_restart
   private_constant :AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED
 
   module ResubscriptionReason
@@ -568,6 +569,66 @@ class Subscription < ApplicationRecord
       !original_purchase&.is_multi_buy? &&
       !original_purchase&.order&.purchases&.many? &&
       merchant_account.present? && !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
+  end
+
+  def india_card_mandate_pending_restart_enabled?
+    india_card_mandate_reliability_enabled? && Feature.active?(INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, seller)
+  end
+
+  # Pairs with `indian_card_mandate.pending_restart.held` to measure whether held buyers come back.
+  def log_indian_card_mandate_restart
+    return unless stripe_mandate_id.present? && india_card_mandate_pending_restart_enabled?
+
+    Rails.logger.info("indian_card_mandate.pending_restart.restarted subscription_id=#{id} mandate_id=#{stripe_mandate_id}")
+  end
+
+  # The card a restart stored while its e-mandate was still pending. Handing it back when the buyer enters the
+  # same card again stops each retry from creating another SetupIntent and mandate, and lets the retry restart
+  # once the bank confirms.
+  def reusable_pending_indian_card(billing_info: nil, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    return unless india_card_mandate_pending_restart_enabled?
+    return unless renewal_disabled_due_to_indian_card_mandate? && stripe_mandate_id.present?
+
+    card = credit_card
+    setup_intent_id = card&.stripe_setup_intent_id
+    return if setup_intent_id.blank?
+
+    _mandate, status, = indian_card_mandate_for(card.id)
+    return unless status.in?(%w[pending active])
+
+    setup_intent = ChargeProcessor.get_setup_intent(renewal_merchant_account, setup_intent_id)
+    return unless setup_intent&.succeeded? &&
+      setup_intent.mandate == stripe_mandate_id &&
+      setup_intent.customer_id == card.stripe_customer_id &&
+      setup_intent.payment_method_id == card.processor_payment_method_id &&
+      indian_card_setup_intent_terms_match?(setup_intent, billing_info:, authenticated_offer_code_buyer:)
+
+    card
+  end
+
+  def indian_card_setup_intent_terms_match?(setup_intent, billing_info: nil, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    return false unless setup_intent&.usage == "off_session"
+    return false unless setup_intent.metadata[:gumroad_subscription_id] == external_id
+
+    mandate_options = setup_intent.card_mandate_options
+    return false if mandate_options.blank?
+
+    # Recompute the terms with the rate stamped when the setup intent was created, so a
+    # cached-rate refresh between setup and this validation cannot reject the mandate the
+    # buyer just approved. The stamp is server-authored metadata; a missing or unusable
+    # value falls back to the live rate (intents created before the stamp existed).
+    fixed_rate = BigDecimal(setup_intent.metadata[:gumroad_mandate_rate].to_s, exception: false)
+    fixed_rate = nil unless fixed_rate&.positive?
+    expected_terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate:)
+    return false if expected_terms.blank?
+
+    mandate_options.amount_type == "maximum" &&
+      mandate_options.amount.to_i == expected_terms[:amount] &&
+      mandate_options.currency.to_s.downcase == expected_terms[:currency] &&
+      StripeChargeProcessor.indian_card_mandate_reference_for_subscription?(mandate_options.reference, external_id) &&
+      mandate_options.interval == expected_terms[:interval] &&
+      mandate_options.interval_count == expected_terms[:interval_count] &&
+      Array(mandate_options.supported_types).include?("india")
   end
 
   def indian_card_mandate_terms(
