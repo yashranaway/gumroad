@@ -740,6 +740,36 @@ describe Exports::Payouts::Csv, :vcr do
     end
   end
 
+  describe "non-USD payout with a partial refund followed by a chargeback" do
+    before do
+      allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
+      allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
+
+      @seller = create :user
+      travel_to(1.month.ago) do
+        product = create :product, user: @seller, price_cents: 10_00
+        @sale = create_purchase price_cents: 10_00, seller: @seller, link: product
+        create_purchase price_cents: 10_00, seller: @seller, link: product
+      end
+
+      travel_to(1.month.ago + 1.day) do
+        @sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 3_00), @seller.id)
+        event = OpenStruct.new(created_at: Time.current, extras: {}, flow_of_funds: FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @sale.reload.total_transaction_cents))
+        @sale.handle_event_dispute_formalized!(event)
+      end
+
+      @payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @seller)
+      @payout.update!(currency: Currency::GBP)
+    end
+
+    it "nets to the payout's balances" do
+      parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: @payout).perform)
+
+      expect(parsed_csv.map(&:first)).to include("Partial Refund", "Chargeback")
+      expect(parsed_csv.last.last.to_f).to eq(@payout.balances.sum(:amount_cents) / 100.0)
+    end
+  end
+
   def csv_safe(value)
     return value if value.nil?
     str = value.to_s
