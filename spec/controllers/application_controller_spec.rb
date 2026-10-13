@@ -517,5 +517,28 @@ describe ApplicationController do
 
       expect(controller.send(:seller_has_payment_requirements?)).to be(true)
     end
+
+    it "keeps the flash across the compliance redirect so an earlier alert survives it" do
+      allow($redis).to receive(:sismember).and_return(true)
+      allow(seller).to receive_message_chain(:merchant_accounts, :alive, :stripe, :last).and_return(double)
+      allow(seller).to receive_message_chain(:user_compliance_info_requests, :requested, :present?).and_return(true)
+      allow(controller).to receive(:redirect_to).and_return(true)
+      expect(controller.flash).to receive(:keep)
+
+      controller.send(:check_payment_details)
+    end
+
+    it "does not keep the flash when the seller's Stripe capabilities are active and the page renders" do
+      allow($redis).to receive(:sismember).and_return(true)
+      allow($redis).to receive(:srem)
+      merchant_account = double(charge_processor_merchant_id: "acct_123")
+      allow(seller).to receive_message_chain(:merchant_accounts, :alive, :stripe, :last).and_return(merchant_account)
+      allow(seller).to receive_message_chain(:user_compliance_info_requests, :requested, :present?).and_return(false)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_123").and_return(double(capabilities: { card_payments: "active", transfers: "active" }))
+      expect(controller.flash).not_to receive(:keep)
+      expect(controller).not_to receive(:redirect_to)
+
+      controller.send(:check_payment_details)
+    end
   end
 end
