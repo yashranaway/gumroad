@@ -4,7 +4,10 @@ module Product::Tags
   extend ActiveSupport::Concern
 
   included do
-    has_many :product_taggings, foreign_key: :product_id, dependent: :destroy
+    # Ordered by tag_id: creating or destroying a tagging writes the shared `tags` counter
+    # cache, so every traversal of a product's taggings must take those rows in the same order
+    # (see #save_tags!). The default order is the tagging row id, which is unrelated to them.
+    has_many :product_taggings, -> { order(:tag_id) }, foreign_key: :product_id, dependent: :destroy
     has_many :tags, through: :product_taggings
 
     scope :with_tags, lambda { |tag_names|
@@ -43,7 +46,19 @@ module Product::Tags
     tag_list = {} if tag_list.blank?
     # TODO: Remove support for non-array argument when product edit page is migrated to React
     tags_to_save = tag_list.is_a?(Array) ? tag_list : tag_list.values.map(&:downcase)
-    (tags.pluck(:name) - tags_to_save).each { |tag_to_remove| untag!(tag_to_remove) }
-    (tags_to_save - tags.pluck(:name)).each { |tag_to_add| tag!(tag_to_add) }
+
+    current_names = tags.pluck(:name)
+    names_to_remove = current_names - tags_to_save
+    names_to_add = tags_to_save - current_names
+
+    work = names_to_remove.map { |name| [name, :remove] } + names_to_add.map { |name| [name, :add] }
+    # `tag!`/`untag!` each take an X-lock on a `tags` row (the counter cache), so both halves run in
+    # one pass ordered by that row's id rather than two passes that can deadlock. The row is resolved
+    # the way those methods resolve it — equivalent spellings share a slot — with removals first.
+    ids_by_name = work.map { |name, _| name.downcase }.uniq.index_with { |name| Tag.find_by(name:)&.id }
+    work.sort_by! do |name, action|
+      [ids_by_name[name.downcase] || Float::INFINITY, action == :remove ? 0 : 1, name.downcase]
+    end
+    work.each { |name, action| action == :remove ? untag!(name) : tag!(name) }
   end
 end
