@@ -2007,5 +2007,35 @@ describe CustomerMailer do
       expect(body).to include(purchase.url_redirect.download_page_url)
       expect(body).to include("Contact Seller by replying to this email.")
     end
+
+    it "reads the purchase and its download page from the primary, not a replica" do
+      # Tests share one connection across roles, so the pin is only observable by looking at
+      # which statements run while the writing-role block is open.
+      pinned = false
+      reads = []
+      allow(ApplicationRecord).to receive(:connected_to).and_wrap_original do |original, **kwargs, &block|
+        next original.call(**kwargs, &block) unless kwargs[:role] == :writing
+
+        pinned = true
+        begin
+          original.call(**kwargs, &block)
+        ensure
+          pinned = false
+        end
+      end
+      subscriber = ->(_name, _start, _finish, _id, payload) do
+        sql = payload[:sql].to_s
+        reads << [sql, pinned] if sql.match?(/FROM `purchases`|FROM `url_redirects`/)
+      end
+
+      body = ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+        # ActionMailer is lazy: the render is what loads the rows, so it runs in here.
+        CustomerMailer.files_ready_for_download(purchase.id).body.encoded
+      end
+
+      expect(reads.map(&:last)).to all(be(true))
+      expect(reads.map(&:first).grep(/url_redirects/)).not_to be_empty
+      expect(body).to include(purchase.url_redirect.download_page_url)
+    end
   end
 end
