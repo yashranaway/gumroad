@@ -357,6 +357,80 @@ describe UpdateUserComplianceInfo do
         expect(japan_user.reload.alive_user_compliance_info.phone).to eq("+81312345678")
       end
 
+      it "requires the kana block number when a Japanese address changes, and saves once it is filled in" do
+        japan_compliance_info.dup_and_save! do |n|
+          n.city = "文京区"
+          n.city_kana = "ブンキョウク"
+          n.building_number_kana = nil
+          n.skip_stripe_job_on_create = true
+        end
+        params = ActionController::Parameters.new(
+          building_number: "2-2",
+          building_number_kana: "",
+          street_address_kanji: "千駄木4丁目",
+          street_address_kana: "センダギ4チョウメ",
+        )
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user: japan_user).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Block / Building number (Kana) is required for Japanese addresses.")
+        expect(StripeMerchantAccountManager).not_to have_received(:handle_new_user_compliance_info)
+
+        params[:building_number_kana] = "2-2"
+
+        result = described_class.new(compliance_params: params, user: japan_user).process
+
+        expect(result[:success]).to be true
+        expect(StripeMerchantAccountManager).to have_received(:handle_new_user_compliance_info).once
+        saved = japan_user.reload.alive_user_compliance_info
+        expect(saved.building_number).to eq("2-2")
+        expect(saved.building_number_kana).to eq("2-2")
+      end
+
+      it "keeps saving unrelated changes on a record without the kana block number, but not address changes" do
+        japan_compliance_info.dup_and_save! do |n|
+          n.city = "文京区"
+          n.city_kana = "ブンキョウク"
+          n.building_number_kana = nil
+          n.skip_stripe_job_on_create = true
+        end
+        form_params = {
+          is_business: false,
+          first_name: japan_compliance_info.first_name,
+          last_name: japan_compliance_info.last_name,
+          building_number: "1-1",
+          building_number_kana: "",
+          street_address_kanji: "文京区千駄木3丁目",
+          street_address_kana: "ブンキョウクセンダギ3チョウメ",
+          city: "文京区",
+          city_kana: "ブンキョウク",
+          state: "東京都",
+          zip_code: "1130022",
+          country: "JP",
+          phone: "+81312345678",
+        }
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: ActionController::Parameters.new(form_params), user: japan_user).process
+
+        expect(result[:success]).to be true
+        saved = japan_user.reload.alive_user_compliance_info
+        expect(saved.phone).to eq("+81312345678")
+        expect(saved.building_number_kana).to be_nil
+
+        result = described_class.new(compliance_params: ActionController::Parameters.new(form_params.merge(building_number: "2-2")), user: japan_user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Block / Building number (Kana) is required for Japanese addresses.")
+        expect(japan_user.reload.alive_user_compliance_info.building_number).to eq("1-1")
+      end
+
       it "accepts an address submission without city params when the record already has a city" do
         _result, with_city = japan_compliance_info.dup_and_save! do |n|
           n.city = "文京区"
@@ -454,6 +528,75 @@ describe UpdateUserComplianceInfo do
         new_compliance_info = japan_business_user.reload.alive_user_compliance_info
         expect(new_compliance_info.business_city).to eq("千代田区")
         expect(new_compliance_info.business_city_kana).to eq("チヨダク")
+      end
+
+      it "requires the kana business block number when a Japanese business address changes, and saves once it is filled in" do
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_building_number: "1-1",
+          business_building_number_kana: "",
+          business_street_address_kanji: "丸の内1丁目",
+          business_street_address_kana: "マルノウチ1チョウメ",
+          business_city: "千代田区",
+          business_city_kana: "チヨダク",
+        )
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user: japan_business_user).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Business block / building number (Kana) is required for Japanese addresses.")
+        expect(StripeMerchantAccountManager).not_to have_received(:handle_new_user_compliance_info)
+
+        params[:business_building_number_kana] = "1-1"
+
+        result = described_class.new(compliance_params: params, user: japan_business_user).process
+
+        expect(result[:success]).to be true
+        expect(StripeMerchantAccountManager).to have_received(:handle_new_user_compliance_info).once
+        expect(japan_business_user.reload.alive_user_compliance_info.business_building_number_kana).to eq("1-1")
+      end
+
+      it "keeps saving unrelated changes on a business record without the kana business block number, but not business address changes" do
+        japan_business_compliance_info.dup_and_save! do |n|
+          n.business_building_number = "1-1"
+          n.business_building_number_kana = nil
+          n.business_street_address_kanji = "丸の内1丁目"
+          n.business_street_address_kana = "マルノウチ1チョウメ"
+          n.business_city = "千代田区"
+          n.business_city_kana = "チヨダク"
+          n.skip_stripe_job_on_create = true
+        end
+        form_params = {
+          is_business: true,
+          business_building_number: "1-1",
+          business_building_number_kana: "",
+          business_street_address_kanji: "丸の内1丁目",
+          business_street_address_kana: "マルノウチ1チョウメ",
+          business_city: "千代田区",
+          business_city_kana: "チヨダク",
+          business_state: "東京都",
+          business_zip_code: "1130022",
+          business_phone: "+81398765432",
+        }
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: ActionController::Parameters.new(form_params), user: japan_business_user).process
+
+        expect(result[:success]).to be true
+        saved = japan_business_user.reload.alive_user_compliance_info
+        expect(saved.business_phone).to eq("+81398765432")
+        expect(saved.business_building_number_kana).to be_nil
+
+        result = described_class.new(compliance_params: ActionController::Parameters.new(form_params.merge(business_building_number: "2-2")), user: japan_business_user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Business block / building number (Kana) is required for Japanese addresses.")
+        expect(japan_business_user.reload.alive_user_compliance_info.business_building_number).to eq("1-1")
       end
 
       it "accepts a business address submission without business city params when the record already has a business city" do
