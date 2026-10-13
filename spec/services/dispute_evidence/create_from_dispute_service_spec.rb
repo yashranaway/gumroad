@@ -748,4 +748,49 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
       end
     end
   end
+
+  describe "gift orders" do
+    let(:gift) { create(:gift) }
+    let(:gifter_purchase) { create(:purchase, link: create(:product), gift_given: gift, is_gift_sender_purchase: true) }
+    let(:dispute) { create(:dispute_on_charge, charge: create(:charge, purchases: [gifter_purchase])) }
+
+    before do
+      create(:purchase, link: gifter_purchase.link, gift_received: gift, is_gift_receiver_purchase: true)
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(nil)
+    end
+
+    it "includes the giftee purchase in the access activity log" do
+      giftee_purchase = gift.reload.giftee_purchase
+      expect(DisputeEvidence::GenerateAccessActivityLogsService).to receive(:perform)
+        .with(gifter_purchase, other_purchases: [giftee_purchase]).and_return("log")
+
+      expect(DisputeEvidence.create_from_dispute!(dispute).access_activity_log).to eq("log")
+    end
+
+    it "includes the giftee purchases of every disputed purchase in a combined charge" do
+      senders = 2.times.map do |i|
+        sender = create(:purchase, link: create(:product), gift_given: create(:gift), is_gift_sender_purchase: true)
+        receiver = create(:purchase, link: sender.link, gift_received: sender.gift_given, is_gift_receiver_purchase: true)
+        create(:consumption_event, purchase: receiver, ip_address: "9.9.9.#{i}")
+        sender
+      end
+      combined_dispute = create(:dispute_on_charge, charge: create(:charge, purchases: senders))
+
+      log = DisputeEvidence.create_from_dispute!(combined_dispute).access_activity_log
+
+      expect(log).to include("9.9.9.0", "9.9.9.1")
+    end
+
+    it "logs the recipient's first view of a gifted rental",
+       vcr: { cassette_name: "DisputeEvidence_CreateFromDisputeService/gift_orders/includes_the_giftee_purchase_in_the_access_activity_log" } do
+      gifter_purchase.link.update!(name: "Gifted Rental")
+      giftee_purchase = gift.reload.giftee_purchase
+      giftee_purchase.create_url_redirect!
+      giftee_purchase.url_redirect.update!(rental_first_viewed_at: DateTime.parse("2024-05-09"))
+
+      log = DisputeEvidence.create_from_dispute!(dispute).access_activity_log
+
+      expect(log).to include("The rented content (\"Gifted Rental\") was first viewed at 2024-05-09 00:00:00 UTC.")
+    end
+  end
 end
