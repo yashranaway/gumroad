@@ -14,13 +14,16 @@ module User::SocialApple
       user = auth&.user
 
       if user.nil?
-        email = data.dig("info", "email")
+        email = verified_apple_email(data)
+        # An address Apple has not verified must not create an account that would then hold the identity.
+        return nil if email.nil? && data.dig("info", "email").present?
+
         user = User.where(email:).first if EmailFormatValidator.valid?(email)
 
         if user.nil?
           user = User.new
           user.provider = :apple
-          user.password = Devise.friendly_token[0, 20]
+          user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
           apply_apple_data(user, data, new_user: true)
 
           if user.email.present?
@@ -50,7 +53,7 @@ module User::SocialApple
       def apply_apple_data(user, data, new_user: false)
         return if data.blank? || data.is_a?(String)
 
-        email = data.dig("info", "email")
+        email = verified_apple_email(data)
 
         if user.name.blank? && data.dig("info", "name").present?
           sanitized_name = data.dig("info", "name").gsub(User::INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX, "")
@@ -61,15 +64,33 @@ module User::SocialApple
           user.email = email
         end
 
+        # A password signup proves nothing about the address, and a confirmed row is no proof either (it
+        # can be confirmed without mailbox access). A sign-in that brings the first Apple identity for
+        # such a row is adopting it, so the password and the sessions the signup left behind go with it.
+        adopting = user.provider.blank? && !user.user_external_authentications.exists?(provider: "apple")
+        if adopting
+          user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
+          user.invalidate_active_sessions!
+          user.revoke_unproven_access! unless user.confirmed?
+        end
+
         user.skip_confirmation_notification!
         user.save!
-        user.confirm if user.has_unconfirmed_email?
+        # Apple proves only the current address, so a pending change waits for its emailed link.
+        user.confirm if user.has_unconfirmed_email? && !user.pending_reconfirmation?
 
         if data["uid"].present?
           user.user_external_authentications.find_or_create_by!(provider: "apple", uid: data["uid"])
         end
 
         user
+      end
+
+      # Apple sends false for some Work & School accounts, and may send the flag as a string.
+      def verified_apple_email(data)
+        verified = data.dig("info", "email_verified")
+        verified = data.dig("extra", "raw_info", "id_info", "email_verified") if verified.nil?
+        data.dig("info", "email") if verified == true || verified == "true"
       end
   end
 end

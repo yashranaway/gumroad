@@ -48,6 +48,9 @@ class User < ApplicationRecord
 
   MAX_LENGTH_NAME = 100
 
+  # Length of the random password set on accounts that have no password of their own.
+  RANDOM_PASSWORD_LENGTH = 20
+
   INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX = /:/
 
   # Soft deletion keeps the row's email set, so a deleted account goes on
@@ -1190,6 +1193,40 @@ class User < ApplicationRecord
 
   def invalidate_browser_sessions!
     update!(last_active_sessions_invalidated_at: DateTime.current)
+  end
+
+  # Google and Apple adoption already retire the password and sessions. Whoever created an
+  # unconfirmed account never proved the address, so their other ways in, payout destinations,
+  # team access and sale ping go too. Payout removal is local; balances are left untouched.
+  def revoke_unproven_access!
+    # Committed on its own, so a failure removing payout or team rows cannot keep the sign-in access alive.
+    transaction do
+      self.unconfirmed_email = nil
+      self.confirmation_token = nil
+      User::SocialTwitter::TWITTER_PROPERTIES.each { |property| self[property] = nil }
+      save!
+      revoke_all_oauth_access!
+      webauthn_credentials.destroy_all
+      totp_credential&.destroy!
+      devices.destroy_all
+    end
+
+    transaction do
+      self.notification_endpoint = nil
+      self.payment_address = ""
+      self.invalidated_paypal_payout_address = nil
+      self.check_merchant_account_is_linked = false
+      save!
+      merchant_accounts.alive.each { _1.delete_charge_processor_account!(validate: false) }
+      merchant_accounts.find_each(&:mark_retired_by_adoption!)
+      bank_accounts.alive.each { _1.mark_deleted!(validate: false) }
+      [seller_memberships.role_not_owner, user_memberships.role_not_owner, team_invitations.not_accepted].each do |records|
+        records.not_deleted.each do |record|
+          record.deleted_at = Time.current
+          record.save!(validate: false)
+        end
+      end
+    end
   end
 
   def subdomain

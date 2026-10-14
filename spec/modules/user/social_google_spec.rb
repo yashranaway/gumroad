@@ -37,6 +37,17 @@ describe User::SocialGoogle do
       expect(created_user.reload.email).to eq(original_email)
     end
 
+    it "does not apply a pending email change on a returning sign-in", :aggregate_failures do
+      created_user = create(:user, google_uid: @data_copy1["uid"])
+      original_email = created_user.email
+      created_user.update!(email: "pending-#{original_email}")
+
+      User.find_or_create_for_google_oauth2(@data_copy1)
+
+      expect(created_user.reload.email).to eq(original_email)
+      expect(created_user.unconfirmed_email).to eq("pending-#{original_email}")
+    end
+
     it "finds a user using email when google's uid is missing and fills in uid" do
       created_user = create(:user, email: @data_copy2["info"]["email"])
       found_user = User.find_or_create_for_google_oauth2(@data_copy2)
@@ -44,6 +55,271 @@ describe User::SocialGoogle do
       expect(created_user.google_uid).to eq(nil)
       expect(created_user.reload.google_uid).to eq(found_user.google_uid)
       expect(created_user.reload.google_uid).to eq(@data_copy2["uid"])
+    end
+
+    context "when the email match is an account created with a password" do
+      let(:password_set_at_signup) { "chosen-by-whoever-signed-up" }
+
+      before { @data_copy2["info"]["image"] = nil }
+
+      it "drops the password the signup never proved and confirms the account", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+
+        found_user = User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(found_user.id).to eq(created_user.id)
+        expect(created_user.reload).to be_confirmed
+        expect(created_user.google_uid).to eq(@data_copy2["uid"])
+        expect(created_user.valid_password?(password_set_at_signup)).to be(false)
+      end
+
+      it "drops that password when the account had already confirmed its email" do
+        created_user = create(:user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(created_user.reload.valid_password?(password_set_at_signup)).to be(false)
+      end
+
+      it "invalidates the sessions the password signup left behind" do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+
+        expect { User.find_or_create_for_google_oauth2(@data_copy2) }
+          .to change { created_user.reload.last_active_sessions_invalidated_at }.from(nil).to(be_present)
+      end
+
+      def set_up_access_for(user)
+        third_party_token = create("doorkeeper/access_token", resource_owner_id: user.id, scopes: "edit_products")
+        mobile_app = create(:oauth_application, uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID)
+        mobile_token = create("doorkeeper/access_token", application: mobile_app, resource_owner_id: user.id, scopes: "mobile_api")
+        user.webauthn_credentials.create!(webauthn_id: "signup-passkey", public_key: "public-key", sign_count: 0, nickname: "Passkey")
+        user.create_totp_credential!(confirmed_at: Time.current)
+        create(:device, user:)
+        user.remember_me!
+        user.update!(twitter_user_id: "9876543210", twitter_handle: "signup", twitter_oauth_token: "token", twitter_oauth_secret: "secret")
+        { remember_cookie: User.serialize_into_cookie(user), tokens: [third_party_token, mobile_token] }
+      end
+
+      it "revokes every other way in the creator of an unconfirmed account set up", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        access = set_up_access_for(created_user)
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(created_user)
+
+        created_user.reload
+        expect(created_user).to be_confirmed
+        expect(User.serialize_from_cookie(*access[:remember_cookie])).to be_nil
+        expect(access[:tokens].map { _1.reload.revoked? }).to eq([true, true])
+        expect(created_user.webauthn_credentials).to be_empty
+        expect(created_user.totp_credential).to be_nil
+        expect(created_user.devices).to be_empty
+        expect(created_user.slice(*User::SocialTwitter::TWITTER_PROPERTIES).values).to all(be_nil)
+      end
+
+      def set_up_store_for(user)
+        user.update!(notification_endpoint: "https://ping.example.com/sales", payment_address: "paypal-payouts@example.com",
+                     invalidated_paypal_payout_address: "refused-payouts@example.com")
+        {
+          payout_destinations: [
+            create(:merchant_account, user:),
+            create(:merchant_account_stripe_connect, user:),
+            create(:merchant_account_paypal, user:),
+            create(:ach_account, user:),
+          ],
+          team: [
+            create(:team_membership, seller: user),
+            create(:team_membership, user:),
+            create(:team_invitation, seller: user, email: "invited-before-adoption@example.com"),
+          ],
+        }
+      end
+
+      it "removes the payout destinations, team access and sale ping the creator of an unconfirmed account set up", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        store = set_up_store_for(created_user)
+        created_user.update!(check_merchant_account_is_linked: true)
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(created_user)
+
+        created_user.reload
+        expect(created_user.notification_endpoint).to be_nil
+        expect(created_user.payment_address).to be_blank
+        expect(created_user.invalidated_paypal_payout_address).to be_nil
+        expect(created_user.check_merchant_account_is_linked).to be(false)
+        expect(created_user.has_payout_information?).to be(false)
+        expect(store[:payout_destinations].map { _1.reload.alive? }).to eq([false, false, false, false])
+        expect(store[:payout_destinations].first(3).map(&:retired_by_adoption_at)).to all(be_present)
+        expect(store[:team].map { _1.reload.deleted? }).to eq([true, true, true])
+        stripe_connect_data = { "uid" => store[:payout_destinations].second.charge_processor_merchant_id,
+                                "info" => { "email" => created_user.email }, "extra" => { "extra_info" => { "country" => "US" } } }
+        expect(User.find_or_create_for_stripe_connect_account(stripe_connect_data)).to be_nil
+      end
+
+      it "does not let a later Stripe disconnect reactivate a payout account the creator set up", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        retired_account = create(:merchant_account, user: created_user)
+        earlier_account = create(:merchant_account, user: created_user).tap(&:delete_charge_processor_account!)
+        [retired_account, earlier_account].each { create(:balance, user: created_user, merchant_account: _1) }
+        User.find_or_create_for_google_oauth2(@data_copy2)
+        Feature.activate_user(:merchant_migration, created_user)
+        create(:merchant_account_stripe_connect, user: created_user)
+        allow_any_instance_of(User).to receive(:stripe_disconnect_allowed?).and_return(true)
+
+        expect(StripeMerchantAccountManager.disconnect(user: created_user.reload)).to be(true)
+
+        expect([retired_account, earlier_account].map { _1.reload.alive? }).to eq([false, false])
+        expect(created_user.reload.stripe_account).to be_nil
+      end
+
+      it "removes team and payout rows that no longer pass validation", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        invitation = create(:team_invitation, seller: created_user, email: "invited-before-adoption@example.com")
+        invitation.update_column(:email, "not an address")
+        merchant_account = create(:merchant_account, user: created_user)
+        create(:merchant_account).update_column(:charge_processor_merchant_id, merchant_account.charge_processor_merchant_id)
+        bank_account = create(:ach_account, user: created_user)
+        bank_account.update_column(:account_holder_full_name, nil)
+        expect([invitation, merchant_account, bank_account].map(&:valid?)).to eq([false, false, false])
+        earlier_account = create(:merchant_account, user: created_user).tap(&:delete_charge_processor_account!)
+        earlier_account.update_column(:json_data, '"not a hash"')
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(created_user)
+        expect(invitation.reload).to be_deleted
+        expect([merchant_account, bank_account].map { _1.reload.alive? }).to eq([false, false])
+        expect(earlier_account.reload.retired_by_adoption_at).to be_present
+      end
+
+      it "keeps the sign-in revocation when removing a payout destination fails", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        access = set_up_access_for(created_user)
+        create(:merchant_account_stripe_connect, user: created_user)
+        allow_any_instance_of(MerchantAccount).to receive(:delete_charge_processor_account!).and_raise(ActiveRecord::RecordInvalid.new(MerchantAccount.new))
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to be_nil
+
+        created_user.reload
+        expect(access[:tokens].map { _1.reload.revoked? }).to eq([true, true])
+        expect(created_user.webauthn_credentials).to be_empty
+        expect(created_user.totp_credential).to be_nil
+      end
+
+      it "discards the pending email change of an unconfirmed account and confirms the Google address", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        created_user.update!(email: "signup-pending@example.com")
+        expect(created_user.reload.unconfirmed_email).to eq("signup-pending@example.com")
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(created_user.reload.email).to eq(@data_copy2["info"]["email"])
+        expect(created_user.unconfirmed_email).to be_nil
+        expect(created_user).to be_confirmed
+      end
+
+      it "voids the emailed confirmation link even when the sign-in fails after the adoption drop", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        created_user.update!(email: "signup-pending@example.com")
+        pending_link_token = created_user.reload.confirmation_token
+        allow_any_instance_of(User).to receive(:skip_confirmation_notification!).and_raise(ActiveRecord::RecordInvalid.new(User.new))
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to be_nil
+        expect(created_user.reload.valid_password?(password_set_at_signup)).to be(false)
+
+        expect(User.confirm_by_token(pending_link_token).errors).to be_present
+        expect(created_user.reload).not_to be_confirmed
+      end
+
+      it "keeps a confirmed account's other access and its pending email change", :aggregate_failures do
+        created_user = create(:user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        access = set_up_access_for(created_user)
+        store = set_up_store_for(created_user)
+        created_user.update!(email: "owner-pending@example.com")
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(store[:payout_destinations].map { _1.reload.alive? }).to all(be(true))
+        expect(store[:team].map { _1.reload.deleted? }).to all(be(false))
+        created_user.reload
+        expect(created_user.notification_endpoint).to eq("https://ping.example.com/sales")
+        expect(created_user.payment_address).to eq("paypal-payouts@example.com")
+        expect(created_user.valid_password?(password_set_at_signup)).to be(false)
+        expect(created_user.email).to eq(@data_copy2["info"]["email"])
+        expect(created_user.unconfirmed_email).to eq("owner-pending@example.com")
+        expect(access[:tokens].first.reload).not_to be_revoked
+        expect(created_user.webauthn_credentials.count).to eq(1)
+        expect(created_user.twitter_user_id).to eq("9876543210")
+      end
+
+      it "leaves the password and the sessions alone once the account has a Google identity", :aggregate_failures do
+        created_user = create(:user, email: @data_copy2["info"]["email"], password: password_set_at_signup,
+                                     google_uid: @data_copy2["uid"])
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(created_user.reload.valid_password?(password_set_at_signup)).to be(true)
+        expect(created_user.last_active_sessions_invalidated_at).to be_nil
+      end
+    end
+
+    context "when Google has not verified the email" do
+      let(:address) { @data_copy2["extra"]["raw_info"]["email"] }
+      let(:unverified_data) do
+        @data_copy2.deep_dup.tap do |data|
+          data["info"]["image"] = nil
+          data["info"].delete("email")
+          data["info"]["email_verified"] = false
+          data["extra"]["raw_info"]["email_verified"] = false
+        end
+      end
+
+      it "does not adopt the account that holds the address through the raw_info fallback", :aggregate_failures do
+        existing_user = create(:unconfirmed_user, email: address, password: "chosen-by-its-owner")
+
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).not_to eq(existing_user)
+
+        existing_user.reload
+        expect(existing_user.google_uid).to be_nil
+        expect(existing_user.valid_password?("chosen-by-its-owner")).to be(true)
+        expect(existing_user).not_to be_confirmed
+      end
+
+      it "does not adopt it when the verified-email field is false either" do
+        existing_user = create(:user, email: address)
+        unverified_data["info"]["email"] = address
+
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).not_to eq(existing_user)
+      end
+
+      it "does not create an account for the address" do
+        expect { expect(User.find_or_create_for_google_oauth2(unverified_data)).to be_nil }.not_to change(User, :count)
+      end
+
+      it "reads the verified flag from raw_info when the info hash has none", :aggregate_failures do
+        existing_user = create(:user, email: address)
+        unverified_data["info"].delete("email_verified")
+
+        unverified_data["extra"]["raw_info"]["email_verified"] = "false"
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).to be_nil
+
+        unverified_data["extra"]["raw_info"]["email_verified"] = true
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).to eq(existing_user)
+      end
+
+      it "does not reach a live account past a deleted placeholder husk" do
+        husk = create(:user)
+        husk.update_columns(google_uid: unverified_data["uid"], email: "released-husk@deleted.invalid", deleted_at: Time.current)
+        live_user = create(:user, email: address)
+
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).to eq(husk)
+        expect(live_user.reload.google_uid).to be_nil
+      end
+
+      it "still uses the raw_info address when Google marks it verified" do
+        existing_user = create(:user, email: address)
+        unverified_data["extra"]["raw_info"]["email_verified"] = true
+        unverified_data["info"]["email_verified"] = true
+
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).to eq(existing_user)
+      end
     end
 
     context "when the matched account was deleted and its email freed to another account" do
@@ -111,6 +387,20 @@ describe User::SocialGoogle do
 
         expect(live_user.reload).to be_confirmed
         expect(live_user.email).to eq(@data_copy2["info"]["email"])
+      end
+
+      it "revokes an unconfirmed live account's other access and discards its pending email", :aggregate_failures do
+        @data_copy2["info"]["image"] = nil
+        live_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"])
+        live_user.update!(email: "signup-pending@example.com")
+        token = create("doorkeeper/access_token", resource_owner_id: live_user.id, scopes: "edit_products")
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(live_user)
+
+        expect(live_user.reload).to be_confirmed
+        expect(live_user.email).to eq(@data_copy2["info"]["email"])
+        expect(live_user.unconfirmed_email).to be_nil
+        expect(token.reload).to be_revoked
       end
 
       context "when the live account already has its own Google identity" do
