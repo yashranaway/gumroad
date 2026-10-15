@@ -65,6 +65,55 @@ describe Api::V2::OfferCodesController do
         @params.merge!(access_token: @token.token)
       end
 
+      it "creates a universal auto-applied code with a sale label" do
+        post @action, params: @params.merge(universal: "true", auto_apply: "true", sale_label: "Black Friday")
+
+        expect(response.parsed_body["success"]).to eq(true)
+        code = @user.offer_codes.alive.last
+        expect(code).to have_attributes(auto_apply: true, sale_label: "Black Friday", universal: true)
+        expect(response.parsed_body["offer_code"]).to include("auto_apply" => true, "sale_label" => "Black Friday")
+      end
+
+      it "accepts a JSON boolean for auto_apply" do
+        post @action, params: @params.merge(universal: true, auto_apply: true, sale_label: "Black Friday"), as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        code = @user.offer_codes.alive.last
+        expect(code).to have_attributes(auto_apply: true, sale_label: "Black Friday", universal: true)
+        expect(response.parsed_body["offer_code"]).to include("auto_apply" => true, "sale_label" => "Black Friday")
+      end
+
+      it "creates a universal percent code from a JSON boolean" do
+        post @action, params: @params.merge(offer_type: "percent", universal: true), as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        code = @user.offer_codes.alive.last
+        expect(code).to have_attributes(universal: true, amount_percentage: 31, auto_apply: false)
+        expect(code.products).to be_empty
+      end
+
+      it "leaves auto apply off when it is false or omitted" do
+        post @action, params: @params.merge(universal: "true", auto_apply: "false")
+        post @action, params: @params.merge(name: "omitted", universal: "true")
+
+        expect(@user.offer_codes.alive.pluck(:code, :auto_apply)).to contain_exactly(["hi", false], ["omitted", false])
+      end
+
+      it "keeps a code product-specific when universal is a string other than true" do
+        post @action, params: @params.merge(universal: "False")
+        post @action, params: @params.merge(name: "no", universal: "no")
+
+        codes = @user.offer_codes.alive
+        expect(codes.pluck(:code, :universal)).to contain_exactly(["hi", false], ["no", false])
+        expect(codes.map(&:products)).to all(contain_exactly(@product))
+      end
+
+      it "leaves auto apply off when it is a string other than true" do
+        post @action, params: @params.merge(universal: "true", auto_apply: "False")
+
+        expect(@user.offer_codes.alive.pluck(:code, :auto_apply)).to contain_exactly(["hi", false])
+      end
+
       describe "incorrect parameters" do
         it "returns error message" do
           post :create, params: @params.merge(amount_off: nil)
@@ -267,6 +316,40 @@ describe Api::V2::OfferCodesController do
       before do
         @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products")
         @params.merge!(access_token: @token.token)
+      end
+
+      it "does not let a product-specific code auto apply" do
+        put @action, params: @params.merge(auto_apply: "true")
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(@offer_code.reload.auto_apply).to eq(false)
+      end
+
+      it "enables auto apply on a universal code from a JSON boolean" do
+        @offer_code.update!(universal: true, products: [])
+
+        put @action, params: @params.merge(auto_apply: true), as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@offer_code.reload.auto_apply).to eq(true)
+      end
+
+      it "enables auto apply on a universal code from the string true" do
+        @offer_code.update!(universal: true, products: [])
+
+        put @action, params: @params.merge(auto_apply: "true")
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@offer_code.reload.auto_apply).to eq(true)
+      end
+
+      it "leaves auto apply off when it is a string other than true" do
+        @offer_code.update!(universal: true, products: [])
+
+        put @action, params: @params.merge(auto_apply: "False")
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@offer_code.reload.auto_apply).to eq(false)
       end
 
       it "fails gracefully on bad id" do

@@ -13,23 +13,29 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
   end
 
   def create
+    universal = true_param?(:universal)
+    auto_apply = true_param?(:auto_apply)
     offer_code = if params[:offer_type] == "percent"
       OfferCode.new(code: params[:name],
-                    universal: params[:universal] == "true",
+                    universal:,
                     amount_percentage: params[:amount_off].to_i,
                     max_purchase_count: params[:max_purchase_count],
+                    auto_apply:,
+                    sale_label: params[:sale_label],
                     minimum_amount_cents: params[:minimum_amount_cents].presence)
     else
       OfferCode.new(code: params[:name],
-                    universal: params[:universal] == "true",
+                    universal:,
                     amount_cents: params[:amount_cents].presence || params[:amount_off].presence,
                     max_purchase_count: params[:max_purchase_count],
                     minimum_amount_cents: params[:minimum_amount_cents].presence,
+                    auto_apply:,
+                    sale_label: params[:sale_label],
                     currency_type: @product.price_currency_type)
     end
 
     offer_code.user = @product.user
-    offer_code.products << @product unless params[:universal] == "true"
+    offer_code.products << @product unless universal
     offer_code.created_via_cli = true if request_from_cli?
 
     if offer_code.save
@@ -61,7 +67,15 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
 
   private
     def permitted_params
-      params.permit(:max_purchase_count, :minimum_amount_cents)
+      permitted = params.permit(:max_purchase_count, :minimum_amount_cents, :auto_apply, :sale_label)
+      permitted[:auto_apply] = true_param?(:auto_apply) if permitted.key?(:auto_apply)
+      permitted
+    end
+
+    # Only a JSON true or the documented "true" string counts: Rails' boolean cast reads any
+    # string off its false list, such as "False" or "no", as true.
+    def true_param?(key)
+      params[key].in?([true, "true"])
     end
 
     def check_offer_code_params
