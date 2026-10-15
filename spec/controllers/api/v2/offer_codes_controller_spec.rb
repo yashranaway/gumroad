@@ -437,4 +437,175 @@ describe Api::V2::OfferCodesController do
       end
     end
   end
+
+  describe "sale schedule" do
+    let(:product) { create(:product, user: @user, price_cents: 10_000) }
+    let(:token) { create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products") }
+    let(:code) { create(:percentage_offer_code, user: @user, universal: true, products: []) }
+    let(:parameters) { { access_token: token.token, link_id: product.external_id } }
+    let(:starts_at) { "2026-11-27T00:00:00-05:00" }
+    let(:ends_at) { "2026-12-01T00:00:00-05:00" }
+    let(:invalid_timestamp_message) { "expires_at must be an RFC 3339 timestamp with a time zone, or null." }
+
+    def update_code(attributes)
+      put :update, params: parameters.merge(id: code.external_id).merge(attributes), as: :json
+    end
+
+    it "creates a scheduled automatic sale and returns UTC timestamps" do
+      post :create, params: parameters.merge(name: "SALE30", amount_off: 30, offer_type: "percent", universal: true, auto_apply: true,
+                                             sale_label: "Black Friday", valid_at: starts_at, expires_at: ends_at), as: :json
+
+      expect(response.parsed_body["offer_code"]).to include("valid_at" => "2026-11-27T05:00:00Z", "expires_at" => "2026-12-01T05:00:00Z", "auto_apply" => true, "sale_label" => "Black Friday")
+      expect(@user.offer_codes.alive.sole).to have_attributes(valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
+    end
+
+    it "rejects an invalid timestamp on create without saving the code" do
+      expect do
+        post :create, params: parameters.merge(name: "SALE30", amount_off: 30, offer_type: "percent", universal: true, valid_at: starts_at, expires_at: "not-a-date"), as: :json
+      end.not_to change(OfferCode, :count)
+
+      expect(response.parsed_body).to include("success" => false, "message" => invalid_timestamp_message)
+    end
+
+    it "updates the schedule" do
+      update_code(valid_at: starts_at, expires_at: ends_at)
+
+      expect(response.parsed_body).to include("success" => true)
+      expect(code.reload).to have_attributes(valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
+    end
+
+    # Time.zone.rfc3339 rolls the first three over to a different time instead of raising.
+    ["2027-02-30T00:00:00Z", "2026-11-27T24:00:00Z", "2026-11-27T00:00:60-05:00", "2026-11-27T00:00:00", 1].each do |invalid|
+      it "rejects #{invalid.inspect} without changing the code" do
+        before_attributes = code.attributes
+        update_code(valid_at: starts_at, expires_at: invalid, auto_apply: true)
+
+        expect(response.parsed_body).to include("success" => false, "message" => invalid_timestamp_message)
+        expect(code.reload.attributes).to eq(before_attributes)
+      end
+    end
+
+    it "rejects an end before the start" do
+      update_code(valid_at: ends_at, expires_at: starts_at)
+
+      expect(response.parsed_body).to include("success" => false, "message" => "The discount code's start date must be earlier than its end date.")
+    end
+
+    it "rejects an end without a start" do
+      update_code(expires_at: ends_at)
+
+      expect(response.parsed_body).to include("success" => false, "message" => "The discount code's start date must be earlier than its end date.")
+    end
+
+    it "keeps omitted dates unchanged" do
+      code.update!(valid_at: Time.iso8601(starts_at), expires_at: Time.iso8601(ends_at))
+      update_code(auto_apply: true)
+
+      expect(response.parsed_body).to include("success" => true)
+      expect(code.reload).to have_attributes(valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
+    end
+
+    it "clears dates sent as null or an empty string" do
+      code.update!(valid_at: Time.iso8601(starts_at), expires_at: Time.iso8601(ends_at))
+      update_code(valid_at: nil, expires_at: "")
+
+      expect(response.parsed_body).to include("success" => true)
+      expect(code.reload).to have_attributes(valid_at: nil, expires_at: nil)
+    end
+  end
+
+  describe "store-level offer codes" do
+    let(:product) { create(:product, user: @user, price_currency_type: "usd", price_cents: 2000) }
+    let(:token) { create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products") }
+    let(:parameters) { { access_token: token.token } }
+    let(:code) { create(:offer_code, user: @user, universal: true, products: [], amount_cents: 100, amount_percentage: nil, currency_type: "eur", auto_apply: true, excluded_products: [product]) }
+
+    it "lists an automatic sale that a product-scoped list cannot see" do
+      code
+      get :index, params: parameters.merge(link_id: product.external_id)
+      expect(response.parsed_body["offer_codes"]).to eq([])
+
+      get :index, params: parameters
+
+      expect(response.parsed_body["offer_codes"]).to include(a_hash_including("id" => code.external_id, "auto_apply" => true, "currency_type" => "eur"))
+    end
+
+    it "finds an expired automatic sale before older pages of manual codes" do
+      code.update!(valid_at: 2.months.ago, expires_at: 1.month.ago, created_at: 3.months.ago)
+      Array.new(30) { |index| create(:percentage_offer_code, user: @user, universal: true, products: [], code: "MANUAL#{index}") }
+
+      get :index, params: parameters.merge(auto_apply: "true")
+
+      expect(response.parsed_body["offer_codes"].map { _1["id"] }).to eq([code.external_id])
+      expect(response.parsed_body).not_to have_key("next_page_key")
+
+      get :index, params: parameters.merge(auto_apply: "false")
+      expect(response.parsed_body["offer_codes"]).to all(include("auto_apply" => false))
+      expect(response.parsed_body["offer_codes"].length).to eq(10)
+    end
+
+    it "rejects an invalid automatic-application filter" do
+      get :index, params: parameters.merge(auto_apply: "yes")
+      expect(response).to have_http_status(:bad_request)
+    end
+
+    it "reads and disables a sale without an eligible product" do
+      get :show, params: parameters.merge(id: code.external_id)
+      expect(response.parsed_body["offer_code"]).to include("id" => code.external_id)
+
+      put :update, params: parameters.merge(id: code.external_id, auto_apply: false)
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(code.reload.auto_apply).to be(false)
+    end
+
+    it "paginates codes with the same creation time without duplicates" do
+      codes = travel_to(Time.utc(2026, 10, 15)) do
+        Array.new(11) { |index| create(:percentage_offer_code, user: @user, universal: true, products: [], code: "PAGE#{index}") }
+      end
+      get :index, params: parameters
+      first = response.parsed_body
+      expect(first["offer_codes"].map { _1["id"] }).to eq(codes.last(10).reverse.map(&:external_id))
+      expect(first["next_page_url"]).to start_with("/v2/offer_codes?")
+
+      get :index, params: parameters.merge(page_key: first["next_page_key"])
+
+      expect(response.parsed_body["offer_codes"].map { _1["id"] }).to eq([codes.first.external_id])
+      expect(response.parsed_body).not_to have_key("next_page_key")
+    end
+
+    it "excludes deleted codes and another seller's codes" do
+      code
+      create(:percentage_offer_code, user: @user, universal: true, products: [], deleted_at: Time.current)
+      create(:percentage_offer_code, universal: true, products: [])
+      get :index, params: parameters
+      expect(response.parsed_body["offer_codes"].map { _1["id"] }).to eq([code.external_id])
+    end
+
+    %i[show update].each do |action|
+      it "refuses #{action} for another seller's code" do
+        other_code = create(:percentage_offer_code, universal: true, products: [])
+        if action == :show
+          get :show, params: parameters.merge(id: other_code.external_id)
+        else
+          put :update, params: parameters.merge(id: other_code.external_id, auto_apply: true)
+        end
+        expect(response.parsed_body).to include("success" => false, "message" => "The offer_code was not found.")
+        expect(other_code.reload.auto_apply).to be(false)
+      end
+    end
+
+    it "requires a sales or product-edit scope for store-wide reads" do
+      token.update!(scopes: "view_public")
+      get :index, params: parameters
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    ["invalid", ["x"], { "cursor" => "x" }].each do |cursor|
+      it "rejects an invalid pagination cursor #{cursor.inspect}" do
+        get :index, params: parameters.merge(page_key: cursor)
+        expect(response).to have_http_status(:bad_request)
+      end
+    end
+  end
 end
