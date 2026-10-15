@@ -44,6 +44,8 @@ class PaginatedInstallmentsPresenter
       pagiation_metadata = { count: es_search.results.total, next: can_paginate_further ? page + 1 : nil }
     end
 
+    installments = installments.to_a
+    Installment.preload_engagement_summaries!(installments)
     {
       installments: installments.map { InstallmentPresenter.new(seller:, installment: _1).props },
       pagination: pagiation_metadata,
