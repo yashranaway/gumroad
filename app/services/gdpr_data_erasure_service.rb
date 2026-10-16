@@ -5,6 +5,11 @@ class GdprDataErasureService
   ANONYMIZED_NAME = "[deleted]"
   ANONYMIZED_VALUE = "[redacted]"
   SENT_POST_EMAIL_DELETE_BATCH_SIZE = 1_000
+  # Clearing a value other than the one noted would hide a newer run's unfinished recheck.
+  SENT_POST_EMAIL_MANUAL_STEP = "A rerun cannot find them. Once no other erasure of this account is running, note " \
+                                "the account's gdpr_sent_post_emails_recheck_pending value, delete the original " \
+                                "address's sent post email rows by hand, then clear that field only if it still " \
+                                "holds the value you noted, before confirming the request as fulfilled."
 
   # Fields that must be retained for tax/legal compliance (Article 17(3)(b))
   # Transaction records, payout history, tax documents are kept.
@@ -27,8 +32,8 @@ class GdprDataErasureService
     credit_card_ids = credit_card_ids_for_erasure
     # Read before anything below nulls the browser_guid columns this attribution is built from.
     guest_cart_browser_guids = exclusive_browser_guids(original_email)
-    # Read before the transaction: the lookup takes seconds, and the erasure's row locks would be held
-    # for all of it.
+    # Read before the transaction so the erasure's row locks are not held while it scans. A timeout
+    # here fails the run before anything is changed.
     erase_sent_post_emails = email_keyed_erasure?(original_email:, anonymized_email: anonymized_account_email)
     sent_post_email_ids = erase_sent_post_emails ? SentPostEmail.ids_for_email(original_email) : []
     # Read before the transaction so the Stripe deletion below has the accounts to hand. The values
@@ -66,7 +71,11 @@ class GdprDataErasureService
     # there would delete the guardian Person of an account that is still live and still needs it.
     @local_erasure_committed = true
 
-    delete_late_sent_post_emails!(original_email) if erase_sent_post_emails
+    if erase_sent_post_emails
+      delete_late_sent_post_emails!(original_email)
+    else
+      report_pending_sent_post_email_recheck!
+    end
     remove_profile_assets!
     # Re-resolved after the commit and unioned with the snapshot, because an account created while
     # the transaction ran is absent from the snapshot and a sync can put a guardian Person on it.
@@ -128,6 +137,7 @@ class GdprDataErasureService
       @counts = Hash.new(0)
       @search_index_error = nil
       @sent_post_email_error = nil
+      @sent_post_email_recheck_generation = nil
     end
 
     # Hands every recorded guardian Person to the retry job and leaves the durable note. Selects on
@@ -572,6 +582,12 @@ class GdprDataErasureService
       # Marketing-send dedupe rows, across every seller's posts. Nothing requires keeping them, so
       # they are deleted rather than rewritten.
       @counts[:sent_post_emails] = delete_sent_post_emails!(sent_post_email_ids)
+      # Commits with the anonymize, so a run that dies before the post-commit pass still leaves it set.
+      @sent_post_email_recheck_generation = SecureRandom.hex(8)
+      @user.reload.with_lock do
+        @user.gdpr_sent_post_emails_recheck_pending = @sent_post_email_recheck_generation
+        @user.save!(validate: false)
+      end
 
       audience_records = GdprAudienceRecordsAnonymizer.new(email: original_email, anonymized_email:)
       @counts[:audience_members] = audience_records.anonymize_audience_members!
@@ -583,20 +599,66 @@ class GdprDataErasureService
       )
     end
 
-    # A send can insert a row between the first lookup and the commit. Once the commit lands nothing
-    # addresses a new send to this email, so one more pass on the primary catches those rows. A rerun
-    # cannot, and retry state would have to keep the address, so a failure goes to the operator instead.
+    # A send that locked its source before the anonymize did can have written a row since the first
+    # lookup, so one more pass on the primary deletes those. Every sent_post_emails writer checks its
+    # source under a share lock, so none writes the old address from a source this erasure rewrote after
+    # the commit; another account's row under the same address still can. A rerun cannot redo this pass,
+    # so the pending flag stays set until it succeeds.
     def delete_late_sent_post_emails!(original_email)
+      rechecked = false
       ApplicationRecord.connected_to(role: :writing) do
         @counts[:sent_post_emails] += delete_sent_post_emails!(SentPostEmail.ids_for_email(original_email))
+        rechecked = true
+        unless clear_sent_post_email_recheck_pending!
+          @sent_post_email_error = "Erasure incomplete: a later run of this erasure has not finished rechecking " \
+                                   "sent post email records for the original address. Wait for that run to " \
+                                   "finish and check its result before confirming the request as fulfilled."
+        end
       end
     rescue => e
       Rails.logger.error("GDPR: could not recheck sent post emails for user #{@user.id}: #{e.message}")
       ErrorNotifier.notify(e)
-      @sent_post_email_error = "Erasure incomplete: sent post email records for the original address could " \
-                               "not be rechecked after the erasure. Delete them by hand before confirming " \
-                               "the request as fulfilled; a rerun cannot find them."
+      # After a finished recheck only the marker write failed: the rows are likely gone, but the marker
+      # still says otherwise and every rerun trusts it.
+      failure = if rechecked
+        "were rechecked after the erasure, but its pending recheck marker could not be cleared"
+      else
+        "could not be rechecked after the erasure"
+      end
+      @sent_post_email_error = "Erasure incomplete: sent post email records for the original address " \
+                               "#{failure}. #{SENT_POST_EMAIL_MANUAL_STEP}"
       record_incomplete_erasure_step_note!(@sent_post_email_error)
+    end
+
+    # A rerun holds only the anonymized address, so it cannot tell whether those rows are gone. Matching
+    # on the anonymized address would prove nothing about the original one.
+    def report_pending_sent_post_email_recheck!
+      pending = ApplicationRecord.connected_to(role: :writing) { @user.reload.gdpr_sent_post_emails_recheck_pending }
+      return unless pending
+
+      @sent_post_email_error = "Erasure incomplete: an earlier run did not finish rechecking sent post email " \
+                               "records for the original address. #{SENT_POST_EMAIL_MANUAL_STEP}"
+      record_incomplete_erasure_step_note!(@sent_post_email_error)
+    rescue => e
+      # Rescued so the guardian deletion that follows still runs.
+      Rails.logger.error("GDPR: could not read the sent post email recheck flag for user #{@user.id}: #{e.message}")
+      ErrorNotifier.notify(e)
+      @sent_post_email_error = "Erasure incomplete: could not check whether an earlier run finished rechecking " \
+                               "sent post email records. Run the erasure again before confirming the request as fulfilled."
+    end
+
+    # Clears only this run's generation. A run that committed later wrote its own, and its recheck
+    # starts after this one's commit, so only that recheck can cover both. False while it is pending.
+    def clear_sent_post_email_recheck_pending!
+      @user.reload.with_lock do
+        pending = @user.gdpr_sent_post_emails_recheck_pending
+        if pending == @sent_post_email_recheck_generation
+          @user.gdpr_sent_post_emails_recheck_pending = nil
+          @user.save!(validate: false)
+          pending = nil
+        end
+        pending.nil?
+      end
     end
 
     def delete_sent_post_emails!(ids)

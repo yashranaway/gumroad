@@ -55,25 +55,60 @@ describe SentPostEmail do
 
   describe ".ensure_uniqueness" do
     it "runs block if we successfully created a unique record for that post and email" do
-      create(:sent_post_email, email: "foo") # belongs to another post, so it should not interact with the checks below
+      create(:sent_post_email, email: "foo@example.com") # belongs to another post, so it should not interact with the checks below
       counter = 0
-      described_class.ensure_uniqueness(post:, email: "foo") { counter += 1 }
+      described_class.ensure_uniqueness(post:, email: "foo@example.com", source: create(:follower, email: "foo@example.com")) { counter += 1 }
       expect(counter).to eq(1)
 
-      described_class.ensure_uniqueness(post:, email: "FOO") { counter += 1 }
+      # Follower keeps the case it was given, so this reaches the unique key rather than the source check.
+      mixed_case_source = create(:follower, email: "FOO@example.com")
+      logged = []
+      allow(Rails.logger).to receive(:info).and_wrap_original { |original, message| logged << message.to_s; original.call(message) }
+      described_class.ensure_uniqueness(post:, email: mixed_case_source.email, source: mixed_case_source) { counter += 1 }
       expect(counter).to eq(1)
+      expect(logged.grep(/SentPostEmail: skipped/)).to be_empty
 
-      described_class.ensure_uniqueness(post:, email: "bar") { counter += 1 }
+      described_class.ensure_uniqueness(post:, email: "baz@example.com", source: create(:purchase, email: "baz@example.com")) { counter += 1 }
       expect(counter).to eq(2)
+
+      described_class.ensure_uniqueness(post:, email: "bar@example.com", source: create(:user, email: "bar@example.com")) { counter += 1 }
+      expect(counter).to eq(3)
+      expect(described_class.where(post:).pluck(:email)).to match_array(["foo@example.com", "baz@example.com", "bar@example.com"])
     end
 
     it "does not raise error if email is blank" do
       counter = 0
-      described_class.ensure_uniqueness(post:, email: "") { counter += 1 }
+      described_class.ensure_uniqueness(post:, email: "", source: nil) { counter += 1 }
       expect(counter).to eq(0)
 
-      described_class.ensure_uniqueness(post:, email: nil) { counter += 1 }
+      described_class.ensure_uniqueness(post:, email: nil, source: nil) { counter += 1 }
       expect(counter).to eq(0)
+    end
+
+    # An erasure that commits between reading the address and claiming it rewrites or removes the source.
+    {
+      "purchase" => -> { create(:purchase, email: "buyer@example.com") },
+      "follower" => -> { create(:follower, email: "buyer@example.com") },
+      "user" => -> { create(:user, email: "buyer@example.com") },
+    }.each do |name, build_source|
+      it "claims nothing and does not run the block once the #{name} no longer holds the address" do
+        rewritten = instance_exec(&build_source)
+        captured_email = rewritten.email
+        rewritten.class.where(id: rewritten.id).update_all(email: "deleted-1@deleted.gumroad.com")
+        counter = 0
+        logged = []
+        allow(Rails.logger).to receive(:info).and_wrap_original { |original, message| logged << message.to_s; original.call(message) }
+
+        described_class.ensure_uniqueness(post:, email: captured_email, source: rewritten) { counter += 1 }
+        rewritten.class.where(id: rewritten.id).delete_all
+        described_class.ensure_uniqueness(post:, email: captured_email, source: rewritten) { counter += 1 }
+
+        expect(counter).to eq(0)
+        expect(described_class.where(post:)).to be_empty
+        skip_line = "SentPostEmail: skipped post #{post.id} for #{rewritten.class.name} #{rewritten.id}, whose address changed"
+        expect(logged.count(skip_line)).to eq(2)
+        expect(logged.join).not_to include("buyer@example.com", "deleted-1@deleted.gumroad.com")
+      end
     end
   end
 

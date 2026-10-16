@@ -182,6 +182,45 @@ describe GdprDataErasureService do
         expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
       end
 
+      it "still deletes the guardian's person when a rerun cannot read the pending sent post email recheck" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        user.update_columns(email: "deleted-#{user.id}@deleted.gumroad.com")
+        user.gdpr_sent_post_emails_recheck_pending = "earlier-run-generation"
+        user.save!(validate: false)
+        allow_any_instance_of(User).to receive(:gdpr_sent_post_emails_recheck_pending)
+          .and_raise(ActiveRecord::ConnectionNotEstablished, "primary unavailable")
+
+        result = described_class.new(User.find(user.id), performed_by: admin).perform!
+
+        expect(result[:success]).to eq(false)
+        expect(result[:error]).to include("could not check whether an earlier run finished rechecking sent post email records")
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
+      end
+
+      it "keeps the recheck pending and still deletes the guardian's person when the marker cannot be cleared" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        create(:sent_post_email, email: user.email)
+        # The clear is the only row lock taken on an account that already holds a marker.
+        allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          raise ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded" if original.receiver.gdpr_sent_post_emails_recheck_pending.present?
+          original.call(*args, &block)
+        end
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to eq(false)
+        expect(result[:error]).to include("were rechecked after the erasure, but its pending recheck marker could not be cleared")
+        expect(result[:error]).to include("Once no other erasure of this account is running")
+        expect(user.reload.gdpr_sent_post_emails_recheck_pending).to be_present
+        expect(SentPostEmail.where(email: "john@example.com")).to be_empty
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
+        expect(user.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last.content)
+          .to include("its pending recheck marker could not be cleared")
+        expect(described_class.new(User.find(user.id), performed_by: admin).perform!).to include(success: false)
+      end
+
       # The gap a recorded id alone cannot close: a sync that created the Person but failed before
       # saving its id leaves no local pointer, and erasure cannot wait for a next sync to supply one.
       it "deletes a guardian person Stripe holds that we never recorded an id for" do
@@ -854,10 +893,12 @@ describe GdprDataErasureService do
       expect(result[:summary][:sent_post_emails_deleted]).to eq(2)
     end
 
-    it "deletes a sent post email row a send inserts after the first lookup" do
+    it "deletes a sent post email row a send inserts after the first lookup, then clears the pending recheck" do
       post = create(:installment)
       lookups = 0
+      pending_during_recheck = nil
       allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+        pending_during_recheck = User.find(user.id).gdpr_sent_post_emails_recheck_pending if lookups == 1
         original.call(email).tap do
           lookups += 1
           create(:sent_post_email, post:, email:) if lookups == 1
@@ -869,23 +910,73 @@ describe GdprDataErasureService do
       expect(result[:success]).to eq(true)
       expect(SentPostEmail.where(email: "john@example.com")).to be_empty
       expect(result[:summary][:sent_post_emails_deleted]).to eq(1)
+      expect(pending_during_recheck).to be_present
+      expect(user.reload.gdpr_sent_post_emails_recheck_pending).to be_nil
     end
 
-    it "reports the erasure as incomplete when the post-commit sent post email recheck fails" do
+    it "keeps the erasure incomplete across reruns until someone clears the pending sent post email recheck" do
       lookups = 0
       allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
         lookups += 1
         raise ActiveRecord::StatementTimeout, "timed out" if lookups == 2
         original.call(email)
       end
+      notes = -> { user.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).order(:id).pluck(:content) }
 
       result = described_class.new(user, performed_by: admin).perform!
 
       expect(result[:success]).to eq(false)
       expect(result[:error]).to include("sent post email records for the original address could not be rechecked")
       expect(user.reload.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
-      note = user.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
-      expect(note.content).to include("sent post email records for the original address could not be rechecked")
+      pending_generation = user.gdpr_sent_post_emails_recheck_pending
+      expect(pending_generation).to be_present
+      expect(notes.call.last).to include("sent post email records for the original address could not be rechecked")
+
+      rerun = described_class.new(User.find(user.id), performed_by: admin).perform!
+
+      expect(rerun[:success]).to eq(false)
+      expect(rerun[:error]).to include("an earlier run did not finish rechecking sent post email records")
+      expect(rerun[:error]).to include("Once no other erasure of this account is running, note the account's gdpr_sent_post_emails_recheck_pending value")
+      expect(rerun[:error]).to include("clear that field only if it still holds the value you noted")
+      expect(notes.call.last).to include("an earlier run did not finish rechecking sent post email records")
+      expect(user.reload.gdpr_sent_post_emails_recheck_pending).to eq(pending_generation)
+      expect(lookups).to eq(2)
+
+      user.gdpr_sent_post_emails_recheck_pending = nil
+      user.save!(validate: false)
+
+      expect(described_class.new(User.find(user.id), performed_by: admin).perform!).to include(success: true)
+    end
+
+    it "does not let a run's finished recheck clear the pending recheck of a run that committed after it" do
+      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+        if User.find(user.id).gdpr_sent_post_emails_recheck_pending.present?
+          # Another run read the address before this one committed, then committed its own generation.
+          later_run = User.find(user.id)
+          later_run.gdpr_sent_post_emails_recheck_pending = "later-run-generation"
+          later_run.save!(validate: false)
+        end
+        original.call(email)
+      end
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(false)
+      expect(result[:error]).to include("a later run of this erasure has not finished rechecking sent post email records")
+      expect(user.reload.gdpr_sent_post_emails_recheck_pending).to eq("later-run-generation")
+      expect(described_class.new(User.find(user.id), performed_by: admin).perform!).to include(success: false)
+    end
+
+    it "leaves no pending sent post email recheck when the erasure rolls back" do
+      create(:sent_post_email, email: user.email)
+      allow_any_instance_of(described_class).to receive(:log_erasure!).and_raise(StandardError, "failed late")
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result).to include(success: false, error: "failed late")
+      expect(user.reload.email).to eq("john@example.com")
+      expect(user.gdpr_sent_post_emails_recheck_pending).to be_nil
+      expect(SentPostEmail.where(email: "john@example.com").count).to eq(1)
     end
 
     it "anonymizes the address on other sellers' audience, follower and imported customer rows and in their search documents" do
