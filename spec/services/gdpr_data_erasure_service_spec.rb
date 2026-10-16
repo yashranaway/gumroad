@@ -819,6 +819,444 @@ describe GdprDataErasureService do
       expect(credit_card.recurring_authorization_max_amount_cents).to be_nil
     end
 
+    it "anonymizes guest carts under the account's address or on a device only it used, and leaves shared devices alone" do
+      create(:cart, user:, browser_guid: "own-device")
+      own_device_guest_cart = create(:cart, :guest, email: nil, browser_guid: "own-device", ip_address: "10.0.0.1")
+      address_guest_cart = create(:cart, :guest, email: "JOHN@example.com", browser_guid: "shared-device", ip_address: "10.0.0.2", deleted_at: 1.day.ago)
+      other_account_cart = create(:cart, browser_guid: "shared-device")
+      shared_device_guest_cart = create(:cart, :guest, email: nil, browser_guid: "shared-device", ip_address: "10.0.0.3")
+      create(:free_purchase, purchaser: user, email: user.email, browser_guid: "family-device")
+      relative_guest_cart = create(:cart, :guest, email: "relative@example.com", browser_guid: "family-device", deleted_at: 1.day.ago)
+      family_device_guest_cart = create(:cart, :guest, email: nil, browser_guid: "family-device", ip_address: "10.0.0.4")
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(address_guest_cart.reload).to have_attributes(email: "deleted-#{user.id}@deleted.gumroad.com", ip_address: nil, browser_guid: nil)
+      expect(own_device_guest_cart.reload).to have_attributes(email: nil, ip_address: nil, browser_guid: nil)
+      expect(shared_device_guest_cart.reload).to have_attributes(ip_address: "10.0.0.3", browser_guid: "shared-device")
+      expect(family_device_guest_cart.reload).to have_attributes(ip_address: "10.0.0.4", browser_guid: "family-device")
+      expect(relative_guest_cart.reload).to have_attributes(email: "relative@example.com", browser_guid: "family-device")
+      expect(other_account_cart.reload.browser_guid).to eq("shared-device")
+      expect(result[:summary][:carts_anonymized]).to eq(3)
+    end
+
+    it "deletes the address's sent post email rows on every seller's posts and keeps everyone else's" do
+      first_post = create(:installment)
+      second_post = create(:installment)
+      create(:sent_post_email, post: first_post, email: user.email)
+      create(:sent_post_email, post: second_post, email: user.email)
+      other_recipient_row = create(:sent_post_email, post: first_post, email: "someone@example.com")
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(SentPostEmail.where(email: "john@example.com")).to be_empty
+      expect(SentPostEmail.pluck(:id)).to eq([other_recipient_row.id])
+      expect(result[:summary][:sent_post_emails_deleted]).to eq(2)
+    end
+
+    it "deletes a sent post email row a send inserts after the first lookup" do
+      post = create(:installment)
+      lookups = 0
+      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+        original.call(email).tap do
+          lookups += 1
+          create(:sent_post_email, post:, email:) if lookups == 1
+        end
+      end
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(SentPostEmail.where(email: "john@example.com")).to be_empty
+      expect(result[:summary][:sent_post_emails_deleted]).to eq(1)
+    end
+
+    it "reports the erasure as incomplete when the post-commit sent post email recheck fails" do
+      lookups = 0
+      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+        lookups += 1
+        raise ActiveRecord::StatementTimeout, "timed out" if lookups == 2
+        original.call(email)
+      end
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(false)
+      expect(result[:error]).to include("sent post email records for the original address could not be rechecked")
+      expect(user.reload.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
+      note = user.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+      expect(note.content).to include("sent post email records for the original address could not be rechecked")
+    end
+
+    it "anonymizes the address on other sellers' audience, follower and imported customer rows and in their search documents" do
+      seller = create(:user)
+      follower = create(:active_follower, user: seller, email: user.email)
+      imported_customer = create(:imported_customer, email: user.email)
+      other_follower = create(:active_follower, user: seller, email: "someone@example.com")
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+      conflicting_seller = create(:user)
+      conflicting_member_id = create(:active_follower, user: conflicting_seller, email: user.email).then { AudienceMember.find_by!(seller: conflicting_seller, email: _1.email).id }
+      create(:audience_member, seller: conflicting_seller, email: anonymized_email)
+      member_id = AudienceMember.find_by!(seller:, email: user.email).id
+      other_member_id = AudienceMember.find_by!(seller:, email: "someone@example.com").id
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      indexed_email = ->(id) { EsClient.get(index: AudienceMember.index_name, id:, ignore: 404)["_source"]&.fetch("email") }
+      expect([member_id, conflicting_member_id, other_member_id].map(&indexed_email)).to eq(["john@example.com", "john@example.com", "someone@example.com"])
+      ElasticsearchIndexerWorker.jobs.clear
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(indexed_email.(member_id)).to eq(anonymized_email)
+      expect(EsClient.exists?(index: AudienceMember.index_name, id: conflicting_member_id)).to be(false)
+      expect(indexed_email.(other_member_id)).to eq("someone@example.com")
+      expect(ElasticsearchIndexerWorker.jobs.select { _1["args"][1]["class_name"] == "AudienceMember" }).to be_empty
+      expect(user.reload).to have_attributes(gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [])
+      expect(follower.reload.email).to eq(anonymized_email)
+      expect(imported_customer.reload.email).to eq(anonymized_email)
+      expect(AudienceMember.find_by(seller:, email: anonymized_email)).to have_attributes(follower: false, details: nil)
+      expect(AudienceMember.where(email: "john@example.com")).to be_empty
+      expect(other_follower.reload.email).to eq("someone@example.com")
+      expect(AudienceMember.find_by(seller:, email: "someone@example.com")).to be_follower
+      expect(result[:summary]).to include(audience_members_anonymized: 1, followers_anonymized: 2, imported_customers_anonymized: 1)
+    end
+
+    it "removes the Google and Apple sign-in ids, leaving other accounts' sign-ins alone" do
+      user.update!(google_uid: "google-subject-1")
+      create(:user, google_uid: "google-subject-2")
+      create(:user_external_authentication, user:, provider: "apple", uid: "apple-subject-1")
+      other_apple_sign_in = create(:user_external_authentication, user: create(:user), provider: "apple", uid: "apple-subject-2")
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(user.reload.google_uid).to be_nil
+      expect(User.where.not(google_uid: nil).pluck(:google_uid)).to eq(["google-subject-2"])
+      expect(UserExternalAuthentication.pluck(:id)).to eq([other_apple_sign_in.id])
+    end
+
+    it "keeps the rows a previous run anonymized when the erasure is run again" do
+      follower = create(:active_follower, email: user.email)
+      create(:sent_post_email, email: user.email)
+      guest_cart = create(:cart, :guest, email: user.email)
+      described_class.new(user, performed_by: admin).perform!
+
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+
+      result = described_class.new(user.reload, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(Follower.where(id: follower.id).pluck(:email)).to eq([anonymized_email])
+      expect(AudienceMember.where(email: anonymized_email).count).to eq(1)
+      expect(guest_cart.reload.email).to eq(anonymized_email)
+      expect(result[:summary]).to include(carts_anonymized: 0, sent_post_emails_deleted: 0, audience_members_anonymized: 0, followers_anonymized: 0)
+    end
+
+    it "anonymizes follows linked to the account under an earlier address, drops their audience follower details, and leaves other people's rows under it" do
+      old_email = "john.old@example.com"
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+      seller, both_addresses_seller, two_old_addresses_seller, unrelated_seller = create_list(:user, 4)
+      linked = create(:active_follower, user: seller, email: old_email, follower_user_id: user.id)
+      shared_member = AudienceMember.find_by!(seller:, email: old_email)
+      shared_member.details["purchases"] = [{ "id" => 1, "product_id" => 1, "price_cents" => 100, "created_at" => 7.days.ago.iso8601, "country" => "United States" }]
+      shared_member.save!
+      current = create(:active_follower, user: both_addresses_seller, email: user.email, follower_user_id: user.id)
+      create(:active_follower, user: both_addresses_seller, email: old_email, follower_user_id: user.id)
+      create(:deleted_follower, user: two_old_addresses_seller, email: "john.older@example.com", follower_user_id: user.id)
+      alive_old = create(:active_follower, user: two_old_addresses_seller, email: old_email, follower_user_id: user.id)
+      unlinked = create(:active_follower, user: unrelated_seller, email: old_email)
+      other_account = create(:active_follower, user: create(:user), email: old_email, follower_user_id: create(:user).id)
+      stranger = create(:active_follower, user: seller, email: "john.older@example.com")
+      linked_member_ids = AudienceMember.where(seller: [both_addresses_seller, two_old_addresses_seller], email: old_email).ids
+      unrelated_member_id = AudienceMember.find_by!(seller: unrelated_seller, email: old_email).id
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      indexed = ->(id) { EsClient.get(index: AudienceMember.index_name, id:, ignore: 404)["_source"]&.slice("email", "follower", "customer") }
+      expect(linked_member_ids.size).to eq(2)
+      expect(indexed.(shared_member.id)).to eq("email" => old_email, "follower" => true, "customer" => true)
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(linked.reload.email).to eq(anonymized_email)
+      expect(Follower.where(followed_id: both_addresses_seller.id).pluck(:id, :email)).to eq([[current.id, anonymized_email]])
+      expect(Follower.where(followed_id: two_old_addresses_seller.id).pluck(:id, :email)).to eq([[alive_old.id, anonymized_email]])
+      expect([unlinked, other_account, stranger].map { _1.reload.email }).to eq([old_email, old_email, "john.older@example.com"])
+      expect(AudienceMember.find_by(seller:, email: "john.older@example.com")).to be_follower
+      expect(AudienceMember.where(seller: [both_addresses_seller, two_old_addresses_seller], email: [old_email, "john.older@example.com"])).to be_empty
+      expect(linked_member_ids.map { EsClient.exists?(index: AudienceMember.index_name, id: _1) }).to eq([false, false])
+      expect(shared_member.reload).to have_attributes(follower: false, customer: true)
+      expect(shared_member.details["purchases"].pluck("id")).to eq([1])
+      expect(indexed.(shared_member.id)).to eq("email" => old_email, "follower" => false, "customer" => true)
+      expect(AudienceMember.find(unrelated_member_id)).to be_follower
+      expect(indexed.(unrelated_member_id)).to include("email" => old_email, "follower" => true)
+      expect(result[:summary]).to include(followers_anonymized: 3)
+    end
+
+    it "anonymizes linked follows a previous run left under an earlier address when the erasure is run again" do
+      seller, other_seller = create_list(:user, 2)
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+      erased = create(:active_follower, user: seller, email: user.email, follower_user_id: user.id)
+      described_class.new(user, performed_by: admin).perform!
+      create(:active_follower, user: seller, email: "john.old@example.com", follower_user_id: user.id)
+      left_behind = create(:active_follower, user: other_seller, email: "john.old@example.com", follower_user_id: user.id)
+
+      rerun = described_class.new(user.reload, performed_by: admin).perform!
+      again = described_class.new(user.reload, performed_by: admin).perform!
+
+      expect([rerun[:success], again[:success]]).to eq([true, true])
+      expect(Follower.where(followed_id: seller.id).pluck(:id, :email)).to eq([[erased.id, anonymized_email]])
+      expect(left_behind.reload.email).to eq(anonymized_email)
+      expect(AudienceMember.where(email: "john.old@example.com")).to be_empty
+      expect([rerun, again].map { _1[:summary][:followers_anonymized] }).to eq([1, 0])
+    end
+
+    it "removes the account's own purchases from audience members under an earlier address and keeps other buyers' purchases there" do
+      old_email = "john.old@example.com"
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+      shared_seller, solo_seller = create_list(:user, 2)
+      own_shared = create(:free_purchase, link: create(:product, user: shared_seller), purchaser: user, email: old_email)
+      other_account = create(:free_purchase, link: create(:product, user: shared_seller), purchaser: create(:user), email: old_email)
+      guest = create(:free_purchase, link: create(:product, user: shared_seller), purchaser: nil, email: old_email)
+      own_solo = create(:free_purchase, link: create(:product, user: solo_seller), purchaser: user, email: old_email)
+      shared_member = AudienceMember.find_by!(seller: shared_seller, email: old_email)
+      solo_member_id = AudienceMember.find_by!(seller: solo_seller, email: old_email).id
+      expect(shared_member.details["purchases"].pluck("id")).to contain_exactly(own_shared.id, other_account.id, guest.id)
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      indexed_purchase_ids = ->(id) { EsClient.get(index: AudienceMember.index_name, id:, ignore: 404)["_source"]&.fetch("purchases")&.pluck("id") }
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(shared_member.reload.details["purchases"].pluck("id")).to contain_exactly(other_account.id, guest.id)
+      expect(shared_member).to have_attributes(email: old_email, customer: true)
+      expect(indexed_purchase_ids.(shared_member.id)).to contain_exactly(other_account.id, guest.id)
+      expect(AudienceMember.exists?(solo_member_id)).to be(false)
+      expect(EsClient.exists?(index: AudienceMember.index_name, id: solo_member_id)).to be(false)
+      expect([own_shared, own_solo].map { _1.reload.email }).to eq([anonymized_email, anonymized_email])
+      expect([other_account, guest].map { _1.reload.email }).to eq([old_email, old_email])
+    end
+
+    it "erases an account whose linked follow an earlier erasure of its old address already anonymized" do
+      seller = create(:user)
+      follower = create(:active_follower, user: seller, email: "john.old@example.com", follower_user_id: user.id)
+      earlier_erasure = GdprAudienceRecordsAnonymizer.new(email: "john.old@example.com", anonymized_email: "buyer-1@deleted.gumroad.com")
+      earlier_erasure.anonymize_audience_members!
+      earlier_erasure.anonymize_followers!
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(follower.reload.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
+      expect(AudienceMember.find_by!(seller:, email: "buyer-1@deleted.gumroad.com")).to have_attributes(details: nil, follower: false)
+    end
+
+    it "keeps a purchase added to a linked follow's audience member after the erasure first read it" do
+      seller = create(:user)
+      create(:active_follower, user: seller, email: "john.old@example.com", follower_user_id: user.id)
+      member = AudienceMember.find_by!(seller:, email: "john.old@example.com")
+      purchase = { "id" => 1, "product_id" => 1, "price_cents" => 100, "created_at" => 7.days.ago.iso8601, "country" => "United States" }
+      allow(AudienceMember).to receive(:lock).and_wrap_original do |original, *args|
+        AudienceMember.find(member.id).then { _1.update_columns(details: _1.details.merge("purchases" => [purchase])) }
+        original.call(*args)
+      end
+
+      expect(described_class.new(user, performed_by: admin).perform![:success]).to eq(true)
+
+      expect(member.reload).to have_attributes(follower: false, customer: true)
+      expect(member.details.keys).to eq(["purchases"])
+    end
+
+    it "rolls back the residual cleanup with the rest of the erasure when a step fails" do
+      guest_cart = create(:cart, :guest, email: user.email)
+      sent_post_email = create(:sent_post_email, email: user.email)
+      follower = create(:active_follower, email: user.email)
+      create(:audience_member, seller: follower.user, email: "deleted-#{user.id}@deleted.gumroad.com")
+      allow_any_instance_of(GdprAudienceRecordsAnonymizer).to receive(:anonymize_imported_customers!).and_raise(StandardError, "boom")
+      allow(EsClient).to receive(:index).and_call_original
+      allow(EsClient).to receive(:delete).and_call_original
+      ElasticsearchIndexerWorker.jobs.clear
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result).to eq(success: false, error: "boom")
+      expect(user.reload.email).to eq("john@example.com")
+      expect(guest_cart.reload.email).to eq("john@example.com")
+      expect(SentPostEmail.exists?(sent_post_email.id)).to eq(true)
+      expect(AudienceMember.where(email: "john@example.com").count).to eq(1)
+      expect(EsClient).not_to have_received(:index)
+      expect(EsClient).not_to have_received(:delete)
+      expect(ElasticsearchIndexerWorker.jobs.select { _1["args"][1]["class_name"] == "AudienceMember" }).to be_empty
+    end
+
+    it "finishes the erasure when the same service is retried after a late failure" do
+      guest_cart = create(:cart, :guest, email: user.email)
+      create(:sent_post_email, email: user.email)
+      follower = create(:active_follower, email: user.email)
+      create(:product, user:)
+      service = described_class.new(user, performed_by: admin)
+      log_attempts = 0
+      allow(service).to receive(:log_erasure!).and_wrap_original do |original|
+        log_attempts += 1
+        raise "transient failure" if log_attempts == 1
+        original.call
+      end
+      allow(EsClient).to receive(:index).and_call_original
+      expect(service.perform![:success]).to eq(false)
+      expect(EsClient).not_to have_received(:index)
+
+      result = service.perform!
+
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+      expect(result[:success]).to eq(true)
+      expect(User.find(user.id)).to have_attributes(email: anonymized_email, deleted?: true)
+      expect(guest_cart.reload.email).to eq(anonymized_email)
+      expect(SentPostEmail.where(email: "john@example.com")).to be_empty
+      expect(follower.reload.email).to eq(anonymized_email)
+      expect(EsClient).to have_received(:index).with(hash_including(id: AudienceMember.find_by!(email: anonymized_email).id))
+      expect(result[:summary]).to include(products_deleted: 1, carts_anonymized: 1, sent_post_emails_deleted: 1, audience_members_anonymized: 1, followers_anonymized: 1)
+    end
+
+    it "keeps the members whose search documents it could not write on the account until a rerun writes them" do
+      user.update!(gumroad_day_timezone: "Pacific Time (US & Canada)")
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+      seller = create(:user)
+      member_id = create(:active_follower, user: seller, email: user.email).then { AudienceMember.find_by!(seller:, email: _1.email).id }
+      departed_seller = create(:user)
+      departed_member_id = create(:active_follower, user: departed_seller, email: user.email).then { AudienceMember.find_by!(seller: departed_seller, email: _1.email).id }
+      conflicting_seller = create(:user)
+      conflicting_member_id = create(:active_follower, user: conflicting_seller, email: user.email).then { AudienceMember.find_by!(seller: conflicting_seller, email: _1.email).id }
+      create(:audience_member, seller: conflicting_seller, email: anonymized_email)
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      elasticsearch_down_for = [:index, :delete]
+      [:index, :delete].each do |operation|
+        allow(EsClient).to receive(operation).and_wrap_original do |original, *args|
+          raise Faraday::ConnectionFailed, "elasticsearch down" if operation.in?(elasticsearch_down_for) && args.first[:index] == AudienceMember.index_name
+          original.call(*args)
+        end
+      end
+      allow(ErrorNotifier).to receive(:notify)
+      indexed_email = ->(id) { EsClient.get(index: AudienceMember.index_name, id:, ignore: 404)["_source"]&.fetch("email") }
+      payout_notes = -> { user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).pluck(:content) }
+
+      first = described_class.new(user, performed_by: admin).perform!
+
+      expect(first[:success]).to eq(false)
+      expect(first[:error]).to include(member_id.to_s, departed_member_id.to_s, conflicting_member_id.to_s)
+      expect(payout_notes.call).to contain_exactly(a_string_including("GDPR: Erasure incomplete", conflicting_member_id.to_s))
+      expect([member_id, conflicting_member_id].map(&indexed_email)).to eq(["john@example.com", "john@example.com"])
+      expect(user.reload).to have_attributes(
+        gdpr_audience_reindex_member_ids: contain_exactly(member_id, departed_member_id),
+        gdpr_audience_unindex_member_ids: [conflicting_member_id],
+      )
+
+      elasticsearch_down_for = [:delete]
+      still_down = described_class.new(User.find(user.id), performed_by: admin).perform!
+
+      expect(still_down[:success]).to eq(false)
+      expect(still_down[:error]).to include(member_id.to_s, conflicting_member_id.to_s)
+      expect(payout_notes.call.size).to eq(2)
+      expect(indexed_email.(member_id)).to eq(anonymized_email)
+      expect(indexed_email.(conflicting_member_id)).to eq("john@example.com")
+      expect(user.reload).to have_attributes(
+        gdpr_audience_reindex_member_ids: contain_exactly(member_id, departed_member_id),
+        gdpr_audience_unindex_member_ids: [conflicting_member_id],
+      )
+
+      elasticsearch_down_for = []
+      AudienceMember.where(id: departed_member_id).delete_all
+      restored = described_class.new(User.find(user.id), performed_by: admin).perform!
+
+      expect(restored[:success]).to eq(true)
+      expect(indexed_email.(member_id)).to eq(anonymized_email)
+      expect([departed_member_id, conflicting_member_id].map { EsClient.exists?(index: AudienceMember.index_name, id: _1) }).to eq([false, false])
+      expect(user.reload).to have_attributes(gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [], gumroad_day_timezone: "Pacific Time (US & Canada)")
+    end
+
+    it "keeps the member ids another run records while this one is writing them" do
+      user.update!(gdpr_audience_unindex_member_ids: [999_001])
+      create(:active_follower, email: user.email)
+      recreate_model_index(AudienceMember)
+      written_once = false
+      allow(EsClient).to receive(:index).and_wrap_original do |original, *args|
+        unless written_once
+          written_once = true
+          concurrent_run = User.find(user.id)
+          concurrent_run.with_lock do
+            concurrent_run.gdpr_audience_unindex_member_ids = concurrent_run.gdpr_audience_unindex_member_ids | [999_002]
+            concurrent_run.save!(validate: false)
+          end
+        end
+        original.call(*args)
+      end
+      allow(EsClient).to receive(:delete).and_call_original
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      member = AudienceMember.find_by!(email: "deleted-#{user.id}@deleted.gumroad.com")
+      expect(result[:success]).to eq(true)
+      expect(EsClient.get(index: AudienceMember.index_name, id: member.id)["_source"]["email"]).to eq(member.email)
+      expect(EsClient).to have_received(:delete).with(hash_including(index: AudienceMember.index_name, id: 999_001))
+      expect(user.reload).to have_attributes(gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [999_002])
+    end
+
+    it "writes nothing to the audience search index when a transaction around the erasure rolls back" do
+      follower = create(:active_follower, email: user.email)
+      conflicting_seller = create(:user)
+      create(:active_follower, user: conflicting_seller, email: user.email)
+      create(:audience_member, seller: conflicting_seller, email: "deleted-#{user.id}@deleted.gumroad.com")
+      member_ids = AudienceMember.where(email: user.email).ids
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      indexed_emails = -> { member_ids.map { EsClient.get(index: AudienceMember.index_name, id: _1, ignore: 404)["_source"]&.fetch("email") } }
+      allow(EsClient).to receive(:index).and_call_original
+      allow(EsClient).to receive(:delete).and_call_original
+
+      ActiveRecord::Base.transaction do
+        expect(described_class.new(user, performed_by: admin).perform![:success]).to eq(true)
+        expect(indexed_emails.call).to eq(["john@example.com", "john@example.com"])
+        raise ActiveRecord::Rollback
+      end
+
+      expect(EsClient).not_to have_received(:index)
+      expect(EsClient).not_to have_received(:delete)
+      expect(indexed_emails.call).to eq(["john@example.com", "john@example.com"])
+      expect(User.find(user.id)).to have_attributes(email: "john@example.com", gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [])
+      expect(follower.reload.email).to eq("john@example.com")
+    end
+
+    it "scrubs guest carts under the address and a former affiliate's sent post emails, and leaves carts on a device another account shares" do
+      original_email = user.email
+      user.update_columns(google_uid: "google-subject")
+      guest_cart = create(:cart, :guest, email: original_email, ip_address: "127.0.0.3", browser_guid: "guest-guid")
+      relative_cart = create(:cart, :guest, email: "relative@example.com", ip_address: "127.0.0.5", browser_guid: "own-guid", deleted_at: 1.day.ago)
+      shared_device_cart = create(:cart, :guest, email: nil, ip_address: "127.0.0.4", browser_guid: "own-guid")
+      other_cart = create(:cart, :guest, email: "other@example.com", browser_guid: "other-guid")
+      create(:cart, user:, email: original_email, browser_guid: "own-guid")
+      other_user_cart = create(:cart, user: create(:user), email: "shared@example.com", browser_guid: "own-guid")
+      affiliate_seller = create(:user)
+      create(:direct_affiliate, seller: affiliate_seller, affiliate_user: user, deleted_at: Time.current)
+      affiliate_sent = create(:sent_post_email, post: create(:installment, seller: affiliate_seller), email: original_email)
+      seller = create(:user)
+      post = create(:installment, seller:)
+      create(:purchase, link: create(:product, user: seller), email: original_email)
+      sent = create(:sent_post_email, post:, email: original_email)
+      other_sent = create(:sent_post_email, post:, email: "other@example.com")
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(guest_cart.reload).to have_attributes(email: "deleted-#{user.id}@deleted.gumroad.com", ip_address: nil, browser_guid: nil)
+      # own-guid is also on another account's cart, so it does not tie this address-less cart to the user.
+      expect(shared_device_cart.reload).to have_attributes(ip_address: "127.0.0.4", browser_guid: "own-guid")
+      expect(relative_cart.reload).to have_attributes(email: "relative@example.com", ip_address: "127.0.0.5", browser_guid: "own-guid")
+      expect(other_cart.reload.email).to eq("other@example.com")
+      expect(other_user_cart.reload).to have_attributes(email: "shared@example.com", browser_guid: "own-guid")
+      expect(SentPostEmail.where(id: [affiliate_sent.id, sent.id])).to be_empty
+      expect(SentPostEmail.exists?(other_sent.id)).to be(true)
+      expect(user.reload.google_uid).to be_nil
+    end
+
     it "deletes the user's device records" do
       ios_device = create(:device, user:, token: "ios-device-token")
       android_device = create(:android_device, user:, token: "android-device-token")
