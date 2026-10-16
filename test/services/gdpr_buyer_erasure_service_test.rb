@@ -163,6 +163,41 @@ class GdprBuyerErasureServiceGuestBuyerDataTest < ActiveSupport::TestCase
     assert_equal "guid_event", event.browser_guid
   end
 
+  test "redacts the buyer's PII from purchase version history and leaves other buyers' history alone" do
+    @purchase1.update_attribute(:full_name, "Jane Q Doe")
+    history = ->(purchase) { purchase.versions.reload.flat_map { [_1.object, _1.object_changes] }.compact.join }
+
+    result = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
+
+    assert_equal true, result[:success]
+    assert_operator result[:counts][:purchase_versions], :>=, 1
+    [@purchase1, @purchase2].each do |purchase|
+      assert_not_includes history.(purchase), @buyer_email
+      assert_not_includes history.(purchase), "Jane Doe"
+    end
+    assert_includes history.(@unrelated_purchase), "other@example.com"
+  end
+
+  test "redacts purchase version history on a re-run after that step was skipped" do
+    @purchase1.update_attribute(:full_name, "Jane Q Doe")
+    history = -> { @purchase1.versions.reload.flat_map { [_1.object, _1.object_changes] }.compact.join }
+
+    first_run = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin)
+    first_run.stubs(:redact_purchase_versions!).raises(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
+    first_result = first_run.perform!
+
+    assert_includes first_result[:skipped], :purchase_versions
+    assert @purchase1.reload.email.end_with?("@deleted.gumroad.com")
+    assert_includes history.(), @buyer_email
+
+    second_result = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
+
+    assert_empty second_result[:skipped]
+    assert_operator second_result[:counts][:purchase_versions], :>=, 1
+    assert_not_includes history.(), @buyer_email
+    assert_not_includes history.(), "Jane Doe"
+  end
+
   test "anonymizes events on a re-run after the events step was skipped, even though purchases were already anonymized" do
     event = build_event(purchase_id: @purchase1.id, email: @buyer_email)
 
