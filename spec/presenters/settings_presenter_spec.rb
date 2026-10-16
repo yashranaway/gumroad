@@ -713,25 +713,18 @@ describe SettingsPresenter do
         },
         paypal_address: seller.payment_address,
         fee_info: {
-          card_fee_info: {
-            summary: "All sales will incur fees based on how customers find your product:",
+          merchant_account_fee_info: {
+            summary: "Your fees depend on how buyers find your product:",
             items: [
-              { label: "Direct sales", value: "10% + 50¢ Gumroad fee + 2.9% + 30¢ credit card fee" },
-              { label: "Discover sales", value: "30% flat" },
-            ],
-          },
-          paypal_fee_info: {
-            summary: "All sales will incur fees based on how customers find your product:",
-            items: [
-              { label: "Direct sales", value: "10% + 50¢ Gumroad fee + 2.9% + 30¢ PayPal fee" },
-              { label: "Discover sales", value: "30% flat" },
+              { label: "Direct sales", value: "10% + 50¢ Gumroad fee + 2.9% + 30¢ processing fee" },
+              { label: "Discover sales", value: "30%, processing fee included" },
             ],
           },
           connect_account_fee_info: {
-            summary: "All sales will incur fees based on how customers find your product:",
+            summary: "Your fees depend on how buyers find your product:",
             items: [
-              { label: "Direct sales", value: "10% + 50¢" },
-              { label: "Discover sales", value: "30% flat" },
+              { label: "Direct sales", value: "10% + 50¢ Gumroad fee" },
+              { label: "Discover sales", value: "30% Gumroad fee" },
             ],
           },
         },
@@ -1689,7 +1682,7 @@ describe SettingsPresenter do
       end
 
       it "returns 0% Gumroad fee in the connect account fee info" do
-        expect(presenter.payments_props[:fee_info][:connect_account_fee_info]).to eq(summary: "All sales will incur a 0% Gumroad fee.", items: [])
+        expect(presenter.payments_props[:fee_info][:connect_account_fee_info]).to eq(summary: "You pay a 0% Gumroad fee on all sales.", items: [])
       end
     end
 
@@ -1700,9 +1693,8 @@ describe SettingsPresenter do
 
       it "returns custom Gumroad fee percent in the fee info" do
         fee_info = presenter.payments_props[:fee_info]
-        expect(fee_info[:card_fee_info][:items].first).to eq(label: "Direct sales", value: "7.5% + 50¢ Gumroad fee + 2.9% + 30¢ credit card fee")
-        expect(fee_info[:paypal_fee_info][:items].first).to eq(label: "Direct sales", value: "7.5% + 50¢ Gumroad fee + 2.9% + 30¢ PayPal fee")
-        expect(fee_info[:connect_account_fee_info][:items].first).to eq(label: "Direct sales", value: "7.5% + 50¢")
+        expect(fee_info[:merchant_account_fee_info][:items].first).to eq(label: "Direct sales", value: "7.5% + 50¢ Gumroad fee + 2.9% + 30¢ processing fee")
+        expect(fee_info[:connect_account_fee_info][:items].first).to eq(label: "Direct sales", value: "7.5% + 50¢ Gumroad fee")
       end
     end
 

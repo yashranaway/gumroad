@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class FeeInfoPresenter
-  SUMMARY = "All sales will incur fees based on how customers find your product:"
+  SUMMARY = "Your fees depend on how buyers find your product:"
 
   attr_reader :seller, :country_code
 
@@ -10,38 +10,38 @@ class FeeInfoPresenter
     @country_code = country_code
   end
 
-  def card_fee_info
-    processor_fee_info("credit card fee")
-  end
-
-  def paypal_fee_info
-    processor_fee_info("PayPal fee")
+  # Payout method does not change how a sale is charged: every sale on Gumroad's merchant account pays the same processor fee.
+  def merchant_account_fee_info
+    processor_fee = "#{format_percent(Purchase::PROCESSOR_FEE_PER_THOUSAND)}% + #{Purchase::PROCESSOR_FIXED_FEE_CENTS}¢ processing fee"
+    breakdown(
+      direct_sales: "#{gumroad_fee} Gumroad fee + #{processor_fee}",
+      discover_sales: "#{discover_fee}, processing fee included",
+    )
   end
 
   def connect_account_fee_info
-    return { summary: "All sales will incur a 0% Gumroad fee.", items: [] } if country_code == Compliance::Countries::BRA.alpha2
+    return { summary: "You pay a 0% Gumroad fee on all sales.", items: [] } if country_code == Compliance::Countries::BRA.alpha2
 
-    breakdown(direct_sales: gumroad_fee)
+    breakdown(direct_sales: "#{gumroad_fee} Gumroad fee", discover_sales: "#{discover_fee} Gumroad fee")
   end
 
   private
-    def processor_fee_info(processor_fee_name)
-      processor_fee = "#{format_percent(Purchase::PROCESSOR_FEE_PER_THOUSAND)}% + #{Purchase::PROCESSOR_FIXED_FEE_CENTS}¢ #{processor_fee_name}"
-      breakdown(direct_sales: "#{gumroad_fee} Gumroad fee + #{processor_fee}")
-    end
-
-    def breakdown(direct_sales:)
+    def breakdown(direct_sales:, discover_sales:)
       {
         summary: SUMMARY,
         items: [
           { label: "Direct sales", value: direct_sales },
-          { label: "Discover sales", value: "#{format_percent(Purchase::GUMROAD_DISCOVER_FEE_PER_THOUSAND)}% flat" },
+          { label: "Discover sales", value: discover_sales },
         ],
       }
     end
 
     def gumroad_fee
       @gumroad_fee ||= "#{format_percent(seller.gumroad_fee_per_thousand)}% + #{Purchase::GUMROAD_FIXED_FEE_CENTS}¢"
+    end
+
+    def discover_fee
+      "#{format_percent(Purchase::GUMROAD_DISCOVER_FEE_PER_THOUSAND)}%"
     end
 
     def format_percent(per_thousand)

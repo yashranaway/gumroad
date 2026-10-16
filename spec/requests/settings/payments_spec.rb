@@ -285,7 +285,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       Feature.activate_user(:merchant_migration, @user)
       refresh
       choose "Stripe"
-      expect(page).to have_text("All sales will incur a 0% Gumroad fee.")
+      expect(page).to have_text("You pay a 0% Gumroad fee on all sales.")
       expect(page).not_to have_selector("dt", text: "Direct sales")
       expect(page).to have_content("This feature is available in all countries where Stripe operates, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.")
       expect(page).to have_link("all countries where Stripe operates", href: "https://stripe.com/en-in/global")
@@ -302,11 +302,11 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       visit settings_payments_path
 
       choose "Debit Card"
-      expect(page).to have_text("All sales will incur fees based on how customers find your product:")
+      expect(page).to have_text("Your fees depend on how buyers find your product:")
       expect(page).to have_selector("dt", text: "Direct sales")
-      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ credit card fee")
+      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ processing fee")
       expect(page).to have_selector("dt", text: "Discover sales")
-      expect(page).to have_selector("dd", text: "30% flat")
+      expect(page).to have_selector("dd", text: "30%, processing fee included")
     end
 
     it "does not show the deprecated Stripe Connect option even if the can_connect_stripe flag is enabled" do
@@ -1007,7 +1007,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       @user.update(payment_address: "barny@paypal.com")
       visit settings_payments_path
       expect(page).to have_field("PayPal Email")
-      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ PayPal fee")
+      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ processing fee")
     end
 
     it "warns a Zambian creator that PayPal cannot receive payouts there" do
@@ -1256,7 +1256,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           change_masked_tax_field("Emirates ID")
           fill_in("Emirates ID", with: "000000000000000")
 
-          expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+          expect(page).to have_status(text: "PayPal payouts have a 2% payout fee.")
           fill_in("PayPal Email", with: "uaecr@gumroad.com")
 
           click_on("Update settings")
@@ -1298,7 +1298,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           change_masked_tax_field("Emirates ID")
           fill_in("Emirates ID", with: "000000000000000")
 
-          expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+          expect(page).to have_status(text: "PayPal payouts have a 2% payout fee.")
           fill_in("PayPal Email", with: "uaecr@gumroad.com")
 
           click_on("Update settings")
@@ -2153,7 +2153,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         change_masked_tax_field("Emirates ID")
         fill_in("Emirates ID", with: "000000000000000")
 
-        expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+        expect(page).to have_status(text: "PayPal payouts have a 2% payout fee.")
         fill_in("PayPal Email", with: "uaecr@gumroad.com")
 
         click_on("Update settings")
@@ -2200,7 +2200,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         change_masked_tax_field("Emirates ID")
         fill_in("Emirates ID", with: "000000000000000")
 
-        expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+        expect(page).to have_status(text: "PayPal payouts have a 2% payout fee.")
         fill_in("PayPal Email", with: "uaecr@gumroad.com")
 
         click_on("Update settings")
@@ -2237,7 +2237,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         change_masked_tax_field("Emirates ID")
         fill_in("Emirates ID", with: "000000000000000")
 
-        expect(page).not_to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+        expect(page).not_to have_status(text: "PayPal payouts have a 2% payout fee.")
         fill_in("PayPal Email", with: "uaecr@gumroad.com")
 
         click_on("Update settings")
@@ -3251,7 +3251,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("January", from: "Month")
         select("1980", from: "Year")
 
-        expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+        expect(page).to have_status(text: "PayPal payouts have a 2% payout fee.")
         fill_in("PayPal Email", with: "egycr@example.com")
 
         click_on("Update settings")
@@ -3490,7 +3490,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("January", from: "Month")
         select("1980", from: "Year")
 
-        expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+        expect(page).to have_status(text: "PayPal payouts have a 2% payout fee.")
         fill_in("PayPal Email", with: "kzcr@example.com")
 
         click_on("Update settings")
