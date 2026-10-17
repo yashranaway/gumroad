@@ -60,6 +60,29 @@ describe AffiliatesPresenter do
       expect(index_queries.call).to eq(one_affiliate)
     end
 
+    context "when the requested page is past the last page" do
+      it "returns the last page instead of raising" do
+        props = described_class.new(pundit_user, page: "2").index_props
+
+        expect(props[:affiliates]).to be_present
+        expect(props[:pagination]).to eq({ page: 1, pages: 1 })
+      end
+
+      it "includes the pending affiliate requests the first page shows" do
+        props = described_class.new(pundit_user, page: "2", should_get_affiliate_requests: false).index_props
+
+        expect(props[:affiliate_requests]).to eq([affiliate_request.as_json(pundit_user:)])
+      end
+    end
+
+    context "when the page is not a page number" do
+      it "returns the first page" do
+        props = described_class.new(pundit_user, page: "-1").index_props
+
+        expect(props[:pagination]).to eq({ page: 1, pages: 1 })
+      end
+    end
+
     context "when search query is present" do
       context "when partially matching an affiliate user" do
         let(:query) { "affil" }
