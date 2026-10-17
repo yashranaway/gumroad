@@ -91,7 +91,15 @@ class UserPagesController < ApplicationController
         <meta property="og:title" content="#{title}">
         <meta property="og:type" content="website">
         <meta property="og:url" content="#{canonical}">
+        #{page_share_image_tags}
       HTML
+    end
+
+    # Same chain as the profile root (PageMeta::ShareCard); "" when the seller
+    # has no card, so the scraper falls back to its own image.
+    def page_share_image_tags
+      card = PageMeta::ShareCard.for(@user)
+      card ? card.to_html : ""
     end
 
     # Sanitized rich text renders directly — it can't carry scripts, so it
