@@ -15,4 +15,26 @@ describe CreateStripeApplePayDomainWorker, :vcr do
       expect(StripeApplePayDomain.last.user_id).to eq(@user.id)
     end
   end
+
+  describe "when the retries are exhausted" do
+    it "notifies with the seller and domain that never got registered" do
+      expect(ErrorNotifier).to receive(:notify).with(
+        /user 1234.*sampleusername\.gumroad\.dev.*wallet/m
+      )
+
+      described_class.sidekiq_retries_exhausted_block.call(
+        { "args" => [1234, "sampleusername.gumroad.dev"] },
+        StandardError.new("Stripe is down")
+      )
+    end
+
+    it "still notifies when the enqueued job carried no domain" do
+      expect(ErrorNotifier).to receive(:notify).with(/user 1234.*unknown/m)
+
+      described_class.sidekiq_retries_exhausted_block.call(
+        { "args" => [1234] },
+        StandardError.new("Stripe is down")
+      )
+    end
+  end
 end
