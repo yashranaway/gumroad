@@ -125,10 +125,27 @@ class ForeignWebhooksController < ApplicationController
       true
     end
 
+    # The endpoint is public and SNS posts with a text/plain content type, so the body is whatever
+    # an arbitrary client sent. Anything that is not a JSON object is a rejected sender, not a 500
+    # — #012 is the escaped-newline sequence the sns action strips before parsing.
     def validate_sns_webhook
-      return if Aws::SNS::MessageVerifier.new.authentic?(request.raw_post)
+      body = request.raw_post
+      return if sns_notification?(body) && sns_authentic?(body)
 
       render json: { success: false }, status: :bad_request
+    end
+
+    # The verifier parses the raw body, which can still carry #012 after the guard above accepted it.
+    def sns_authentic?(body)
+      Aws::SNS::MessageVerifier.new.authentic?(body)
+    rescue Aws::Json::ParseError
+      false
+    end
+
+    def sns_notification?(body)
+      JSON.parse(body.gsub("#012", "")).is_a?(Hash)
+    rescue JSON::ParserError
+      false
     end
 
     def validate_stripe_webhook(endpoint_secret)

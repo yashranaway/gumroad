@@ -527,6 +527,30 @@ describe ForeignWebhooksController do
         expect(HandleSnsTranscoderEventWorker.jobs.size).to eq(0)
       end
     end
+
+    context "when the body is not a JSON object" do
+      [%w[not_json not-json], %w[null null], %w[array []], %w[number 123], %w[boolean true], %w[string "\"abc\""]].each do |name, body|
+        it "renders bad request for a #{name} body and does not enqueue a job" do
+          request.headers["CONTENT_TYPE"] = "text/plain"
+          post :sns, body: body
+
+          expect(response).to be_a_bad_request
+          expect(response.media_type).to eq("application/json")
+          expect(response.parsed_body).to eq({ "success" => false })
+          expect(HandleSnsTranscoderEventWorker.jobs.size).to eq(0)
+        end
+      end
+
+      it "renders bad request for an object carrying #012 that the verifier cannot parse" do
+        request.headers["CONTENT_TYPE"] = "text/plain"
+        post :sns, body: "#012{}"
+
+        expect(response).to be_a_bad_request
+        expect(response.media_type).to eq("application/json")
+        expect(response.parsed_body).to eq({ "success" => false })
+        expect(HandleSnsTranscoderEventWorker.jobs.size).to eq(0)
+      end
+    end
   end
 
   describe "POST mediaconvert" do
