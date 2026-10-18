@@ -18,6 +18,12 @@ module MailerHelper
     "#{username.presence || "creators"}@#{CREATOR_CONTACTING_CUSTOMERS_MAIL_DOMAIN}"
   end
 
+  # Resend parses the From header itself, so a display name containing an RFC 5322
+  # special ("Smith, John") must be quoted or the send is rejected.
+  def from_address_with_name(name, email)
+    ActionMailer::Base.email_address_with_name(email, from_email_address_name(name.to_s))
+  end
+
   def from_email_address_name(name)
     # SendGrid bounces emails where the creator's name contains
     # at least one letter with accents and at least one symbol.

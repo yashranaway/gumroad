@@ -84,6 +84,18 @@ describe ProductPresenter do
     end
   end
 
+  describe "#edit_props receipt From preview" do
+    it "quotes a seller name containing an RFC 5322 special" do
+      seller = create(:named_user, name: "Smith, John")
+      product = create(:product, user: seller)
+      request = instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", remote_ip: "0.0.0.0", params: {}, cookie_jar: {})
+
+      props = described_class.new(product:, request:).edit_props
+
+      expect(props[:receipt_email_from]).to eq(%("Smith, John" <noreply@#{CUSTOMERS_MAIL_DOMAIN}>))
+    end
+  end
+
   describe "#product_props" do
     let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:31337", protocol: "http", cookie_jar: {}, params: {}, remote_ip: "0.0.0.0") }
     let(:buyer) { create(:user) }

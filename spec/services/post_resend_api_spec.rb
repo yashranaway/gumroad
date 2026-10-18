@@ -464,6 +464,16 @@ describe PostResendApi, :freeze_time do
       send_emails(recipients: [{ email: "c1@example.com" }])
     end
 
+    it "quotes a seller name containing an RFC 5322 special in the from header" do
+      @seller.update!(name: "Smith, John")
+      response = double(success?: true)
+      expect(Resend::Emails).to receive(:send).with(
+        a_hash_including(from: %("Smith, John" <#{@seller.username}@#{CREATOR_CONTACTING_CUSTOMERS_MAIL_DOMAIN}>))
+      ).and_return(response)
+
+      send_emails(recipients: [{ email: "c1@example.com" }])
+    end
+
     it "uses Resend::Batch.send for multiple recipients" do
       response = double(success?: true)
       expect(Resend::Batch).to receive(:send).with(an_instance_of(Array)).and_return(response)

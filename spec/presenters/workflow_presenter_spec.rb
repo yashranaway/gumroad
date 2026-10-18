@@ -11,6 +11,12 @@ describe WorkflowPresenter do
       let(:user) { seller }
       let(:result) { described_class.new(seller:).new_page_react_props }
     end
+
+    it "quotes a sender name containing an RFC 5322 special in the email preview" do
+      seller.update!(name: "Smith, John")
+      props = described_class.new(seller:).new_page_react_props
+      expect(props[:context][:email_from]).to eq(%("Smith, John" <#{seller.username}@#{CREATOR_CONTACTING_CUSTOMERS_MAIL_DOMAIN}>))
+    end
   end
 
   describe "#edit_page_react_props" do
