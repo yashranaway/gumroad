@@ -308,12 +308,14 @@ RSpec.configure do |config|
     ViteRuby.commands.build if ViteRuby.instance.config.manifest_paths.empty?
   end
 
-  # Stub SsrfFilter globally to allow localhost/minio in tests
+  # Stub SsrfFilter globally to allow localhost/minio in tests. SsrfFilter hands back the raw
+  # Net::HTTPResponse, so unwrap HTTParty's wrapper — callers branch on `is_a?(Net::HTTPOK)` and
+  # read `content_type` off the response itself.
   # Use `skip_ssrf_stub: true` metadata to opt-out (e.g., for SSRF protection tests)
   config.before(:each) do |example|
     unless example.metadata[:skip_ssrf_stub]
       allow(SsrfFilter).to receive(:get) do |url, **_args|
-        HTTParty.get(url)
+        HTTParty.get(url.to_s).response
       end
     end
   end
