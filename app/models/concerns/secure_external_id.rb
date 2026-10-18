@@ -85,10 +85,12 @@ module SecureExternalId
 
       decoded_json = Base64.urlsafe_decode64(token)
       outer_payload = JSON.parse(decoded_json, symbolize_names: true)
+      return nil unless outer_payload.is_a?(Hash) # Attacker-supplied JSON: any type can appear
 
       version = outer_payload[:v]
       encrypted_data = outer_payload[:d]
       return nil if version.blank? || encrypted_data.blank?
+      return nil unless encrypted_data.is_a?(String) # MessageEncryptor assumes a string
 
       encryptor = encryptors[version]
       return nil unless encryptor # Invalid version
