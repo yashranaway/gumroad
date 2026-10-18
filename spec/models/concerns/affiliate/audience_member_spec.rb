@@ -73,5 +73,14 @@ describe Affiliate::AudienceMember do
       expect { direct_affiliate.update_audience_member_with_added_product(product.id) }.not_to raise_error
       expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(direct_affiliate.affiliate_user.email, direct_affiliate.seller_id)
     end
+
+    it "does not raise when Redis is also down for the fallback refresh enqueue" do
+      allow_any_instance_of(AudienceMember).to receive(:save!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
+      allow(ErrorNotifier).to receive(:notify)
+      allow(RefreshAudienceMemberJob).to receive(:perform_async)
+        .and_raise(RedisClient::CannotConnectError, "Waited 3 seconds (redis://production-redis-2)")
+
+      expect { direct_affiliate.update_audience_member_with_added_product(product.id) }.not_to raise_error
+    end
   end
 end

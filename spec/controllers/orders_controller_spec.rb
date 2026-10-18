@@ -352,6 +352,20 @@ describe OrdersController, :vcr do
           expect(utm_link_driven_sale.utm_link_visit).to eq(utm_link_visit)
         end
 
+        it "keeps the checkout successful when the attribution enqueue cannot reach Redis" do
+          utm_link = create(:utm_link, seller: product_1.user)
+          create(:utm_link_visit, utm_link:, browser_guid:)
+          allow(UtmLinkSaleAttributionJob).to receive(:perform_async)
+            .and_raise(RedisClient::CannotConnectError, "Waited 3 seconds (redis://production-redis-2)")
+          allow(ErrorNotifier).to receive(:notify)
+
+          expect { post :create, params: single_purchase_params }.to change { Order.count }.by(1)
+
+          expect(Order.last.purchases.successful).to be_present
+          expect(ErrorNotifier).to have_received(:notify)
+            .with(instance_of(RedisClient::CannotConnectError), hash_including(source: "utm_sale_attribution_enqueue"))
+        end
+
         it "does not attribute purchase when there is no matching UTM link visit" do
           utm_link = create(:utm_link, seller: product_1.user)
 

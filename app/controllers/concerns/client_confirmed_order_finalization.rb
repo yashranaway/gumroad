@@ -18,6 +18,15 @@ module ClientConfirmedOrderFinalization
     def attribute_utm_link_sale(order, browser_guid)
       return unless order.persisted? && order.purchases.successful.any? && UtmLinkVisit.where(browser_guid:).any?
       UtmLinkSaleAttributionJob.perform_async(order.id, browser_guid)
+    rescue *REDIS_TRANSPORT_ERRORS => e
+      # The charge is already captured, so a Redis outage here must not 500 the checkout.
+      # Reported rather than silently dropped: unlike a read, a lost attribution enqueue is
+      # not rebuilt by a later request.
+      begin
+        ErrorNotifier.notify(e, source: "utm_sale_attribution_enqueue", order_id: order.id)
+      rescue StandardError => reporting_error
+        Rails.logger.warn("UTM sale attribution enqueue reporting failed: #{reporting_error.class}")
+      end
     end
 
     def create_purchase_event_and_recommendation_info(purchase)

@@ -51,7 +51,7 @@ module Purchase::AudienceMember
   # from pre-commit state and drops the refresh entirely on rollback (see RefreshAudienceMemberJob).
   def schedule_audience_member_refresh(email = self.email)
     AfterCommitEverywhere.after_commit do
-      RefreshAudienceMemberJob.perform_async(email, seller_id)
+      RefreshAudienceMemberJob.enqueue(email, seller_id)
     end
   end
 
