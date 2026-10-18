@@ -13,9 +13,13 @@ class ReindexSellerOfferCodesJob
     ReindexSellerOfferCodesRecoveryJob.perform_in(1.hour, message.fetch("args").first)
   end
 
+  # Runs in after_commit on the offer-code write; a Redis outage must not fail that request.
+  # The index self-heals on the seller's next offer-code change.
   def self.enqueue(seller_id)
     $redis.incr("offer_code_index:#{seller_id}:version")
     perform_async(seller_id)
+  rescue *REDIS_TRANSPORT_ERRORS => e
+    Rails.logger.warn("Offer-code reindex enqueue skipped for seller #{seller_id}: #{e.class}")
   end
 
   def self.enqueue_products(seller_id, product_ids)
@@ -29,6 +33,8 @@ class ReindexSellerOfferCodesJob
       end
     LUA
     perform_async(seller_id)
+  rescue *REDIS_TRANSPORT_ERRORS => e
+    Rails.logger.warn("Offer-code reindex enqueue skipped for seller #{seller_id}: #{e.class}")
   end
 
   def perform(seller_id)

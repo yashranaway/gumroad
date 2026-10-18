@@ -9,5 +9,7 @@ class InstallmentEvent < ApplicationRecord
   private
     def update_installment_events_cache_count
       UpdateInstallmentEventsCountCacheWorker.perform_in(2.seconds, installment_id)
+    rescue *REDIS_TRANSPORT_ERRORS => e
+      Rails.logger.warn("Installment events count refresh skipped: #{e.class}")
     end
 end

@@ -17,6 +17,13 @@ describe ReindexSellerOfferCodesJob do
     travel ReindexSellerOfferCodesJob::INTERVAL
   end
 
+  it "does not raise from enqueue when Redis is unreachable" do
+    allow($redis).to receive(:incr).and_raise(RedisClient::CannotConnectError)
+    allow($redis).to receive(:eval).and_raise(RedisClient::CannotConnectError)
+    expect { described_class.enqueue(seller.id) }.not_to raise_error
+    expect { described_class.enqueue_products(seller.id, [1]) }.not_to raise_error
+  end
+
   it "bounds actual work across queued duplicates and resumes from the last batch" do
     products = create_list(:product, 5, user: seller)
     10.times { described_class.enqueue(seller.id) }

@@ -3710,6 +3710,13 @@ describe User, :vcr do
       GenerateSubscribePreviewJob.jobs.clear
     end
 
+    it "does not fail the save when Redis is unreachable" do
+      allow(GenerateSubscribePreviewJob).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
+      @user.update!(name: "Renamed")
+      @user.subscribe_preview.attach(io: File.open(Rails.root.join("spec", "support", "fixtures", "subscribe_preview.png")), filename: "b.png", content_type: "image/png")
+      expect { @user.save! }.not_to raise_error
+    end
+
     it "does not schedule GenerateSubscribePreviewJob when email changes" do
       @user.update!(email: "new.email@example.com")
       expect(GenerateSubscribePreviewJob.jobs.size).to eq(0)

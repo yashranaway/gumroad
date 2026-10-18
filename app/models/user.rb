@@ -1072,6 +1072,8 @@ class User < ApplicationRecord
   def generate_subscribe_preview
     raise "User must be persisted to generate a subscribe preview" unless persisted?
     GenerateSubscribePreviewJob.perform_async(id)
+  rescue *REDIS_TRANSPORT_ERRORS => e
+    Rails.logger.warn("Subscribe preview enqueue skipped for user #{id}: #{e.class}")
   end
 
   def minimum_payout_amount_cents
