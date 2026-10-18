@@ -299,7 +299,16 @@ module WithProductFiles
     end
 
     def save_subtitle_files(product_file, subtitle_files_params)
-      product_file.save_subtitle_files!(subtitle_files_params || {})
+      # Only a list of attribute maps can be written. A mapping keyed by index ({"0" => {...}})
+      # or a single {url:, language:} object makes create! read each [key, value] pair as a record
+      # and raise on the string key; a list of strings raises the same way. Each one fails the
+      # whole save, so refuse the shape with a message the client can act on.
+      entries = subtitle_files_params.presence
+      unless entries.nil? || (entries.is_a?(Array) && entries.all? { _1.respond_to?(:to_h) })
+        errors.add(:base, "Subtitle files must be sent as a list.")
+        raise Link::LinkInvalid
+      end
+      product_file.save_subtitle_files!(entries || {})
     rescue ActiveRecord::RecordInvalid => e
       errors.add(:base, e.message)
       raise e
