@@ -22,16 +22,17 @@ const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_BYTES = 6 * 1024 * 1024;
 const ACCEPTED_ATTACHMENT_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
-// The message is kept in localStorage so closing the modal or navigating away
-// from the Help Center cannot throw away text the user already wrote. The key is
-// scoped to the signed-in account so a shared browser never hands one person's
-// unpublished support message to the next.
-const draftStorageKey = (userId: string | null) => `gumroad:help-center:contact-draft:${userId ?? "anonymous"}`;
+// The message text (not the screenshots) is kept in sessionStorage so closing the
+// modal, navigating or reloading the tab cannot throw it away. sessionStorage
+// ends with the tab, so a shared browser never shows it to the next visitor, and
+// the key keeps signed-in accounts and anonymous visitors apart within a tab.
+const DRAFT_KEY_PREFIX = "gumroad:help-center:contact-draft:";
+const draftStorageKey = (userId: string | null) => `${DRAFT_KEY_PREFIX}${userId ?? "anonymous"}`;
 
 const readDraft = (key: string) => {
   if (typeof window === "undefined") return "";
   try {
-    return window.localStorage.getItem(key) ?? "";
+    return window.sessionStorage.getItem(key) ?? "";
   } catch {
     // Storage can be unavailable (private mode, blocked cookies) — a lost draft
     // is not worth failing the form over.
@@ -41,8 +42,19 @@ const readDraft = (key: string) => {
 
 const writeDraft = (key: string, message: string) => {
   try {
-    if (message) window.localStorage.setItem(key, message);
-    else window.localStorage.removeItem(key);
+    if (message) window.sessionStorage.setItem(key, message);
+    else window.sessionStorage.removeItem(key);
+  } catch {
+    // Ignore: see readDraft.
+  }
+};
+
+// Drafts used to live in localStorage, where the anonymous one outlived the
+// visitor who wrote it.
+const discardLocalStorageDrafts = () => {
+  try {
+    const keys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index));
+    for (const key of keys) if (key?.startsWith(DRAFT_KEY_PREFIX)) window.localStorage.removeItem(key);
   } catch {
     // Ignore: see readDraft.
   }
@@ -56,15 +68,21 @@ const formatBytes = (bytes: number) =>
 // Center is the first mount) — render <ContactSupportModal> with your own
 // trigger and pass the page's path as `referrerPath` so support can see where
 // the user came from.
-export const ContactSupportModal = ({
-  open,
-  onClose,
-  referrerPath,
-}: {
+type ContactSupportModalProps = {
   open: boolean;
   onClose: () => void;
   referrerPath?: string;
-}) => {
+};
+
+export const ContactSupportModal = (props: ContactSupportModalProps) => {
+  const loggedInUser = useLoggedInUser();
+  React.useEffect(discardLocalStorageDrafts, []);
+  // Remount on an account change, so nothing typed or attached under one
+  // identity is shown to, or saved under the draft key of, the next one.
+  return <ContactSupportForm key={loggedInUser?.id ?? "anonymous"} {...props} />;
+};
+
+const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModalProps) => {
   const loggedInUser = useLoggedInUser();
   const uid = React.useId();
   const draftKey = draftStorageKey(loggedInUser?.id ?? null);
@@ -72,6 +90,7 @@ export const ContactSupportModal = ({
   const [category, setCategory] = React.useState("");
   const [message, setMessage] = React.useState(() => readDraft(draftKey));
   const [files, setFiles] = React.useState<File[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   // Honeypot field: invisible to humans, bots tend to fill it. The server
   // silently drops submissions where it is present.
   const [website, setWebsite] = React.useState("");
@@ -105,12 +124,11 @@ export const ContactSupportModal = ({
   };
 
   // A screenshot pasted into the textarea arrives as a clipboard file, not as
-  // text — pick it up as an attachment instead of silently dropping it.
+  // text — pick it up as an attachment instead of silently dropping it. The paste
+  // itself goes ahead, so any text copied alongside the image still lands.
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/"));
-    if (pasted.length === 0) return;
-    e.preventDefault();
-    addFiles(pasted);
+    if (pasted.length > 0) addFiles(pasted);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -122,6 +140,8 @@ export const ContactSupportModal = ({
       return;
     }
 
+    // The fields stay locked until this settles: success clears the draft, which
+    // would also drop anything typed in the meantime.
     setSubmitting(true);
     try {
       const data = new FormData();
@@ -179,6 +199,7 @@ export const ContactSupportModal = ({
               id={`${uid}-email`}
               type="email"
               required
+              disabled={submitting}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
@@ -186,7 +207,13 @@ export const ContactSupportModal = ({
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${uid}-category`}>What do you need help with?</Label>
-            <Select id={`${uid}-category`} required value={category} onChange={(e) => setCategory(e.target.value)}>
+            <Select
+              id={`${uid}-category`}
+              required
+              disabled={submitting}
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
               <option value="" disabled>
                 Select a category
               </option>
@@ -202,6 +229,7 @@ export const ContactSupportModal = ({
             <Textarea
               id={`${uid}-message`}
               required
+              disabled={submitting}
               rows={6}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -211,10 +239,17 @@ export const ContactSupportModal = ({
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${uid}-attachments`}>Screenshots (optional)</Label>
+            {/* The native control would keep saying "No file chosen" after the reset below, so it stays hidden and
+                the list is the only record of what will be sent. Input's own w-full, padding and border outrank
+                sr-only, so they are replaced here; otherwise the hidden box widens the dialog. */}
             <Input
+              ref={fileInputRef}
               id={`${uid}-attachments`}
               type="file"
               multiple
+              className="sr-only w-px border-0 p-0"
+              tabIndex={-1}
+              disabled={submitting}
               accept={ACCEPTED_ATTACHMENT_TYPES.join(",")}
               onChange={(e) => {
                 addFiles(Array.from(e.target.files ?? []));
@@ -222,7 +257,15 @@ export const ContactSupportModal = ({
                 e.target.value = "";
               }}
             />
-            <p className="text-sm text-muted">
+            <Button
+              className="self-start"
+              disabled={submitting}
+              aria-describedby={`${uid}-attachments-hint`}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Add screenshots
+            </Button>
+            <p id={`${uid}-attachments-hint`} className="text-sm text-muted">
               Up to {MAX_ATTACHMENTS} images, {formatBytes(MAX_ATTACHMENT_BYTES)} each. You can also paste a screenshot
               into the message.
             </p>
@@ -230,10 +273,18 @@ export const ContactSupportModal = ({
               <ul className="flex flex-col gap-1">
                 {files.map((file, index) => (
                   <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="truncate">
-                      {file.name} ({formatBytes(file.size)})
+                    {/* w-0 keeps a long name from widening the dialog past a phone screen; flex-1 then fills the row. */}
+                    <span className="flex w-0 flex-1 gap-1">
+                      <span className="truncate">{file.name}</span>{" "}
+                      <span className="shrink-0">({formatBytes(file.size)})</span>
                     </span>
-                    <Button type="button" size="sm" onClick={() => setFiles(files.filter((_, i) => i !== index))}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="shrink-0 whitespace-nowrap"
+                      disabled={submitting}
+                      onClick={() => setFiles(files.filter((_, i) => i !== index))}
+                    >
                       Remove
                     </Button>
                   </li>
