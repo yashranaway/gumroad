@@ -540,6 +540,7 @@ Rails.application.routes.draw do
     %w[muse claude].each do |client|
       get "/#{client}", to: "mcp_connectors#show", defaults: { client: }, as: client
     end
+    get "/mcp", to: "mcp_connectors#index", as: :mcp
     %w[muse claude chatgpt].each do |client|
       get "/#{client}/v1/status" => "api/v2/muse#status"
       get "/#{client}/v1/oauth2/authorize/:code(.:format)" => "oauth/authorizations#show"
