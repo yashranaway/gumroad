@@ -615,13 +615,13 @@ export const Product = ({
         // the named areas below put both back in the desktop columns.
         "relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]",
         showsExistingPurchase
-          ? "[grid-template-areas:'covers'_'title'_'price'_'details'_'controls']"
-          : "[grid-template-areas:'covers'_'title'_'price'_'controls'_'details']",
+          ? "[grid-template-areas:'covers'_'title'_'price'_'details'_'controls'_'social']"
+          : "[grid-template-areas:'covers'_'title'_'price'_'controls'_'details'_'social']",
         // The title spans two rows, so a tall title stretches the controls' row instead of the price row.
         // In one shared row, the controls would start below the title and leave a gap under the price.
         saleBanner || priceTag
-          ? "lg:grid-rows-[auto_auto_auto_1fr] lg:[grid-template-areas:'covers_covers'_'title_price'_'title_controls'_'details_controls']"
-          : "lg:grid-rows-[auto_auto_1fr] lg:[grid-template-areas:'covers_covers'_'title_controls'_'details_controls']",
+          ? "lg:grid-rows-[auto_auto_auto_auto_1fr] lg:[grid-template-areas:'covers_covers'_'title_price'_'title_controls'_'details_controls'_'details_social']"
+          : "lg:grid-rows-[auto_auto_auto_1fr] lg:[grid-template-areas:'covers_covers'_'title_controls'_'details_controls'_'details_social']",
       )}
     >
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} productName={product.name} />
@@ -864,16 +864,22 @@ export const Product = ({
             <RefundPolicyInfo refundPolicy={product.refund_policy} permalink={product.permalink} />
           ) : null}
         </section>
-        {product.ratings ? <Reviews ratings={product.ratings} productId={product.id} seller={product.seller} /> : null}
-        {product.seller_reputation ? (
-          <SellerReputationSection
-            reputation={product.seller_reputation}
-            hasOwnReviews={product.ratings != null && product.ratings.count > 0}
-            seller={product.seller}
-          />
-        ) : null}
       </section>
       {showsExistingPurchase ? null : details}
+      {product.ratings || product.seller_reputation ? (
+        <section className="border-t [grid-area:social]">
+          {product.ratings ? (
+            <Reviews ratings={product.ratings} productId={product.id} seller={product.seller} />
+          ) : null}
+          {product.seller_reputation ? (
+            <SellerReputationSection
+              reputation={product.seller_reputation}
+              hasOwnReviews={product.ratings != null && product.ratings.count > 0}
+              seller={product.seller}
+            />
+          ) : null}
+        </section>
+      ) : null}
     </article>
   );
 };

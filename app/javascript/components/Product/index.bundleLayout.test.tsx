@@ -535,4 +535,35 @@ describe("product page reading order below lg", () => {
 
     expect(desktopClasses(renderArticle(product, receipt))).toEqual(newBuyer);
   });
+
+  describe("with ratings", () => {
+    const rated: ProductData = {
+      ...product,
+      ratings: { average: 4.5, count: 3, percentages: [0, 0, 0, 33, 67] },
+    };
+
+    it("draws and focuses the ratings after the details for a new buyer", () => {
+      const { drawn, inDom } = areaOrder(renderArticle(rated, null));
+
+      expect(inDom).toEqual(drawn);
+      expect(inDom).toEqual(expect.arrayContaining(["controls", "details", "social"]));
+      expect(inDom.indexOf("controls")).toBeLessThan(inDom.indexOf("details"));
+      expect(inDom.indexOf("details")).toBeLessThan(inDom.indexOf("social"));
+      expect(position(screen.getByRole("heading", { name: "Ratings" }))).toBeGreaterThan(position(sellerLink()));
+    });
+
+    it("keeps the ratings last for a returning buyer", () => {
+      const { drawn, inDom } = areaOrder(renderArticle(rated, receipt));
+
+      expect(inDom).toEqual(drawn);
+      expect(inDom.indexOf("controls")).toBeGreaterThan(inDom.indexOf("details"));
+      expect(inDom.indexOf("social")).toBe(inDom.length - 1);
+    });
+
+    it("puts the ratings in the right column under the controls on lg", () => {
+      const classes = renderArticle(rated, null).className;
+
+      expect(classes).toContain("'details_controls'_'details_social'");
+    });
+  });
 });
