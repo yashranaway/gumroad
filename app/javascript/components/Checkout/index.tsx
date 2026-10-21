@@ -1035,6 +1035,8 @@ const CartPriceItem = ({
   );
 };
 
+const cartActionButtonClasses = "h-8 w-15 !p-0 !text-xs";
+
 const CartItemComponent = ({
   item,
   cart,
@@ -1120,41 +1122,56 @@ const CartItemComponent = ({
   };
 
   const option = item.product.options.find((option) => option.id === item.option_id);
-  const price = hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity;
+  const freeTrial = !!hasFreeTrial(item, isGift);
+  const price = freeTrial ? 0 : item.price * item.quantity;
+  // Rendered below the row, across the whole line: the details column is too
+  // narrow for it at phone widths.
+  const renewalNotice =
+    item.recurrence && !isGift && !isSingleChargeDuration(item.recurrence, item.product.duration_in_months)
+      ? renewalReminderNotice(item.product.recurrences, item.recurrence, { freeTrial })
+      : null;
+  const bundleContents =
+    item.product.bundle_products.length > 0 ? (
+      <div className="flex flex-col gap-3">
+        <h4>This bundle contains...</h4>
+        <CartItemList className="overflow-hidden">
+          {item.product.bundle_products.map((bundleProduct) => (
+            <CartItem key={bundleProduct.product_id} isBundleItem>
+              <CartItemMedia className="h-20 w-20">
+                <a href={bundleProduct.url}>
+                  <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+                </a>
+              </CartItemMedia>
+              <span className="sr-only">Qty: {bundleProduct.quantity || item.quantity}</span>
+              <CartItemMain className="h-20">
+                <CartItemTitle className="line-clamp-1">{bundleProduct.name}</CartItemTitle>
+                {bundleProduct.variant ? (
+                  <CartItemFooter className="line-clamp-1">
+                    <span>
+                      <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
+                    </span>
+                  </CartItemFooter>
+                ) : null}
+              </CartItemMain>
+            </CartItem>
+          ))}
+        </CartItemList>
+      </div>
+    ) : null;
 
   return (
     <CartItem
       extra={
-        item.product.bundle_products.length > 0 ? (
-          <div className="flex flex-col gap-3">
-            <h4>This bundle contains...</h4>
-            <CartItemList className="overflow-hidden">
-              {item.product.bundle_products.map((bundleProduct) => (
-                <CartItem key={bundleProduct.product_id} isBundleItem>
-                  <CartItemMedia className="h-20 w-20">
-                    <a href={bundleProduct.url}>
-                      <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
-                    </a>
-                  </CartItemMedia>
-                  <span className="sr-only">Qty: {bundleProduct.quantity || item.quantity}</span>
-                  <CartItemMain className="h-20">
-                    <CartItemTitle className="line-clamp-1">{bundleProduct.name}</CartItemTitle>
-                    {bundleProduct.variant ? (
-                      <CartItemFooter className="line-clamp-1">
-                        <span>
-                          <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
-                        </span>
-                      </CartItemFooter>
-                    ) : null}
-                  </CartItemMain>
-                </CartItem>
-              ))}
-            </CartItemList>
-          </div>
+        renewalNotice || bundleContents ? (
+          <>
+            {renewalNotice ? <span className="text-sm">{renewalNotice}</span> : null}
+            {bundleContents}
+          </>
         ) : null
       }
     >
-      <div className="relative inline-flex">
+      {/* shrink-0 goes on this wrapper, the row's flex item: a shrunk wrapper crops the thumbnail. */}
+      <div className="relative inline-flex shrink-0">
         <CartItemMedia className="h-16 w-16 sm:h-30 sm:w-30">
           <a href={item.product.url}>
             <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
@@ -1163,11 +1180,10 @@ const CartItemComponent = ({
         <CartItemQuantity>{item.quantity}</CartItemQuantity>
       </div>
 
-      {/* min-w-2/5 keeps the title/tier column at least 40% of the row on narrow
-          viewports. Without a real floor, a wide CartItemEnd (long price strings on
-          free-trial memberships) squeezes this zero-basis column down to one letter
-          per line. */}
-      <CartItemMain className="min-w-2/5">
+      {/* min-w-33 = two cartActionButtonClasses widths (w-15) plus the gap-3 between
+          them. Without it, a wide CartItemEnd (long price strings on free-trial
+          memberships) squeezes this zero-basis column until the buttons stack. */}
+      <CartItemMain className="min-w-33">
         <CartItemTitle>
           {/* dir="auto" lets RTL product names render right-to-left (gumroad-private#1259). */}
           <a href={item.product.url} className="no-underline" dir="auto">
@@ -1198,8 +1214,9 @@ const CartItemComponent = ({
             isPWYW ? (
               <Popover open={editPopoverOpen} onOpenChange={setEditPopoverOpen}>
                 <PopoverAnchor>
+                  {/* PopoverTrigger merges all-unset into the button, which drops box-sizing to content-box. */}
                   <PopoverTrigger asChild>
-                    <Button className="h-8 w-15 !p-0 !text-xs">Edit</Button>
+                    <Button className={classNames("box-border", cartActionButtonClasses)}>Edit</Button>
                   </PopoverTrigger>
                 </PopoverAnchor>
                 <PopoverContent className="max-h-[var(--radix-popover-content-available-height,80vh)] overflow-auto">
@@ -1227,7 +1244,7 @@ const CartItemComponent = ({
               </Popover>
             ) : null}
             <Button
-              className="h-8 w-15 !p-0 !text-xs"
+              className={cartActionButtonClasses}
               onClick={() => {
                 const newItems = cart.items.filter((i) => i !== item);
                 updateCart({
@@ -1247,12 +1264,6 @@ const CartItemComponent = ({
               Remove
             </Button>
           </CartItemActions>
-          {item.recurrence && !isGift && !isSingleChargeDuration(item.recurrence, item.product.duration_in_months)
-            ? (() => {
-                const notice = renewalReminderNotice(item.product.recurrences, item.recurrence);
-                return notice ? <span className="text-sm">{notice}</span> : null;
-              })()
-            : null}
         </CartItemFooter>
       </CartItemMain>
       {/* Cap this column at half the row so a long price string (e.g.
@@ -1265,7 +1276,7 @@ const CartItemComponent = ({
             ? formatPresentmentCents(presentmentPriceCents, buyerCurrencyDisplay, { noCentsIfWhole })
             : formatCheckoutPrice(convertToUSD(item, price), buyerCurrencyDisplay, { noCentsIfWhole })}
         </span>
-        {hasFreeTrial(item, isGift) && item.product.free_trial ? (
+        {freeTrial && item.product.free_trial ? (
           <>
             <span className="text-sm">
               {item.product.free_trial.duration.amount === 1

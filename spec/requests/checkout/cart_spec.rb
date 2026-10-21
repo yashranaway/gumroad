@@ -102,6 +102,61 @@ describe "Checkout cart", :js, type: :system do
       check_out(@membership_product)
     end
 
+    def edit_and_remove_boxes
+      %w[Edit Remove].map do |label|
+        find_button(label).evaluate_script("(({ top, width, height }) => ({ top, width, height }))(this.getBoundingClientRect())")
+      end
+    end
+
+    it "renders Edit at the same size as Remove, on the same line" do
+      visit @membership_product.long_url
+      add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variant_categories.first.variants.first.name)
+      within_cart_item(@membership_product.name) do
+        edit, remove = edit_and_remove_boxes
+        expect(edit).to eq(remove)
+      end
+    end
+
+    it "renders Edit at the same size as Remove on a phone", :mobile_view do
+      visit @membership_product.long_url
+      add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variant_categories.first.variants.first.name)
+      within_cart_item(@membership_product.name) do
+        edit, remove = edit_and_remove_boxes
+        expect(edit).to eq(remove)
+      end
+    end
+
+    describe "renewal reminder notice" do
+      before do
+        Feature.activate_user(:membership_renewal_reminders, @membership_product.user)
+      end
+
+      def box(node)
+        node.evaluate_script("(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(this.getBoundingClientRect())")
+      end
+
+      # The notice is its own line under the row: it starts at the thumbnail's left
+      # edge, ends at the price's right edge and sits below Edit and Remove.
+      def expect_notice_across_the_line
+        notice = box(find("span", text: "We'll email you a reminder 30 days and 7 days before each renewal.", exact_text: true))
+        expect(notice["top"]).to be >= box(find_button("Remove"))["bottom"]
+        expect(notice["left"]).to be_within(1).of(box(find("figure"))["left"])
+        expect(notice["right"]).to be_within(1).of(box(find("[aria-label='Price']"))["right"])
+      end
+
+      it "spans the line below Edit and Remove" do
+        visit @membership_product.long_url
+        add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variant_categories.first.variants.first.name)
+        within_cart_item(@membership_product.name) { expect_notice_across_the_line }
+      end
+
+      it "spans the line below Edit and Remove on a phone", :mobile_view do
+        visit @membership_product.long_url
+        add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variant_categories.first.variants.first.name)
+        within_cart_item(@membership_product.name) { expect_notice_across_the_line }
+      end
+    end
+
     it "updates the quantity" do
       visit @product.long_url
       add_to_cart(@product)
