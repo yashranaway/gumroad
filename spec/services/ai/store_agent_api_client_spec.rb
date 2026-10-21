@@ -151,4 +151,41 @@ describe Ai::StoreAgentApiClient do
       expect(captured_put_options(json_body: true)).to include(as: :json)
     end
   end
+
+  # The revoke is cleanup, not part of the response: a deadlock on the token row used to escape the
+  # `ensure` and fail a tool call that had already succeeded.
+  describe "#request token cleanup" do
+    let(:client) { described_class.new(seller:, pundit_user:) }
+
+    def stub_agent_get!(token)
+      session = double("integration session")
+      allow(ActionDispatch::Integration::Session).to receive(:new).and_return(session)
+      allow(session).to receive(:host!)
+      allow(session).to receive(:get)
+      allow(session).to receive(:response).and_return(double(body: "{}", status: 200))
+      allow(client).to receive(:agent_application).and_return(create_matching_agent_app)
+      allow(Doorkeeper::AccessToken).to receive(:create!).and_return(token)
+
+      client.get("/products")
+    end
+
+    it "retries a deadlocked revoke instead of failing the call" do
+      token = double("access token", token: "agent-token")
+      revokes = 0
+      allow(token).to receive(:revoke) do
+        revokes += 1
+        raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock" if revokes == 1
+      end
+
+      expect { stub_agent_get!(token) }.not_to raise_error
+      expect(revokes).to eq(2)
+    end
+
+    it "swallows a revoke that deadlocks every time" do
+      token = double("access token", token: "agent-token")
+      allow(token).to receive(:revoke).and_raise(ActiveRecord::Deadlocked.new("Deadlock found"))
+
+      expect { stub_agent_get!(token) }.not_to raise_error
+    end
+  end
 end

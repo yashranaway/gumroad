@@ -27,6 +27,8 @@ class Ai::StoreAgentApiClient
   # with a narrowed SUBSET of these based on the acting user's role; see Ai::StoreAgentScopes.
   AGENT_APP_SCOPES = Ai::StoreAgentScopes.all_scopes_string
   TOKEN_TTL_SECONDS = 300
+  # Retries for the token revoke only: it is cleanup, and a deadlock there must not fail the call.
+  REVOKE_RETRIES = 1
 
   # @param seller [User] the store owner (token resource owner; records resolve under this account)
   # @param pundit_user [SellerContext] the acting user + seller; its user's role narrows the scopes
@@ -88,7 +90,22 @@ class Ai::StoreAgentApiClient
       parse(session.response)
     ensure
       Rack::MiniProfiler.current = mini_profiler_context if defined?(Rack::MiniProfiler)
-      token&.revoke
+      revoke_token(token)
+    end
+
+    # Cleanup only: the token expires in TOKEN_TTL_SECONDS either way. A deadlock rolled the revoke
+    # back, so repeating it is safe, and giving up after the retry has to be silent — raising out of
+    # the caller's `ensure` would fail a tool call that had already succeeded.
+    def revoke_token(token)
+      return if token.nil?
+
+      attempts = 0
+      begin
+        token.revoke
+      rescue ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout
+        attempts += 1
+        retry if attempts <= REVOKE_RETRIES
+      end
     end
 
     def parse(response)
