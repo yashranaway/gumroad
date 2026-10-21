@@ -619,9 +619,11 @@ export const Product = ({
           : "[grid-template-areas:'covers'_'title'_'price'_'controls'_'details'_'social']",
         // The title spans two rows, so a tall title stretches the controls' row instead of the price row.
         // In one shared row, the controls would start below the title and leave a gap under the price.
+        // The 1fr row has to sit inside the controls' span but outside the title's, or the controls'
+        // height is shared into the title's row and the title grows a gap of its own.
         saleBanner || priceTag
-          ? "lg:grid-rows-[auto_auto_auto_auto_1fr] lg:[grid-template-areas:'covers_covers'_'title_price'_'title_controls'_'details_controls'_'details_social']"
-          : "lg:grid-rows-[auto_auto_auto_1fr] lg:[grid-template-areas:'covers_covers'_'title_controls'_'details_controls'_'details_social']",
+          ? "lg:grid-rows-[auto_auto_auto_1fr_auto] lg:[grid-template-areas:'covers_covers'_'title_price'_'title_controls'_'details_controls'_'details_social']"
+          : "lg:grid-rows-[auto_auto_1fr_auto] lg:[grid-template-areas:'covers_covers'_'title_controls'_'details_controls'_'details_social']",
       )}
     >
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} productName={product.name} />
