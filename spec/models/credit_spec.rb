@@ -59,6 +59,23 @@ describe Credit do
       Credit.create_for_credit!(user:, amount_cents: 1000, crediting_user: User.first)
       expect(user.reload.comments.last.content).to eq("issued $10 credit.")
     end
+
+    it "emails the seller for a positive credit, whichever surface created it" do
+      mailer = double
+      expect(mailer).to receive(:deliver_later).with(queue: "critical").once
+      expect(ContactingCreatorMailer).to receive(:credit_notification)
+        .with(user.id, 1000, "Goodwill for reported checkout bug")
+        .and_return(mailer).once
+
+      Credit.create_for_credit!(user:, amount_cents: 1000, crediting_user: User.first, reason: "Goodwill for reported checkout bug")
+    end
+
+    it "stays silent for a clawback or a zero-amount correction" do
+      expect(ContactingCreatorMailer).not_to receive(:credit_notification)
+
+      Credit.create_for_credit!(user:, amount_cents: -500, crediting_user: User.first, reason: "Clawback: unspent goodwill")
+      Credit.create_for_credit!(user:, amount_cents: 0, crediting_user: User.first, reason: "Engineering script leftover")
+    end
   end
 
   describe "#notify_user" do
@@ -66,7 +83,8 @@ describe Credit do
 
     it "sends the credit notification including the reason" do
       credit = Credit.create_for_credit!(user:, amount_cents: 1000, crediting_user: User.first, reason: "Goodwill for reported checkout bug")
-      mailer = double(deliver_later: true)
+      mailer = double
+      expect(mailer).to receive(:deliver_later).with(queue: "critical").once
       expect(ContactingCreatorMailer).to receive(:credit_notification).with(user.id, 1000, "Goodwill for reported checkout bug").and_return(mailer)
       credit.notify_user
     end

@@ -69,6 +69,8 @@ class Credit < ApplicationRecord
 
     credit.balance = balance_transaction.balance
     credit.save!
+    # Notify here so console callers do not need a separate mailer call.
+    credit.notify_user if credit.amount_cents.positive?
     credit
   end
 
