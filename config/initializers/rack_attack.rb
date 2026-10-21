@@ -46,6 +46,29 @@ class Rack::Attack
     end
   end
 
+  # Resolved only after the path and method match, so unrelated requests never pay for the lookup.
+  def self.scoped?(path:, method:, request:, only_if:)
+    return true if only_if.nil?
+
+    matches_path?(path:, request:) &&
+      (method.blank? || request.request_method.to_s.upcase == method.to_s.upcase) &&
+      only_if.call(request)
+  end
+
+  # OAuth token -> owner is cached by token digest, so most requests skip the DB.
+  def self.vip_token?(token)
+    return false if token.blank?
+
+    Rails.cache.fetch("rack_attack:vip_token:#{Digest::SHA256.hexdigest(token)}", expires_in: 10.minutes) do
+      access_token = Doorkeeper::AccessToken.by_token(token)
+      owner = User.find_by(id: access_token.resource_owner_id) if access_token&.accessible? && access_token.resource_owner_id.present?
+      !!owner&.vip_creator?
+    end
+  rescue StandardError => e
+    Rails.logger.warn("Rack::Attack VIP lookup failed: #{e.class}")
+    false
+  end
+
   def self.throttle_identifier(path:, method:, request:, identifier:)
     identifier = path.is_a?(Regexp) ? "#{request.path}:#{identifier}" : identifier
 
@@ -92,17 +115,25 @@ class Rack::Attack
   end
 
   # Throttle by request parameters
-  def self.throttle_by_params(path:, requests:, period:, throttle_params:, method: nil)
-    block_proc = proc { |req| throttle_identifier(path:, method:, request: req, identifier: "#{throttle_params.call(req)}") }
-    name = throttle_name(prefix: "/params", path:, method:)
+  def self.throttle_by_params(path:, requests:, period:, throttle_params:, method: nil, only_if: nil, name_prefix: "/params")
+    block_proc = proc do |req|
+      next unless scoped?(path:, method:, request: req, only_if:)
+
+      throttle_identifier(path:, method:, request: req, identifier: "#{throttle_params.call(req)}")
+    end
+    name = throttle_name(prefix: name_prefix, path:, method:)
 
     throttle_with_exponential_backoff(name:, requests:, period:, max_level: 6, &block_proc)
   end
 
   # Throttle by IP with exponential backoff
-  def self.throttle_by_ip(path:, requests:, period:, max_level: 5, method: nil)
-    block_proc = proc { |req| throttle_identifier(path:, method:, request: req, identifier: req.remote_ip) }
-    name = throttle_name(prefix: "/ip", path:, method:)
+  def self.throttle_by_ip(path:, requests:, period:, max_level: 5, method: nil, only_if: nil, name_prefix: "/ip")
+    block_proc = proc do |req|
+      next unless scoped?(path:, method:, request: req, only_if:)
+
+      throttle_identifier(path:, method:, request: req, identifier: req.remote_ip)
+    end
+    name = throttle_name(prefix: name_prefix, path:, method:)
 
     throttle_with_exponential_backoff(name:, requests:, period:, max_level:, &block_proc)
   end
@@ -475,17 +506,24 @@ class Rack::Attack
   # Initial: 30rpm, Max: 150 requests/9 hours
   throttle_by_ip path: /\A\/(api\/)?v2\/products\/comps(\.\w+)?\z/, method: :get, requests: 30, period: 60.seconds
 
-  # Initial: 30rpm, Max: 150 requests/9 hours
-  throttle_by_ip path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :put, requests: 30, period: 60.seconds
-  throttle_by_ip path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :patch, requests: 30, period: 60.seconds
-
   # Per-token layer on top of the per-IP rules above. Blocks the IP-rotation
   # bypass and gives token-level attribution when an agent goes off the rails.
   v2_product_token = Proc.new do |req|
     req.params["access_token"].presence || req.env["HTTP_AUTHORIZATION"].to_s[/\Abearer\s+(\S+)/i, 1]
   end
-  throttle_by_params path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :put, requests: 30, period: 60.seconds, throttle_params: v2_product_token
-  throttle_by_params path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :patch, requests: 30, period: 60.seconds, throttle_params: v2_product_token
+  # Product writes: VIP creators (large API uploads place one file per PUT) get a higher
+  # ceiling, still capped. The VIP rules sit in their own buckets; non-VIP limits are unchanged.
+  # Initial: 30rpm, Max: 150 requests/9 hours (per IP); 30rpm, Max: 180 requests/3 days (per token)
+  # VIP initial: 150rpm, Max: 750 requests/9 hours (per IP); 150rpm, Max: 900 requests/3 days (per token)
+  v2_product_write_path = /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/
+  vip_product_writer = Proc.new { |req| req.memoize(:vip_product_writer) { vip_token?(v2_product_token.call(req)) } }
+  non_vip_product_writer = Proc.new { |req| !vip_product_writer.call(req) }
+  %i[put patch].each do |verb|
+    throttle_by_ip path: v2_product_write_path, method: verb, requests: 30, period: 60.seconds, only_if: non_vip_product_writer
+    throttle_by_params path: v2_product_write_path, method: verb, requests: 30, period: 60.seconds, throttle_params: v2_product_token, only_if: non_vip_product_writer
+    throttle_by_ip path: v2_product_write_path, method: verb, requests: 150, period: 60.seconds, only_if: vip_product_writer, name_prefix: "/vip/ip"
+    throttle_by_params path: v2_product_write_path, method: verb, requests: 150, period: 60.seconds, throttle_params: v2_product_token, only_if: vip_product_writer, name_prefix: "/vip/params"
+  end
   throttle_by_params path: /\A\/(api\/)?v2\/products\/comps(\.\w+)?\z/, method: :get, requests: 30, period: 60.seconds, throttle_params: v2_product_token
 
   # Preview is a non-mutating dry run intended for iteration, so it gets a

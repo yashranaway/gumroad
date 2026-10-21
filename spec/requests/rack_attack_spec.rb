@@ -785,6 +785,61 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "PUT /api/v2/products/:id VIP creators" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    let(:user) { create(:user) }
+    let(:product) { create(:product, user:) }
+    let(:token) do
+      app = create(:oauth_application, owner: create(:user))
+      create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "edit_products").token
+    end
+
+    def put_product(access_token, i)
+      put "/api/v2/products/#{product.external_id}",
+          params: { access_token:, name: "n#{i}" },
+          headers: { "HTTP_CF_CONNECTING_IP" => "10.3.0.#{i % 250 + 1}" }
+    end
+
+    it "lets a VIP token past 30 PUTs/min but still caps it" do
+      allow_any_instance_of(User).to receive(:vip_creator?).and_return(true)
+
+      travel_to(Time.current) do
+        150.times do |i|
+          put_product(token, i)
+          expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+        end
+
+        put_product(token, 999)
+        expect(response.status).to eq(429)
+      end
+    end
+
+    it "still throttles a non-VIP token at 30 PUTs/min" do
+      travel_to(Time.current) do
+        30.times { |i| put_product(token, i) }
+
+        put_product(token, 999)
+        expect(response.status).to eq(429)
+      end
+    end
+
+    it "falls back to the normal limit for a missing or invalid token" do
+      allow_any_instance_of(User).to receive(:vip_creator?).and_return(true)
+
+      travel_to(Time.current) do
+        30.times { |i| put "/api/v2/products/#{product.external_id}", params: { name: "n#{i}" }, headers: { "HTTP_CF_CONNECTING_IP" => "10.4.0.1" } }
+        put "/api/v2/products/#{product.external_id}", params: { name: "x" }, headers: { "HTTP_CF_CONNECTING_IP" => "10.4.0.1" }
+        expect(response.status).to eq(429)
+
+        30.times { |i| put_product("bogus-token", i) }
+        put_product("bogus-token", 999)
+        expect(response.status).to eq(429)
+      end
+    end
+  end
+
   describe "GET /api/v2/products/comps per-token throttle" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }
