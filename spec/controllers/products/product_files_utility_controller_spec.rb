@@ -7,6 +7,8 @@ describe ProductFilesUtilityController, :vcr do
   describe "GET external_link_title", :skip_ssrf_stub do
     before do
       @user = create(:user)
+      # Devise builds its mappings when routes are drawn; this spec also runs alone in test-confidence.
+      Rails.application.reload_routes!
       sign_in @user
     end
 
@@ -34,6 +36,23 @@ describe ProductFilesUtilityController, :vcr do
       post :external_link_title, params: { url: "http://127.0.0.1" }
 
       expect(response.parsed_body["success"]).to eq(false)
+    end
+
+    it "bounds the outbound fetch so a hanging host cannot outlive the Rack timeout" do
+      expect(SsrfFilter).to receive(:get).with(
+        "https://slow.example.com",
+        hash_including(
+          max_redirects: described_class::EXTERNAL_LINK_MAX_REDIRECTS,
+          http_options: {
+            open_timeout: described_class::EXTERNAL_LINK_OPEN_TIMEOUT_SECONDS,
+            read_timeout: described_class::EXTERNAL_LINK_READ_TIMEOUT_SECONDS,
+          }
+        )
+      ).and_return(instance_double(Net::HTTPResponse, body: "<html><head><title>Slow</title></head></html>"))
+
+      post :external_link_title, params: { url: "https://slow.example.com" }
+
+      expect(response.parsed_body["title"]).to eq("Slow")
     end
   end
 

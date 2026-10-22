@@ -3,12 +3,25 @@
 class ProductFilesUtilityController < ApplicationController
   include SignedUrlHelper
 
+  # The fetch runs on the request thread, so it has to fail well inside the 120s Rack::Timeout. Net::HTTP
+  # defaults to 60s connect plus 60s read, and the gem follows up to 10 redirects, each with that budget.
+  EXTERNAL_LINK_OPEN_TIMEOUT_SECONDS = 5
+  EXTERNAL_LINK_READ_TIMEOUT_SECONDS = 10
+  EXTERNAL_LINK_MAX_REDIRECTS = 3
+
   before_action :authenticate_user!
 
   before_action :set_product, only: %i[download_product_files download_folder_archive]
 
   def external_link_title
-    response = SsrfFilter.get(params.require(:url))
+    response = SsrfFilter.get(
+      params.require(:url),
+      max_redirects: EXTERNAL_LINK_MAX_REDIRECTS,
+      http_options: {
+        open_timeout: EXTERNAL_LINK_OPEN_TIMEOUT_SECONDS,
+        read_timeout: EXTERNAL_LINK_READ_TIMEOUT_SECONDS,
+      }
+    )
     title = Nokogiri::HTML(response.body).title
     title = "Untitled" if title.blank?
 
