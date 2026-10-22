@@ -15,5 +15,9 @@ describe Products::MobileTrackingController do
       expect(response).to render_template(:show)
       expect(assigns[:tracking_props][:permalink]).to eq(product.unique_permalink)
     end
+
+    it "responds with a 404 for a permalink that is not a visible product" do
+      expect { get :show, params: { link_id: "not_a_product" } }.to raise_error(ActionController::RoutingError, "Not Found")
+    end
   end
 end
