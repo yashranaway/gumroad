@@ -412,6 +412,118 @@ describe("PDF reader teardown", () => {
   });
 });
 
+describe("PDF reader failure state", () => {
+  const buildPdfDocument = () => {
+    const destroy = vi.fn(() => Promise.resolve());
+    let resolveDocument: ((value: { numPages: number; destroy: typeof destroy }) => void) | undefined;
+    let rejectDocument: ((reason: Error) => void) | undefined;
+    const promise = new Promise<{ numPages: number; destroy: typeof destroy }>((resolve, reject) => {
+      resolveDocument = resolve;
+      rejectDocument = reject;
+    });
+    return {
+      destroy,
+      getDocument: vi.fn(() => ({ promise })),
+      reject: (reason: Error) => rejectDocument?.(reason),
+      resolve: () => resolveDocument?.({ numPages: 3, destroy }),
+    };
+  };
+
+  // The lazy pdf.js imports resolve over several microtask ticks, which fake timers do not advance.
+  const flushMicrotasks = async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  };
+
+  let pdf: ReturnType<typeof buildPdfDocument>;
+
+  beforeEach(() => {
+    pdf = buildPdfDocument();
+    mocks.getDocument.mockImplementation(pdf.getDocument);
+    mocks.usePage.mockReturnValue({ props: readerProps({ file_type: "pdf", latest_media_location: null }) });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("shows the recovery error when the document cannot be loaded", async () => {
+    // A rejected signed URL, a failed worker fetch or an unparseable file all reject here, and
+    // without a handler the loading overlay covered the reader for the page's lifetime.
+    render(<Read />);
+    await waitFor(() => expect(mocks.getDocument).toHaveBeenCalled());
+
+    await act(async () => {
+      pdf.reject(new Error("Unexpected server response (403)"));
+      await Promise.resolve();
+    });
+
+    expect((await screen.findByRole("alert")).textContent).toContain("We couldn't open this PDF");
+    expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull();
+    expect(mocks.viewer.cleanup).toHaveBeenCalled();
+  });
+
+  it("releases a loaded document the viewer cannot use and shows the recovery error", async () => {
+    mocks.viewer.setDocument.mockImplementationOnce(() => {
+      throw new Error("PDF page container is detached");
+    });
+    render(<Read />);
+    await waitFor(() => expect(mocks.getDocument).toHaveBeenCalled());
+    await act(async () => {
+      pdf.resolve();
+      await Promise.resolve();
+    });
+
+    expect((await screen.findByRole("alert")).textContent).toContain("We couldn't open this PDF");
+    expect(pdf.destroy).toHaveBeenCalled();
+  });
+
+  it("surfaces the failure when the document never arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<Read />);
+      await act(async () => {
+        await flushMicrotasks();
+      });
+      expect(screen.queryByText("We couldn't open this PDF")).toBeNull();
+
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+
+      expect(screen.getByText("We couldn't open this PDF")).toBeTruthy();
+      expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the deadline message when a slow document does arrive", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<Read />);
+      await act(async () => {
+        await flushMicrotasks();
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(screen.getByText("We couldn't open this PDF")).toBeTruthy();
+
+      await act(async () => {
+        pdf.resolve();
+        await flushMicrotasks();
+      });
+      act(() => mocks.emitPdf("pagesinit"));
+
+      expect(screen.queryByText("We couldn't open this PDF")).toBeNull();
+      expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("EPUB reader lifecycle", () => {
   let harness: ReturnType<typeof buildEpubHarness>;
 

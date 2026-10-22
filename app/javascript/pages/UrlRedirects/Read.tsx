@@ -188,6 +188,10 @@ const getMediaLocationFromCookies = (readId: string): StoredMediaLocation => {
   return {};
 };
 
+// `pagesinit` normally needs only the first ranges of the file, so a minute is generous; the
+// deadline surfaces the error state rather than rejecting the document.
+const PDF_STALL_DEADLINE_MS = 60_000;
+
 const Read = () => {
   const props = cast<Props>(usePage().props);
   return props.file_type === "epub" ? <EpubReader {...props} /> : <PdfReader {...props} />;
@@ -201,10 +205,12 @@ const PdfReader = ({
   product_file_id,
   latest_media_location,
   title,
+  file_type,
 }: Props) => {
   const [pageNumber, setPageNumber] = React.useState(1);
   const [pageCount, setPageCount] = React.useState(0);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [readerError, setReaderError] = React.useState(false);
   const [pageTooltip, setPageTooltip] = React.useState<{ left: number; pageNumber: number } | null>(null);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const pdfViewerRef = React.useRef<PDFSinglePageViewer | null>(null);
@@ -239,6 +245,30 @@ const PdfReader = ({
     let isCancelled = false;
     let teardown: (() => void) | undefined;
     let releaseHeightSync: (() => void) | undefined;
+
+    const showReaderError = () => {
+      setIsLoading(false);
+      setReaderError(true);
+    };
+
+    // A stalled fetch never rejects (pdf.js reports no byte progress on a range-capable stream), so
+    // without a deadline the overlay stays up for the life of the page. Armed before the imports
+    // below, which are themselves a network window on a first visit.
+    const stallTimer = window.setTimeout(showReaderError, PDF_STALL_DEADLINE_MS);
+
+    // Every await below can reject — an expired or rejected signed URL, a failed worker or chunk
+    // fetch, a parse failure, an out-of-memory load — and getDocument's rejection used to be
+    // unhandled, which left isLoading true and the loading overlay up for good.
+    const handleLoadError = () => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set by the effect's cleanup closure, which the compiler cannot see from here
+      if (isCancelled) return;
+      window.clearTimeout(stallTimer);
+      const release = teardown;
+      teardown = undefined;
+      release?.();
+      pdfViewerRef.current = null;
+      showReaderError();
+    };
 
     const resumeFromLastLocation = (pageCount: number) => {
       const storedCookieLocation = getMediaLocationFromCookies(read_id);
@@ -303,8 +333,10 @@ const PdfReader = ({
         )}`;
       };
       const onPagesInit = () => {
+        window.clearTimeout(stallTimer);
         pdfSinglePageViewer.currentScaleValue = "page-fit";
         setIsLoading(false);
+        setReaderError(false);
         const previousPage = pdfSinglePageViewer.currentPageNumber;
         resumeFromLastLocation(pdfViewerRef.current?.pdfDocument?.numPages ?? 1);
         // Setting the current page to itself does not emit pagechanging.
@@ -361,10 +393,11 @@ const PdfReader = ({
       pdfSinglePageViewer.setDocument(pdf);
       pdfLinkService.setDocument(pdf, null);
     };
-    void showDocument();
+    void showDocument().catch(handleLoadError);
 
     return () => {
       isCancelled = true;
+      window.clearTimeout(stallTimer);
       releaseHeightSync?.();
       teardown?.();
       pdfViewerRef.current = null;
@@ -388,7 +421,7 @@ const PdfReader = ({
 
   return (
     <div style={{ display: "contents" }}>
-      {isLoading ? <ReaderLoadingOverlay /> : null}
+      {readerError ? <ReaderErrorOverlay fileType={file_type} /> : isLoading ? <ReaderLoadingOverlay /> : null}
       <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
@@ -495,6 +528,7 @@ const EpubReader = ({
   product_file_id,
   latest_media_location,
   title,
+  file_type,
 }: Props) => {
   const [sectionNumber, setSectionNumber] = React.useState(1);
   const [sectionCount, setSectionCount] = React.useState(0);
@@ -794,7 +828,7 @@ const EpubReader = ({
 
   return (
     <div style={{ display: "contents" }}>
-      {readerError ? <ReaderErrorOverlay /> : isLoading ? <ReaderLoadingOverlay /> : null}
+      {readerError ? <ReaderErrorOverlay fileType={file_type} /> : isLoading ? <ReaderLoadingOverlay /> : null}
       <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
@@ -924,13 +958,13 @@ const ReaderLoadingOverlay = () => (
   </div>
 );
 
-const ReaderErrorOverlay = () => (
+const ReaderErrorOverlay = ({ fileType }: { fileType: Props["file_type"] }) => (
   <div
     role="alert"
     className="scoped-tailwind-preflight absolute flex size-full flex-col items-center justify-center gap-4 bg-background p-6 text-center"
     style={{ zIndex: "var(--z-index-tooltip)" }}
   >
-    <h3>We couldn&apos;t open this EPUB</h3>
+    <h3>We couldn&apos;t open this {fileType === "epub" ? "EPUB" : "PDF"}</h3>
     <p>You can try loading it again or go back to your files.</p>
     <div className="flex gap-3">
       <Button onClick={() => history.back()}>Back</Button>
