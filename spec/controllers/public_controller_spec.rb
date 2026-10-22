@@ -137,8 +137,26 @@ describe PublicController, type: :controller, inertia: true do
       expect(response.parsed_body["success"]).to be(true)
     end
 
-    it "does not 500 on array-valued email and last_4 params" do
-      get :charge_data, params: { email: ["a", "b"], last_4: ["4242"] }
+    it "does not 500 on an array-valued email param" do
+      get :charge_data, params: { email: ["a", "b"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(false)
+    end
+
+    it "does not 500 on, and matches nothing for, a nested last_4" do
+      create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@example.com")
+
+      get :charge_data, params: { last_4: { a: "4242" }, email: "edgar@example.com" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(false)
+    end
+
+    it "matches nothing for an array-valued last_4 instead of widening to the whole email" do
+      create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@example.com")
+
+      get :charge_data, params: { last_4: ["4", "2", "4", "2"], email: "edgar@example.com" }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(false)
