@@ -924,6 +924,38 @@ describe("PaymentForm validation-failure feedback", () => {
   });
 });
 
+describe("PaymentForm import charges notice", () => {
+  afterEach(cleanup);
+
+  const NOTICE = "Import taxes and duties may be charged by the carrier on delivery.";
+  const shippingState = (country: string) => {
+    const base = state();
+    return {
+      ...base,
+      country,
+      products: base.products.map((p) => ({ ...p, requireShipping: true, shippableCountryCodes: ["US", "DE"] })),
+    };
+  };
+
+  it("warns buyers shipping physical goods outside the US, Canada, and the UK", () => {
+    renderPaymentForm(shippingState("DE"));
+    expect(screen.getByText(NOTICE, { exact: false })).toBeTruthy();
+  });
+
+  it("stays quiet for US, Canadian, and UK addresses", () => {
+    for (const country of ["US", "CA", "GB"]) {
+      const { unmount } = renderPaymentForm(shippingState(country));
+      expect(screen.queryByText(NOTICE, { exact: false })).toBeNull();
+      unmount();
+    }
+  });
+
+  it("does not show on digital-only checkouts", () => {
+    renderPaymentForm({ ...state(), country: "DE" });
+    expect(screen.queryByText(NOTICE, { exact: false })).toBeNull();
+  });
+});
+
 describe("PaymentForm payment method visibility", () => {
   it("passes the seller's Link setting down to the card fields — Link renders the save-info block", () => {
     const checkoutState = state();

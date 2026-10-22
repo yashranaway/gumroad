@@ -176,6 +176,21 @@ const UnshippableProductsAlert = () => {
   );
 };
 
+// Physical orders to these countries are taxed at checkout (or have no import step). Everywhere
+// else the carrier may collect import VAT/duty on delivery, which Gumroad doesn't remit (gp#3730).
+const COUNTRIES_WITHOUT_IMPORT_CHARGES = new Set(["US", "CA", "GB"]);
+
+const ImportChargesNotice = () => {
+  const [state] = useState();
+  if (!state.country || COUNTRIES_WITHOUT_IMPORT_CHARGES.has(state.country)) return null;
+
+  return (
+    <Alert role="status" variant="info">
+      Import taxes and duties may be charged by the carrier on delivery. They aren't included in this price.
+    </Alert>
+  );
+};
+
 const StateInput = () => {
   const [state, dispatch] = useState();
   const uid = React.useId();
@@ -596,6 +611,7 @@ const CustomerDetails = ({ className }: { className?: string }) => {
                 <ZipCodeInput />
               </div>
               <CountryInput />
+              <ImportChargesNotice />
               {isLoggedIn ? (
                 <Label>
                   <Checkbox
