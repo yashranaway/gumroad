@@ -1,10 +1,11 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Decides whether a failed `Tests` attempt failed *only* because actions/checkout
-# hung -- the one failure mode where re-running unattended tells us something new.
-# A spec failure re-run tells us nothing and hides a real red, so anything that
-# reached a non-checkout failure blocks the whole verdict, not just its own job.
+# Decides whether a `Tests` attempt went red *only* on infrastructure -- a hang
+# that never let the specs run, or a job that burned its own budget. That is the
+# one failure mode where re-running unattended tells us something new. A spec
+# failure re-run tells us nothing and hides a real red, so anything that reached
+# a non-hang failure blocks the whole verdict, not just its own job.
 #
 # Reads the attempt's jobs payload on stdin, or from a file argument:
 #
@@ -13,9 +14,9 @@
 #     "conclusion": "<the triggering run's own conclusion>" }
 #
 # `--candidates` prints the job ids whose first bad step already looks like the
-# hang, so the caller only fetches annotations for that short list before asking
-# for the verdict. No network in here: the file the workflow runs is the file the
-# test runs.
+# hang, or that burned a plausible share of their own budget, so the caller only
+# fetches annotations for that short list before asking for the verdict. No
+# network in here: the file the workflow runs is the file the test runs.
 #
 # Exit codes are a contract -- 0 rerun, 1 skip, 2 could not run (bad input) --
 # because the caller turns 0 into a real re-run and must treat everything else as
@@ -45,6 +46,18 @@ HANGS = {
 }.freeze
 HANG_STEPS = HANGS.keys.freeze
 
+# A job that burned its own `timeout-minutes` budget is cancelled by GitHub with
+# this annotation, and that cancellation is what turns the whole run's conclusion
+# into `cancelled` -- which no gate reports on, so the required `ci/green` never
+# lands.
+JOB_TIMEOUT_MESSAGE = "has exceeded the maximum execution time of"
+
+# Cheap prefilter for the ids whose annotations are worth fetching: a job that
+# burned a real budget was cancelled deep into it, so a short cancellation is
+# never a timeout. Measured on the job's own wall clock, the budget GitHub
+# cancels against -- the step the cancel landed in is only the remainder.
+JOB_TIMEOUT_MIN_SECONDS = 600.0
+
 # `timed_out` is a failure, not a cancellation: a job that ran out of its own
 # budget is a red we must not paper over.
 FAILED = %w[failure timed_out].freeze
@@ -72,12 +85,27 @@ rescue ArgumentError
   nil
 end
 
-# Jobs with no `Run tests` step at all (Build images, Compute relevant specs)
-# satisfy this too -- what matters is that no specs got the chance to run, so a
+def job_seconds(job)
+  started = job["started_at"]
+  completed = job["completed_at"]
+  return nil if started.nil? || completed.nil?
+  Time.iso8601(completed) - Time.iso8601(started)
+rescue ArgumentError
+  nil
+end
+
+# The steps that run a suite, in the jobs that carry their own `timeout-minutes`
+# budget: `test_minitest` runs its suite under `Run Minitest`, the rest under
+# `Run tests`. A job-timeout cancellation inside either is the suite's own
+# timeout, not the setup's.
+SUITE_STEPS = ["Run tests", "Run Minitest"].freeze
+
+# Jobs with no suite step at all (Build images, Compute relevant specs) satisfy
+# this too -- what matters is that no specs got the chance to run, so a
 # re-run cannot be laundering a spec failure.
-def run_tests_started?(job)
+def suite_started?(job)
   steps_of(job).any? do |step|
-    next false unless step["name"] == "Run tests"
+    next false unless SUITE_STEPS.include?(step["name"])
     step["status"] == "in_progress" || BAD.include?(step["conclusion"]) || step["conclusion"] == "success"
   end
 end
@@ -89,11 +117,35 @@ def candidate?(job)
   !seconds.nil? && HANGS.fetch(step["name"]).first.cover?(seconds)
 end
 
+# A job cancelled deep into its own budget. Only the annotation can confirm it,
+# and annotations are fetched only for the ids `--candidates` names, so this
+# names the id and `job_timed_out?` decides. The step is the fallback for a
+# payload without job timestamps.
+def job_timeout_candidate?(job)
+  return false unless job["conclusion"] == "cancelled"
+  step = first_bad_step(job)
+  return false unless step && step["conclusion"] == "cancelled"
+  burned = [job_seconds(job), step_seconds(step)].compact.max
+  !burned.nil? && burned >= JOB_TIMEOUT_MIN_SECONDS
+end
+
+def job_timed_out?(job, annotations)
+  Array(annotations[job["id"].to_s]).any? { |message| message.to_s.include?(JOB_TIMEOUT_MESSAGE) }
+end
+
 def hung?(job, annotations)
-  return false unless candidate?(job)
-  return false if run_tests_started?(job)
-  wanted = HANGS.fetch(first_bad_step(job)["name"]).last
-  Array(annotations[job["id"].to_s]).any? { |message| message.to_s.include?(wanted) }
+  return false if suite_started?(job)
+
+  # The step-name classes first, each proved by its own annotation: a job that
+  # happens to carry both must keep the verdict its step already earned.
+  if candidate?(job)
+    wanted = HANGS.fetch(first_bad_step(job)["name"]).last
+    return true if Array(annotations[job["id"].to_s]).any? { |message| message.to_s.include?(wanted) }
+  end
+
+  # A job timeout is a cancellation, not a failure, so the annotation is what
+  # separates it from a sibling a fail-fast or a cancel-in-progress threw away.
+  job_timed_out?(job, annotations) && job_timeout_candidate?(job)
 end
 
 def job_label(job)
@@ -101,11 +153,10 @@ def job_label(job)
 end
 
 def verdict(jobs, annotations, conclusion = nil)
-  # Fail-fast behind a hang still leaves the run `failure`; `cancelled` means a
-  # human or a cancel-in-progress threw the run away, and job-level `cancelled`
-  # cannot tell those two apart. An absent field falls through to the job-level
-  # gates below.
-  if !conclusion.nil? && conclusion != "" && conclusion != "failure"
+  # `failure` is admitted because fail-fast behind a hang still leaves the run
+  # `failure`; `cancelled` only for the job-timeout shape, enforced by the
+  # annotation check after `hangs`.
+  if !conclusion.nil? && conclusion != "" && !%w[failure cancelled].include?(conclusion)
     return [EXIT_SKIP, "skip: the attempt concluded #{conclusion}"]
   end
 
@@ -121,7 +172,14 @@ def verdict(jobs, annotations, conclusion = nil)
 
   failing = jobs.select { |job| JOB_FAILED.include?(job["conclusion"]) }
   hangs = failing.select { |job| hung?(job, annotations) }
-  return [EXIT_SKIP, "skip: no checkout or image-pull timeout on this attempt"] if hangs.empty?
+  return [EXIT_SKIP, "skip: no checkout, image-pull or job timeout on this attempt"] if hangs.empty?
+
+  # A cancelled attempt is only re-runnable on evidence GitHub itself produced:
+  # the job-timeout annotation. A manual cancel and a cancel-in-progress leave no
+  # such annotation, so a run that was thrown away stays thrown away.
+  if conclusion == "cancelled" && hangs.none? { |job| job_timed_out?(job, annotations) }
+    return [EXIT_SKIP, "skip: the attempt was cancelled, not timed out"]
+  end
 
   # Everything else that went red has to be collateral: fail-fast cancelling a
   # sibling mid-`Run tests` is not evidence of anything. A job that reached
@@ -129,6 +187,12 @@ def verdict(jobs, annotations, conclusion = nil)
   collateral = failing - hangs
   offender = collateral.find { |job| job["conclusion"] != "cancelled" }
   return [EXIT_SKIP, "skip: #{job_label(offender)} concluded #{offender['conclusion']}"] if offender
+
+  # A sibling that burned its own budget inside the suite timed out on the
+  # specs, not on the setup in front of them. Re-running the attempt whole would
+  # re-execute them, which is the one thing a spec timeout must never get.
+  specs_timeout = collateral.find { |job| suite_started?(job) && job_timed_out?(job, annotations) }
+  return [EXIT_SKIP, "skip: #{job_label(specs_timeout)} timed out inside #{first_bad_step(specs_timeout)['name']}"] if specs_timeout
 
   [0, "rerun: timed out on #{hangs.map { |job| "#{job_label(job)} (#{first_bad_step(job)['name']})" }.join(', ')}"]
 end
@@ -146,7 +210,7 @@ end
 jobs = Array(payload.is_a?(Hash) ? payload["jobs"] : payload)
 
 if candidates_only
-  jobs.each { |job| puts job["id"] if candidate?(job) }
+  jobs.each { |job| puts job["id"] if candidate?(job) || job_timeout_candidate?(job) }
   exit 0
 end
 

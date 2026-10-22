@@ -1,13 +1,23 @@
 name: Rerun hung checkout
 
-# Re-runs the failed jobs of a `Tests` attempt when the only thing that went
-# wrong was a timeout before the tests started: actions/checkout at its 5-minute
-# limit, or the test image pull timing out three times (Docker Hub). Those
-# failures are unrelated to the commit and land on shards at random.
+# Re-runs a `Tests` attempt when the only thing that went wrong was a timeout
+# before the tests started: actions/checkout at its 5-minute limit, the test
+# image pull timing out three times (Docker Hub), or a job that burned its own
+# `timeout-minutes` budget. Those failures are unrelated to the commit and land
+# on shards at random.
+#
+# The job timeout is the one that arrives as `cancelled` rather than `failure`,
+# because GitHub cancels a job that exceeds its own budget. That shape is worth
+# recovering unattended: ci-green.yml deliberately does not report on a
+# cancelled run, so the PR's required `ci/green` is never published and its
+# auto-merge waits forever with nothing else to unblock it.
 #
 # Scoped hard on purpose: the classifier refuses unless every red job on the
 # triggering attempt is one of those timeouts or a sibling fail-fast cancelled
-# behind one, so a spec failure is never re-run into a pass.
+# behind one, so a spec failure is never re-run into a pass -- and a `cancelled`
+# attempt is only re-run when a job-timeout annotation proves GitHub cancelled
+# it, never when a human or a cancel-in-progress threw it away, and never when a
+# newer push has already superseded the attempt.
 
 on:
   workflow_run:
@@ -18,6 +28,7 @@ permissions:
   actions: write # rerun-failed-jobs; the default token cannot re-run without it
   checks: read # the timeout text lives in the job's check-run annotations
   contents: read
+  pull-requests: read # is this attempt still the head of its PR
 
 jobs:
   rerun:
@@ -25,13 +36,9 @@ jobs:
     # run_attempt < 2 is the cap: attempt 1 may be re-run, attempt 2 is where
     # this stops. A hang that survives one re-run is not a flake worth chasing
     # unattended.
-    #
-    # `failure` only: fail-fast cancelling siblings behind a hang still leaves
-    # the run itself `failure`, while a manual cancel or a concurrency
-    # cancel-in-progress leaves it `cancelled` -- and that run was thrown away
-    # on purpose, so re-running its failed jobs is wasted CI.
     if: >-
-      github.event.workflow_run.conclusion == 'failure' &&
+      (github.event.workflow_run.conclusion == 'failure' ||
+       github.event.workflow_run.conclusion == 'cancelled') &&
       github.event.workflow_run.run_attempt < 2
     steps:
       - uses: actions/checkout@v4
@@ -51,8 +58,45 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
           ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
+
+          # A re-run joins the concurrency group of what it ran for, so re-running
+          # an attempt a newer push has already superseded can cancel the run on
+          # the current head -- and a cancelled run publishes no ci/green either.
+          # Resolve that head live; `pull_requests` is empty for some fork PRs.
+          # Unresolvable means skip: recovering a stale attempt is worth less than
+          # cancelling the head's run.
+          case "${EVENT}" in
+            pull_request_target)
+              if [ -n "${PR_NUMBER}" ]; then
+                current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha || true)
+              else
+                # `head` wants the owner login, not `owner/repo`, and `-f` lets
+                # gh encode a branch name that carries a slash.
+                current=$(gh api -X GET "repos/${GITHUB_REPOSITORY}/pulls" \
+                            -f state=open -f "head=${HEAD_OWNER}:${HEAD_BRANCH}" \
+                            --jq '.[0].head.sha // ""' || true)
+              fi
+              ;;
+            push)
+              # main's group is per commit and never cancels a run in progress.
+              current="${HEAD_SHA}"
+              [ "${HEAD_BRANCH}" = "main" ] || current=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_BRANCH}" --jq .sha || true)
+              ;;
+            *) current="${HEAD_SHA}" ;;
+          esac
+          if [ "${current}" != "${HEAD_SHA}" ]; then
+            echo "skip: not the current head of its ref (${current:-unresolved})"
+            echo "rerun=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           # --paginate --jq emits one job object per line (gh forbids --slurp
           # together with --jq). jq -s rebuilds the jobs array the classifier
           # reads. Use the triggering attempt, not the run's latest jobs.
@@ -85,9 +129,19 @@ jobs:
             *) echo "rerun=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
-      - name: Re-run the failed jobs
+      - name: Re-run the attempt
         if: steps.classify.outputs.rerun == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id }}
-        run: gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          # `--failed` is only meaningful for a `failure` attempt: a cancelled job
+          # is not a failed job, and the point of re-running a job-timeout
+          # attempt is to give the run a conclusion of its own so ci-green.yml
+          # publishes the required ci/green. Re-run that whole attempt instead.
+          if [ "$CONCLUSION" = "cancelled" ]; then
+            gh run rerun "$RUN_ID" -R "$GITHUB_REPOSITORY"
+          else
+            gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
+          fi
