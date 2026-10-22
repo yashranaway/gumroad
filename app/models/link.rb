@@ -1132,13 +1132,18 @@ class Link < ApplicationRecord
     shipping_exclusions.exists?(country_code:)
   end
 
-  # Country codes a physical product can actually ship to: the union of its destinations,
-  # minus its exclusions. Digital products have no shipping surface.
-  def shippable_country_codes
+  # Country codes a physical product can actually ship to: the union of its destinations, minus
+  # its exclusions. Digital products have no shipping surface. `restrict_to_supported_countries:
+  # false` keeps an existing subscriber's country on the manage page, where they update their card.
+  def shippable_country_codes(restrict_to_supported_countries: true)
     return [] unless is_physical
 
     included = shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys }
-    included.uniq - shipping_excluded_country_codes
+    shippable = included.uniq - shipping_excluded_country_codes
+    if restrict_to_supported_countries && Product::Shipping.restricted_to_supported_countries?
+      shippable &= Product::Shipping::SUPPORTED_COUNTRY_CODES
+    end
+    shippable
   end
 
   def save_default_sku!(sku_id, custom_sku)
@@ -1968,8 +1973,13 @@ class Link < ApplicationRecord
       # Not just destinations: a destination the product excludes still leaves nothing to ship to.
       return if shippable_country_codes.present?
 
-      errors.add(:base, "The product needs to be shippable to at least one destination.")
-      raise LinkInvalid, "The product needs to be shippable to at least one destination."
+      message = if Product::Shipping.restricted_to_supported_countries? && shipping_destinations.alive.exists?
+        "Physical products can only ship to the United States, Canada, and the United Kingdom. Add one of those as a shipping destination."
+      else
+        "The product needs to be shippable to at least one destination."
+      end
+      errors.add(:base, message)
+      raise LinkInvalid, message
     end
 
     def enforce_merchant_account_exits_for_new_users!

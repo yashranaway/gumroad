@@ -5652,9 +5652,16 @@ class Purchase < ApplicationRecord
       return unless link.is_physical
       return if country.blank?
 
-      if Compliance::Countries.blocked_location?(alpha2: Compliance::Countries.find_by_name(country)&.alpha2, subdivision_code: state)
+      country_code = Compliance::Countries.find_by_name(country)&.alpha2
+      if Compliance::Countries.blocked_location?(alpha2: country_code, subdivision_code: state)
         self.error_code = PurchaseErrorCode::BLOCKED_SHIPPING_COUNTRY
         errors.add :base, "The creator cannot ship the product to the country you have selected."
+      elsif !Product::Shipping.supported_country?(country_code) && !does_not_count_towards_max_purchases
+        # Only new sales are held to the supported countries. Follow-on charges for a sale already
+        # made (renewals, preorder charges, plan changes, later installments, commission
+        # completions, gift receivers) keep shipping where the original sale was made.
+        self.error_code = PurchaseErrorCode::NO_SHIPPING_COUNTRY_CONFIGURED
+        errors.add :base, "Physical products on Gumroad can only ship to the United States, Canada, and the United Kingdom."
       elsif ShippingDestination.for_product_and_country_code(product: link, country_code: Compliance::Countries.find_by_name(country)&.alpha2).nil?
         self.error_code = PurchaseErrorCode::NO_SHIPPING_COUNTRY_CONFIGURED
         errors.add :base, "The creator cannot ship the product to the country you have selected."
