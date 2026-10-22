@@ -53,6 +53,13 @@ describe User::PasswordsController, type: :controller, inertia: true do
       expect(response).to redirect_to(login_url)
       expect(flash[:warning]).to eq("An account does not exist with that email.")
     end
+
+    it "redirects with warning when the user param is a scalar" do
+      post(:create, params: { user: "abc" })
+
+      expect(response).to redirect_to(login_url)
+      expect(flash[:warning]).to eq("An account does not exist with that email.")
+    end
   end
 
   describe "#edit" do
@@ -71,6 +78,13 @@ describe User::PasswordsController, type: :controller, inertia: true do
   end
 
   describe "#update" do
+    it "redirects with a warning when the user param is a scalar" do
+      patch :update, params: { user: "abc" }
+
+      expect(response).to redirect_to(edit_user_password_path(reset_password_token: nil))
+      expect(flash[:warning]).to eq "That reset password token doesn't look valid (or may have expired)."
+    end
+
     it "logs in after successful pw reset" do
       token = @user.send_reset_password_instructions
       post :update, params: { user: { password: "password_new", password_confirmation: "password_new", reset_password_token: token } }

@@ -17,7 +17,7 @@ class User::PasswordsController < Devise::PasswordsController
   end
 
   def create
-    email = params.dig(:user, :email)
+    email = user_params[:email]
     user = User.alive.by_email(email).first if EmailFormatValidator.valid?(email)
 
     if user&.send_reset_password_instructions
@@ -42,8 +42,8 @@ class User::PasswordsController < Devise::PasswordsController
   end
 
   def update
-    reset_password_token = params[:user][:reset_password_token]
-    user = User.reset_password_by_token(params[:user])
+    reset_password_token = user_params[:reset_password_token]
+    user = User.reset_password_by_token(user_params)
 
     if user.errors.present?
       error_message = if user.errors[:password_confirmation].present?
@@ -74,4 +74,11 @@ class User::PasswordsController < Devise::PasswordsController
   def after_sending_reset_password_instructions_path_for(_resource_name, _user)
     root_url
   end
+
+  private
+    # A scalar `user` param (malformed or bot request) must read as no user params rather than raising.
+    def user_params
+      value = params[:user]
+      value.is_a?(ActionController::Parameters) ? value : ActionController::Parameters.new
+    end
 end
