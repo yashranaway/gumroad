@@ -44,10 +44,27 @@ jobs:
             echo "full=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Never read a failed label lookup as "no label": that takes the
+          # trimmed set, and a diff it cannot attribute then escalates asking
+          # for a label the PR already carries. Retry, then fail SAFE.
+          read_labels() {
+            local attempt
+            for attempt in 1 2 3; do
+              if LABELS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" \
+                           --jq '[.[].labels[].name] | join("\n")'); then
+                return 0
+              fi
+              echo "::warning::could not read the PR labels for $SHA (attempt $attempt of 3)"
+              [ "$attempt" = 3 ] || sleep 2
+            done
+            return 1
+          }
           if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
             LABELS=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}" --jq '[.labels[].name] | join("\n")')
-          else
-            LABELS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '[.[].labels[].name] | join("\n")' || true)
+          elif ! read_labels; then
+            echo "::warning::label lookup for $SHA never succeeded; running the full suite"
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           if echo "$LABELS" | grep -qx 'run-all-specs'; then
             echo "full=true" >> "$GITHUB_OUTPUT"
@@ -364,6 +381,9 @@ jobs:
 
       - name: Self-test the Test Relevant shard count
         run: ruby spec/bin/ci_test_relevant_shards_test.rb
+
+      - name: Self-test the run-all-specs label lookup
+        run: ruby spec/bin/ci_gate_scope_test.rb
 
       - name: Self-test the main spec-failure classifier
         run: ruby spec/bin/classify_main_spec_failure_test.rb
