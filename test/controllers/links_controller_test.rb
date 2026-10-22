@@ -7063,6 +7063,16 @@ class LinksControllerSearchTest < ActionController::TestCase
     assert_nil params[:taxonomy_id]
   end
 
+  test "normalize_search_param_values! collapses crafted nested user_id and min_reviews_count" do
+    params = ActionController::Parameters.new(user_id: { "a" => "1" }, min_reviews_count: { "a" => "3" })
+    assert_raises(NoMethodError) { Link.search_options(params) }
+
+    @controller.send(:normalize_search_param_values!, params)
+    assert_nil params[:user_id]
+    assert_nil params[:min_reviews_count]
+    Link.search_options(params)
+  end
+
   test "GET search searches only for recommendable products" do
     setting_and_ordering_setup
     bad = create_product(name: "Previously-owned weasel")
