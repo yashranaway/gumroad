@@ -158,6 +158,29 @@ describe OfferCodesController do
       expect(response.parsed_body).to eq({ "error_message" => "Sorry, the discount code you wish to use is invalid.", "error_code" => "invalid_offer", "valid" => false })
     end
 
+    it "reads a cart line with nested fields as absent instead of raising" do
+      get :compute_discount, params: {
+        code: offer_code.code,
+        products: {
+          "0" => {
+            permalink: { "0" => product.unique_permalink },
+            quantity: { "0" => "2" },
+            price_cents: ["500"],
+          },
+        },
+      }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({ "error_message" => "Sorry, the discount code you wish to use is invalid.", "error_code" => "invalid_offer", "valid" => false })
+    end
+
+    it "reads a cart line that is not a line-item hash as absent instead of raising" do
+      get :compute_discount, params: { code: offer_code.code, products: { "0" => "abc" } }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({ "error_message" => "Sorry, the discount code you wish to use is invalid.", "error_code" => "invalid_offer", "valid" => false })
+    end
+
     it "tells a signed-in returning customer that a new-customer code is not for them" do
       offer_code.update!(new_customers_only: true)
       buyer = create(:user)

@@ -22,7 +22,7 @@ class OfferCodesController < ApplicationController
   }.freeze
 
   def compute_discount
-    result = OfferCodeDiscountComputingService.new(OfferCode.normalize_code(params[:code]), params[:products], buyer: logged_in_user).process
+    result = OfferCodeDiscountComputingService.new(OfferCode.normalize_code(params[:code]), product_params, buyer: logged_in_user).process
 
     response = if result[:error_code].present?
       { valid: false, error_code: result[:error_code], error_message: INELIGIBILITY_MESSAGES[result[:error_code]] }
@@ -63,5 +63,19 @@ class OfferCodesController < ApplicationController
 
     def integer_param(key)
       scalar_param(key)&.then { _1.to_i if _1.match?(/\A\d+\z/) }
+    end
+
+    # A nested value where a cart line expects a scalar (`?products[x][permalink][y]=1`) arrives as
+    # an ActionController::Parameters and raises in the discount computation's first query or
+    # comparison. Only scalar line-item fields are read; a nested or repeated shape reads as absent.
+    def product_params
+      products = params[:products]
+      return {} unless products.is_a?(ActionController::Parameters)
+
+      products.to_unsafe_h.transform_values do |line|
+        next unless line.is_a?(Hash)
+
+        line.reject { |_key, value| value.is_a?(Array) || value.is_a?(Hash) }.symbolize_keys
+      end.compact
     end
 end
