@@ -338,6 +338,24 @@ describe UrlRedirectsController, inertia: true do
           end
         end
 
+        context "when opened from the mobile app" do
+          let(:application) { create(:oauth_application, owner: create(:user)) }
+          let(:token) { create("doorkeeper/access_token", application:, resource_owner_id: purchase.purchaser.id, scopes: "mobile_api") }
+
+          it "starts a session so the library redirect is authenticated" do
+            get :download_page, params: { id: purchase.url_redirect.token, access_token: token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
+            expect(controller.send(:logged_in_user)).to eq(purchase.purchaser)
+          end
+
+          it "does not sign in without the mobile token" do
+            get :download_page, params: { id: purchase.url_redirect.token, access_token: token.token, mobile_token: "wrong" }
+
+            expect(controller.send(:logged_in_user)).to be_nil
+          end
+        end
+
         context "when the receipt parameter is present" do
           it "includes the purchase_id parameter when redirecting" do
             get :download_page, params: { id: purchase.url_redirect.token, receipt: true }

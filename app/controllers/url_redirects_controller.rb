@@ -429,6 +429,9 @@ class UrlRedirectsController < ApplicationController
       # This runs before `check_permissions`, so anchor on the purchase, not the signed-in user.
       return if purchase.product_purchases.visible_in_library.where(purchaser_id: purchase.purchaser_id).none?
 
+      # The app's purchase WebView has no cookies; /library only sees the session this request starts.
+      sign_in_mobile_app_viewer
+
       # Build the library URL on the main app domain explicitly. This request can arrive on
       # the seller's subdomain (or custom domain), and /library requires authentication. A
       # signed-out buyer would get bounced to /login on the seller's host, which isn't routed
@@ -440,6 +443,13 @@ class UrlRedirectsController < ApplicationController
         host: DOMAIN,
         protocol: PROTOCOL
       ), allow_other_host: true
+    end
+
+    def sign_in_mobile_app_viewer
+      return unless params[:access_token].present? && params[:mobile_token] == Api::Mobile::BaseController::MOBILE_TOKEN
+
+      doorkeeper_authorize! :mobile_api
+      sign_in current_api_user if current_api_user.present?
     end
 
     def redirect_to_coffee_page_if_needed
@@ -545,11 +555,8 @@ class UrlRedirectsController < ApplicationController
       end
 
       if params[:access_token].present? && params[:mobile_token] == Api::Mobile::BaseController::MOBILE_TOKEN
-        doorkeeper_authorize! :mobile_api
-        if current_api_user.present?
-          sign_in current_api_user
-          return if purchase && purchase.purchaser && purchase.purchaser == logged_in_user
-        end
+        sign_in_mobile_app_viewer
+        return if purchase && purchase.purchaser && purchase.purchaser == logged_in_user
       end
 
       # A seller's own purchase carries the seller's public email, so the email/cookie/IP checks
