@@ -87,6 +87,21 @@ describe ProfilePresenter::PublicApiProps do
         expect(entry).to have_key(:thumbnail_url)
       end
 
+      it "reads every product thumbnail from the preloaded association" do
+        thumbnail = create(:thumbnail, product: published)
+
+        thumbnail_queries = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          thumbnail_queries << payload[:sql] if payload[:name] != "SCHEMA" && !payload[:cached] && payload[:sql].include?("`thumbnails`")
+        end
+        product_props = described_class.new(seller:).props[:products]
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+
+        expect(product_props.find { _1[:name] == "Published One" }[:thumbnail_url]).to eq(thumbnail.url)
+        expect(product_props.find { _1[:name] == "Published Two" }[:thumbnail_url]).to be_nil
+        expect(thumbnail_queries.length).to eq(1)
+      end
+
       it "uses the public permalink from the product URL" do
         published.update!(custom_permalink: "custom-product")
         entry = described_class.new(seller:).props[:products].find { _1[:name] == "Published One" }

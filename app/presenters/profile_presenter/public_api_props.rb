@@ -73,7 +73,7 @@ class ProfilePresenter::PublicApiProps
           name: product.name,
           native_type: product.native_type,
           url: product_url(product),
-          thumbnail_url: product.thumbnail&.alive&.url,
+          thumbnail_url: product.thumbnail_alive&.url,
           price_cents: card_props[:price_cents],
           currency_code: card_props[:currency_code],
           price_formatted: product_card_formatted_price(
