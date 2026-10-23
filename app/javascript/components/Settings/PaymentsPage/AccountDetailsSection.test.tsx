@@ -120,6 +120,18 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("floors the Guatemala NIT input at the validator's 7 characters", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "GT",
+    });
+    const input = screen.getByLabelText<HTMLInputElement>("Número de Identificación Tributaria (NIT)");
+    expect([input.placeholder, input.minLength, input.maxLength]).toEqual(["805813-K", 7, 12]);
+    fireEvent.change(input, { target: { value: "805813-K" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("keeps the mapped Canadian field unchanged", () => {
     renderSection(makeUser({ individual_tax_id_entered: false }), {
       is_business: true,

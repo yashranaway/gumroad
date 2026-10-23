@@ -277,9 +277,12 @@ const TAX_ID_CONFIGS: Record<string, TaxIdConfig> = {
     idSuffix: "mozambique-id-number",
   },
   GT: {
+    // Same 7-character floor as isValidGuatemalaNit: a short SAT NIT like "805813-K" (6 digits
+    // plus the check letter) is accepted by Stripe now, and this form's native submit runs the
+    // browser's own length check, so an 8-character floor here would block it silently.
     label: "Número de Identificación Tributaria (NIT)",
-    placeholder: "1234567-8",
-    minLength: 8,
+    placeholder: "805813-K",
+    minLength: 7,
     maxLength: 12,
     idSuffix: "guatemala-id-number",
   },

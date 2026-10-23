@@ -225,9 +225,12 @@ export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: U
       idSuffix: "mozambique-id-number",
     },
     GT: {
+      // Stripe lowered the individual.id_number floor to 7 characters, so a short SAT NIT such as
+      // "805813-K" (6 digits plus the check letter) is valid. The input floor has to match
+      // isValidGuatemalaNit, otherwise the browser rejects a value the check accepts.
       label: "Número de Identificación Tributaria (NIT)",
-      placeholder: "1234567-8",
-      minLength: 8,
+      placeholder: "805813-K",
+      minLength: 7,
       maxLength: 12,
       idSuffix: "guatemala-id-number",
     },
