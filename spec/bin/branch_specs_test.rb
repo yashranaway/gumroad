@@ -333,6 +333,30 @@ check(
   expect_specs: %w[spec/models/widget_spec.rb],
 )
 
+# A shared util whose vitest coverage lives beside its consumers instead of in
+# a co-located .test.ts of its own: personalTaxId.ts is imported by the
+# Settings/PaymentsPage sections that carry the tests, so the util contributed
+# no specs and escalated the whole suite on a branch push (2026-10-23).
+check(
+  "personalTaxId util without a co-located test maps to the payments request spec",
+  base_files: {
+    "spec/requests/settings/payments_spec.rb" => SPEC_STUB,
+    "app/javascript/utils/personalTaxId.ts" => "old",
+  },
+  head_files: { "app/javascript/utils/personalTaxId.ts" => "new" },
+  expect_specs: %w[spec/requests/settings/payments_spec.rb],
+)
+
+# Same shape, no mapping: only the mapped util is covered, so a new util nobody
+# has tests for keeps stopping the selector.
+check(
+  "an unmapped javascript utils file still escalates as a mapping gap",
+  base_files: { "app/javascript/utils/unmappedHelper.ts" => "old" },
+  head_files: { "app/javascript/utils/unmappedHelper.ts" => "new" },
+  expect_escalate: true,
+  expect_reason: "app/javascript/utils/unmappedHelper.ts but no specs were selected for it (mapping gap)",
+)
+
 # Evaporate context, types, and vendored client are vitest-only (lint_js).
 check(
   "Evaporate context, types, and vendored client do not escalate",

@@ -163,6 +163,14 @@ FANOUT = {
     spec/requests/account_confirmation_spec.rb
     spec/requests/user/disable_affiliate_requests_setting_spec.rb
   ],
+  # The shared personal-tax-id helper the Settings/Payments sections render
+  # (AccountDetailsSection, BeneficialOwnersSection). Its vitest coverage sits
+  # beside those consumers, so the util has no co-located .test.ts of its own
+  # and contributed nothing: a diff touching it reported a mapping gap and
+  # escalated the whole suite (branch push 2026-10-23, 12 red Test Relevant
+  # shards on a PR that had already merged). The payments request spec is the
+  # flow the field feeds.
+  %r{\Aapp/javascript/utils/personalTaxId\.ts\z} => %w[spec/requests/settings/payments_spec.rb],
   # Importers: pages/Settings/* Layout/Advanced/Payments; also
   # Oauth/Applications/Edit.tsx:7 ApplicationForm and :8 Layout.
   # PasskeysSection registers then logs in (login/passkeys_spec.rb).
