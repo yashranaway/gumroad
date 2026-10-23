@@ -380,12 +380,17 @@ module Muse
       def tool_list_products(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         products = user.products.visible.order(created_at: :desc, id: :desc).limit(limit_for(args, default: 25))
+          .includes(:alive_prices, tier_categories: { alive_variants: :alive_prices })
         { products: products.map { |product| product_payload(product) } }
       end
 
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
-        { product: product_payload(find_product!(args["id"])) }
+        product = find_product!(args["id"])
+        details = { description: product.description }
+        # The same rule as the public API: sales figures need a sales scope.
+        details.merge!(sales_count: product.successful_sales_count, sales_usd_cents: product.total_usd_cents) if (token.scopes.to_a & %w[view_sales account]).any?
+        { product: product_payload(product).merge(details) }
       end
 
       def tool_create_draft_product(args)
@@ -469,10 +474,28 @@ module Muse
           name: product.name,
           price_cents: product.price_cents,
           currency: product.price_currency_type,
+          **pricing_payload(product),
           published: product.published?,
           url: product.long_url,
           permalink: product.unique_permalink
         }
+      end
+
+      # With pay what you want, a price is the minimum and buyers can pay more. A membership keeps
+      # this on each tier, priced per billing period, and its product-level flag is not kept in sync.
+      def pricing_payload(product)
+        unless product.is_tiered_membership
+          return { pay_what_you_want: !!product.customizable_price, suggested_price_cents: product.customizable_price? ? product.suggested_price_cents : nil }
+        end
+
+        # Built from the loaded associations, so list_products preloads them instead of querying per tier.
+        recurrences = product.alive_prices.filter_map { _1.recurrence if _1.is_buy? }
+        tiers = product.tier_categories.flat_map(&:alive_variants).sort_by { [_1.position_in_category.to_i, _1.created_at] }.map do |tier|
+          prices = tier.alive_prices.select { _1.is_buy? && recurrences.include?(_1.recurrence) }
+            .to_h { [_1.recurrence, { price_cents: _1.price_cents, suggested_price_cents: _1.suggested_price_cents }] }
+          { name: tier.name, pay_what_you_want: !!tier.customizable_price, prices: }
+        end
+        { pay_what_you_want: tiers.any? { _1[:pay_what_you_want] }, suggested_price_cents: nil, tiers: }
       end
 
       def find_product!(id)
