@@ -338,6 +338,17 @@ describe TranscodeVideoForStreamingWorker do
             described_class.new.create_hls_transcode_job(product_file, original_video_key, 1080, @ets_transcoder)
           end
         end
+
+        context "when the extension contains regexp metacharacters" do
+          it "strips the extension literally without compiling it as a pattern" do
+            original_video_key = "prefix/original/clip.m(p4"
+
+            output_prefix_key = "prefix/original/clip/hls/"
+            expect_any_instance_of(Aws::ElasticTranscoder::Client).to receive(:create_job).with(hash_including({ output_key_prefix: output_prefix_key }))
+
+            described_class.new.create_hls_transcode_job(product_file, original_video_key, 1080, @ets_transcoder)
+          end
+        end
       end
     end
   end

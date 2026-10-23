@@ -89,7 +89,7 @@ class TranscodeVideoForStreamingWorker
     extension = File.extname(original_video_key)
     relative_hls_path = "/hls/"
     # Fails to transcode if the 'output_key_prefix' length exceeds 255.
-    video_key_without_extension = original_video_key.sub(/#{extension}\z/, "")
+    video_key_without_extension = original_video_key.delete_suffix(extension)
                                                     .truncate_bytes(MAX_OUTPUT_KEY_PREFIX_BYTESIZE - relative_hls_path.length,
                                                                     omission: nil)
     output_key_prefix = "#{video_key_without_extension}#{relative_hls_path}"
