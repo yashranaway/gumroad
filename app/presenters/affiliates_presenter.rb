@@ -42,6 +42,7 @@ class AffiliatesPresenter
       disable_global_affiliate: seller.disable_global_affiliate?,
       global_affiliate_percentage: seller.global_affiliate&.affiliate_percentage,
       affiliates_disabled_reason:,
+      collab_products_only: collab_products_only?,
     }
   end
 
@@ -86,7 +87,13 @@ class AffiliatesPresenter
     end
 
     def products_props
-      self_service_affiliate_product_details.values.sort_by { |product| [product[:enabled] ? 0 : 1, product[:name]] }
+      @products_props ||= self_service_affiliate_product_details.values.sort_by { |product| [product[:enabled] ? 0 : 1, product[:name]] }
+    end
+
+    # The affiliate lists skip collab-flagged products, so an empty list can mean every published
+    # product has a collaborator rather than that the seller has no published product.
+    def collab_products_only?
+      products_props.empty? && seller.links.alive.is_collab.exists?
     end
 
     def existing_self_service_affiliate_product_details(self_service_affiliate_product)

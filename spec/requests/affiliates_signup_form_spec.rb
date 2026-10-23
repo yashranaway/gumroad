@@ -17,6 +17,20 @@ describe "Affiliate Signup Form", type: :system, js: true do
     end
   end
 
+  context "when every published product is a collab" do
+    let!(:product_one) { create(:product, :is_collab, name: "Product 1", user: seller) }
+    let!(:product_two) { create(:product, :is_collab, name: "Product 2", user: seller) }
+
+    it "names the collaborator as the cause instead of asking for a published product" do
+      visit "/affiliates/onboarding"
+
+      expect(page).to have_text("No products available for affiliates")
+      expect(page).to have_link("Manage collaborators", href: collaborators_path)
+      expect(page).to_not have_text("You need a published product to add affiliates.")
+      expect(page).to_not have_button("New product")
+    end
+  end
+
   context "when using the old form page" do
     it "redirects to the new affiliate signup form" do
       visit "/affiliate_requests/onboarding_form"
