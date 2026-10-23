@@ -1,0 +1,29 @@
+name: Marketing readiness
+
+# A feature merges WITH its marketing artifacts (Sahil, 2026-10-23): the announcement mail and the
+# social posts are part of shipping it, not a follow-up. This job is the check named
+# `marketing/ready` in the `main` ruleset, so it is the one gate a human merge from the UI also
+# passes through. The rule, the marker grammar and the classes that are exempt: bin/marketing-marker-check.
+#
+# Re-runs on `edited` so the line can be added without a push, and on `ready_for_review` because a
+# draft is skipped here (a draft cannot merge anyway).
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  marketing:
+    name: marketing/ready
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the marketing marker
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+        run: python3 bin/marketing-marker-check
