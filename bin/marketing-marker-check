@@ -16,12 +16,13 @@ through its own approval gate. `exempt` covers the classes we never announce (bu
 copy, deps, infra, tests, internal tooling) and a feature that cannot clear the creator-earnings
 framing.
 
-Inputs are the environment (the workflow passes the pull_request payload): PR_BODY, PR_HEAD,
-PR_DRAFT. Exit 0 clear, 1 owed.
+Inputs: either a JSON file path (arg 1, the `gh pr view --json body,headRefOid,isDraft` shape the
+workflow writes) or the environment (PR_BODY, PR_HEAD, PR_DRAFT). Exit 0 clear, 1 owed.
 
 The same grammar is mirrored locally in ~/.hermes/scripts/feature_marketing_gate.py, which blocks
 `gh pr merge` and lists the PRs that owe the marker. Keep the two in step.
 """
+import json
 import os
 import re
 import sys
@@ -68,8 +69,14 @@ def check(body, head, draft):
 
 
 def main():
-    ok, detail = check(os.environ.get("PR_BODY"), os.environ.get("PR_HEAD"),
-                       (os.environ.get("PR_DRAFT") or "").lower() == "true")
+    if len(sys.argv) > 1:
+        with open(sys.argv[1]) as f:
+            pr = json.load(f)
+        body, head, draft = pr.get("body"), pr.get("headRefOid"), bool(pr.get("isDraft"))
+    else:
+        body, head = os.environ.get("PR_BODY"), os.environ.get("PR_HEAD")
+        draft = (os.environ.get("PR_DRAFT") or "").lower() == "true"
+    ok, detail = check(body, head, draft)
     if ok:
         print(f"marketing: {detail}")
         return 0
