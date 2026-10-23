@@ -934,6 +934,22 @@ describe UsersController do
       expect(@purchase.reload.purchaser).to eq @user
     end
 
+    it "returns a failure response instead of raising when the user param is missing" do
+      post :add_purchase_to_library, params: { "purchase_id" => @purchase.external_id, "token" => "token" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to eq false
+      expect(@purchase.reload.purchaser).to be_nil
+    end
+
+    it "returns a failure response instead of raising when the user param is not a hash" do
+      post :add_purchase_to_library, params: { "user" => ["x"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to eq false
+      expect(@purchase.reload.purchaser).to be_nil
+    end
+
     it "claims a successful purchase with incomplete charge fields without re-running charge validation" do
       # Older/migrated or imported purchases can be successful and paid while missing
       # charge fields, which fails financial_transaction_validation on a plain save.

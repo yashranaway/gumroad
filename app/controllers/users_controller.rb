@@ -192,8 +192,13 @@ class UsersController < ApplicationController
   end
 
   def add_purchase_to_library
-    purchase = Purchase.find_by_external_id(params["user"]["purchase_id"])
-    if purchase.present? && ActiveSupport::SecurityUtils.secure_compare(purchase.email.to_s, params["user"]["purchase_email"].to_s)
+    # A malformed or legacy request can send `user` as a scalar, an array, or not at all;
+    # read that as absent rather than raising while parsing this public endpoint's params.
+    user_params = params["user"]
+    return render json: { success: false } unless user_params.is_a?(ActionController::Parameters)
+
+    purchase = Purchase.find_by_external_id(user_params["purchase_id"])
+    if purchase.present? && ActiveSupport::SecurityUtils.secure_compare(purchase.email.to_s, user_params["purchase_email"].to_s)
       # A reassignment-locked purchase is frozen by our support team while its
       # ownership is being reviewed, so knowing the purchase email is not
       # enough to move it into another account. Deny before changing the
@@ -213,7 +218,7 @@ class UsersController < ApplicationController
         return render json: { success: true, redirect_location: library_path }
       else
         user = User.alive.find_by(email: purchase.email)
-        if user.present? && user.valid_password?(params["user"]["password"])
+        if user.present? && user.valid_password?(user_params["password"])
           purchase.purchaser = user
           purchase.save!(validate: false)
 
