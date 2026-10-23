@@ -117,7 +117,7 @@ class UserPagesController < ApplicationController
     def page_custom_html_wrapper_document
       iframe_src = ERB::Util.h("/#{@page.slug}/landing/embed")
       title = ERB::Util.h(@page.title.to_s)
-      seller_name = ERB::Util.h(@user.name_or_username.to_s)
+      document_title = ERB::Util.h(Pages::DocumentTitle.for(page_title: @page.title, seller_name: @user.name_or_username))
       store_hostnames_json = ERB::Util.json_escape(page_store_hostnames.to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
       live_reload = if current_seller.present? && current_seller == @user
@@ -131,7 +131,7 @@ class UserPagesController < ApplicationController
           <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>#{title} — #{seller_name}</title>
+            <title>#{document_title}</title>
             #{page_meta_head}
             <meta name="csrf-token" content="#{CsrfTokenInjector::TOKEN_PLACEHOLDER}">
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}#{custom_html_wrapper_theme_background_css(@user)}</style>

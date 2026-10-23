@@ -22,5 +22,13 @@ describe Pages::RichTextDocument do
       expect(html).to include(%(href="/jane"))
       expect(html).to include("<p>Hello</p>")
     end
+
+    it "does not append the seller name when the page title already ends with it" do
+      titled_page = Struct.new(:title, :content).new("About | Jane", "<p>Hello</p>")
+
+      html = described_class.render(page: titled_page, seller_name: "Jane")
+
+      expect(html).to include("<title>About | Jane</title>")
+    end
   end
 end

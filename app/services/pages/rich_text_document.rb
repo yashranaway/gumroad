@@ -14,6 +14,7 @@ class Pages::RichTextDocument
   def self.render(page:, seller_name:, profile_href: "/", head_extra: "")
     title = ERB::Util.h(page.title.to_s)
     seller = ERB::Util.h(seller_name.to_s)
+    document_title = ERB::Util.h(Pages::DocumentTitle.for(page_title: page.title, seller_name:))
     href = ERB::Util.h(profile_href)
     <<~HTML.html_safe
       <!doctype html>
@@ -21,7 +22,7 @@ class Pages::RichTextDocument
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>#{title} — #{seller}</title>
+          <title>#{document_title}</title>
           #{head_extra}
           <style>
             :root { color-scheme: light dark; }

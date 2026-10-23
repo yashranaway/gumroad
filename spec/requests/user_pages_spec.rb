@@ -34,6 +34,14 @@ describe "Public serving of seller pages", type: :request do
       expect(response.body).to include("<p>Hello there</p>")
     end
 
+    it "does not repeat the store name when the page title already ends with it" do
+      page.update!(title: "About | Jane Doe")
+
+      get "http://#{seller.subdomain}/about"
+
+      expect(response.body).to include("<title>About | Jane Doe</title>")
+    end
+
     it "includes canonical and OG meta for the page" do
       get "http://#{seller.subdomain}/about"
 
@@ -72,6 +80,14 @@ describe "Public serving of seller pages", type: :request do
       get "http://seller.example.com/studio"
 
       expect(response.body).to include("<title>Studio — Jane Doe</title>")
+    end
+
+    it "does not repeat the store name when the page title already ends with it" do
+      page.update!(title: "Free Art Teacher Vault | Jane Doe")
+
+      get "http://seller.example.com/studio"
+
+      expect(response.body).to include("<title>Free Art Teacher Vault | Jane Doe</title>")
     end
 
     it "serves the embed with the strict CSP" do
