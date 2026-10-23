@@ -90,6 +90,33 @@ describe Bundles::ContentController, inertia: true do
       expect(new_bundle_products.third.deleted_at).to be_nil
     end
 
+    it "returns an error instead of raising when products is keyed by index" do
+      expect do
+        put :update, params: {
+          bundle_id: bundle.external_id,
+          products: {
+            "0" => { product_id: product.external_id, quantity: 1 }
+          }
+        }
+      end.to_not change { bundle.reload.bundle_products.alive.count }
+
+      expect(response).to redirect_to(edit_bundle_content_path(bundle.external_id))
+      expect(flash[:alert]).to eq("Products must be an array.")
+    end
+
+    it "does not raise when a keyed products param arrives for a bundle with no products yet" do
+      converting_product = create(:product, user: seller, price_cents: 2000, is_bundle: true, native_type: Link::NATIVE_TYPE_BUNDLE)
+
+      put :update, params: {
+        bundle_id: converting_product.external_id,
+        products: { "0" => { product_id: product.external_id, quantity: 1 } }
+      }
+
+      expect(response).to redirect_to(edit_bundle_content_path(converting_product.external_id))
+      expect(flash[:alert]).to eq("Products must be an array.")
+      expect(converting_product.reload.bundle_products.count).to eq(0)
+    end
+
     it "keeps a supplied redirect on the Gumroad host" do
       put :update, params: {
         bundle_id: bundle.external_id,

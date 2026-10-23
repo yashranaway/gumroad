@@ -14,6 +14,14 @@ class Bundles::ContentController < Bundles::BaseController
   def update
     authorize @bundle
 
+    products = content_permitted_params
+    # A form-encoded submit sends products[0][product_id], which Strong Parameters reads as a
+    # hash the service cannot parse — and an empty list would delete the bundle's current
+    # products. Answer it the way the API does instead of raising.
+    unless products.is_a?(Array)
+      return redirect_to edit_bundle_content_path(@bundle.external_id), alert: "Products must be an array."
+    end
+
     should_publish = params[:publish].present? && !@bundle.published?
     should_unpublish = params[:unpublish].present? && @bundle.published?
 
@@ -21,7 +29,7 @@ class Bundles::ContentController < Bundles::BaseController
     ActiveRecord::Base.transaction do
       @bundle.is_bundle = true
       @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
-      bundle = Bundle::UpdateProductsService.new(bundle: @bundle, products: content_permitted_params).perform
+      bundle = Bundle::UpdateProductsService.new(bundle: @bundle, products:).perform
 
       bundle.publish! if should_publish
       bundle.unpublish! if should_unpublish
