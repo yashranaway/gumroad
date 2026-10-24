@@ -321,7 +321,10 @@ module Muse
         ]
       end
 
-      def tool(name, description, properties, required: [], read_only: false, destructive: false)
+      # Every tool here reaches a creator's storefront: an independently controlled,
+      # publicly reachable system, so it is open-world by default. Pass
+      # open_world: false only for a tool that touches nothing but closed local state.
+      def tool(name, description, properties, required: [], read_only: false, destructive: false, open_world: true)
         schema = { type: "object", properties:, additionalProperties: false }
         schema[:required] = required if required.any?
         {
@@ -331,7 +334,7 @@ module Muse
           inputSchema: schema,
           annotations: {
             readOnlyHint: read_only,
-            openWorldHint: false,
+            openWorldHint: open_world,
             destructiveHint: destructive
           }
         }
