@@ -83,10 +83,11 @@ class Integrations::DiscordController < ApplicationController
   end
 
   def oauth_redirect
-    # state is client-supplied: anything that is not an object carrying a seller id
-    # falls through to the bad-request render instead of raising.
+    # state is client-supplied: only a plain string is parseable, and only an object
+    # carrying a seller id redirects. Anything else falls through to the bad-request render.
+    state_param = params[:state]
     state = begin
-      JSON.parse(params[:state]) if params[:state].present?
+      JSON.parse(state_param) if state_param.is_a?(String) && state_param.present?
     rescue JSON::ParserError
       nil
     end
