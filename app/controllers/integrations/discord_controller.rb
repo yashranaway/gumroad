@@ -83,10 +83,17 @@ class Integrations::DiscordController < ApplicationController
   end
 
   def oauth_redirect
-    if params[:state].present?
-      state = JSON.parse(params[:state])
+    # state is client-supplied: anything that is not an object carrying a seller id
+    # falls through to the bad-request render instead of raising.
+    state = begin
+      JSON.parse(params[:state]) if params[:state].present?
+    rescue JSON::ParserError
+      nil
+    end
+    seller_id = state.is_a?(Hash) ? state["seller_id"] : nil
 
-      seller = User.find(ObfuscateIds.decrypt(CGI.unescape(state.dig("seller_id"))))
+    if seller_id.is_a?(String) && seller_id.present?
+      seller = User.find(ObfuscateIds.decrypt(CGI.unescape(seller_id)))
       if seller.present?
         host = state.dig("is_custom_domain") ? seller.custom_domain.domain : seller.subdomain
         redirect_to oauth_redirect_integrations_discord_index_url(host:, params: { code: params[:code] }),
