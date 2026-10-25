@@ -13,7 +13,6 @@ import {
   PAKISTAN_CNIC_DIGITS,
   PAKISTAN_CNIC_ERROR_MESSAGE,
   PAKISTAN_CNIC_HELP_TEXT,
-  PAKISTAN_CNIC_MAX_INPUT_LENGTH,
 } from "$app/utils/pakistanCnic";
 import {
   HONG_KONG_PASSPORT_ID_CONFIG,
@@ -204,10 +203,10 @@ const TAX_ID_CONFIGS: Record<string, TaxIdConfig> = {
   PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
   PK: {
     label: "National Identity Card Number (SNIC or CNIC)",
-    // The cap leaves room for the two dashes so a pasted "12345-1234567-1" is not truncated.
     placeholder: "12345-1234567-1",
     minLength: PAKISTAN_CNIC_DIGITS,
-    maxLength: PAKISTAN_CNIC_MAX_INPUT_LENGTH,
+    // No maxLength: a cap cuts a CNIC pasted with its dashes and a stray space. isValidPakistanCnic
+    // and the server check the actual shape.
     idSuffix: "snic",
   },
   CR: {
@@ -1283,7 +1282,10 @@ const BeneficialOwnersSection = ({
                               onChange={(event) => updateForm({ id_number: event.target.value })}
                             />
                             {taxIdConfig.idSuffix === "snic" ? (
-                              <FieldsetDescription>{PAKISTAN_CNIC_HELP_TEXT}</FieldsetDescription>
+                              // The muted default measures under 4.5:1 here; this line is the only format guidance.
+                              <FieldsetDescription className="text-foreground">
+                                {PAKISTAN_CNIC_HELP_TEXT}
+                              </FieldsetDescription>
                             ) : null}
                             {isUs ? (
                               <LinkButton
