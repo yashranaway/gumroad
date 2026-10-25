@@ -9,6 +9,8 @@ class Settings::PaymentsController < Settings::BaseController
 
   MILITARY_ZIP_MESSAGE = "We can't accept military (APO/FPO/DPO) ZIP codes for payouts. Please enter a physical US street address and its ZIP code."
 
+  PAYOUT_SETUP_ALREADY_UNDERWAY_MESSAGE = "We're already setting up payouts for your account. Refresh this page in a moment to see its status."
+
   before_action :authorize
 
   def show
@@ -221,6 +223,11 @@ class Settings::PaymentsController < Settings::BaseController
         no_verdict_message = StripeMerchantAccountManager.no_verdict_seller_message(e)
         return redirect_with_error(no_verdict_message) if no_verdict_message
         return redirect_with_error(e.try(:message) || "Something went wrong.")
+      rescue MerchantRegistrationUserAlreadyHasAccountError
+        # A concurrent submit (double-tap, retry, another tab) won the race between the guard above and
+        # create_account's re-check under the user lock. That request owns the outcome, so report
+        # status instead of 500ing.
+        return redirect_with_error(PAYOUT_SETUP_ALREADY_UNDERWAY_MESSAGE, status: "info")
       end
     end
 
@@ -614,9 +621,12 @@ class Settings::PaymentsController < Settings::BaseController
     end
 
     # `field` names the form input the error is about, so the page can flag it and not only the banner.
-    def redirect_with_error(error_message, field: nil)
+    # `status: "info"` keeps the banner in place but drops the danger styling, for outcomes the seller
+    # has nothing to fix.
+    def redirect_with_error(error_message, field: nil, status: nil)
       errors = { base: [error_message] }
       errors[:field] = field.to_s if field.present?
+      errors[:status] = status if status.present?
       redirect_to settings_payments_path, inertia: { errors: }
     end
 
