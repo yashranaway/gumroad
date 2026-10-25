@@ -178,10 +178,11 @@ export const DateRangePicker = ({
               items[next]?.focus();
             }}
           >
+            {/* all-unset resets box-sizing to content-box, so w-full + MenuItem's px-4 would overflow. */}
             {presets.map((preset, index) => (
               <MenuItem key={preset.label} asChild>
                 <LinkButton
-                  className="w-full text-left no-underline focus:bg-active-bg focus-visible:outline-2 focus-visible:-outline-offset-2"
+                  className="box-border w-full text-left no-underline focus:bg-active-bg focus-visible:outline-2 focus-visible:-outline-offset-2"
                   tabIndex={activeItem === index ? 0 : -1}
                   onFocus={() => setActiveItem(index)}
                   onClick={() => quickSet(preset.from, preset.to)}
@@ -192,7 +193,7 @@ export const DateRangePicker = ({
             ))}
             <MenuItem asChild>
               <LinkButton
-                className="w-full text-left no-underline focus:bg-active-bg focus-visible:outline-2 focus-visible:-outline-offset-2"
+                className="box-border w-full text-left no-underline focus:bg-active-bg focus-visible:outline-2 focus-visible:-outline-offset-2"
                 tabIndex={activeItem === presets.length ? 0 : -1}
                 onFocus={() => setActiveItem(presets.length)}
                 onClick={() => setIsCustom(true)}
