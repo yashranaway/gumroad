@@ -40,6 +40,17 @@ describe ForeignWebhooksController do
       expect(response).to be_a_bad_request
       expect(HandleStripeEventWorker.jobs.size).to eq(0)
     end
+
+    it "answers 503 so Stripe redelivers when the enqueue cannot reach Redis" do
+      json = { type: "charge.succeeded", id: "evt_dafasdfadsf", pending_webhooks: "0", user_id: "1" }
+      request.headers["Stripe-Signature"] = stripe_signature_header(json, GlobalConfig.dig(:stripe, :endpoint_secret))
+      allow(HandleStripeEventWorker).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+      expect(ErrorNotifier).to receive(:notify).with(an_instance_of(Redis::CannotConnectError), action: "stripe")
+
+      post :stripe, params: json, as: :json
+
+      expect(response).to have_http_status(:service_unavailable)
+    end
   end
 
   describe "#stripe_connect" do
@@ -227,7 +238,10 @@ describe ForeignWebhooksController do
         allow(ErrorNotifier).to receive(:notify)
         request.headers["X-Twilio-Email-Event-Webhook-Signature"] = nil
 
-        expect { post :sendgrid, body: raw_body, as: :json }.to raise_error(Redis::TimeoutError)
+        post :sendgrid, body: raw_body, as: :json
+
+        expect(response).to have_http_status(:service_unavailable)
+        expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Redis::TimeoutError), action: "sendgrid")
         expect(HandleSendgridEventJob.jobs.size).to eq(0)
       end
 
@@ -357,6 +371,22 @@ describe ForeignWebhooksController do
         )
         expect(HandleResendEventJob).to have_enqueued_sidekiq_job(expected_params)
         expect(response).to be_successful
+      end
+
+      it "reports and answers 503 so the event is redelivered when the enqueue cannot reach Redis" do
+        error = RedisClient::CannotConnectError.new("unreachable")
+        allow(HandleResendEventJob).to receive(:perform_async).and_raise(error)
+        expect(ErrorNotifier).to receive(:notify).with(error, action: "resend")
+
+        post :resend, params: payload, as: :json
+
+        expect(response).to have_http_status(:service_unavailable)
+      end
+
+      it "still raises an unrelated error" do
+        allow(HandleResendEventJob).to receive(:perform_async).and_raise(NoMethodError)
+
+        expect { post :resend, params: payload, as: :json }.to raise_error(NoMethodError)
       end
     end
 
