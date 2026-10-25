@@ -19,6 +19,10 @@ export type GetSurchargesRequest = {
     // per-line rounded total the charge path will later persist.
     listed_price_cents?: number | undefined;
     listed_tip_cents?: number | undefined;
+    // Commission lines: the tip the order puts on the deposit, and the line's discount code, so
+    // the server can quote the deposit and completion the way Purchase and Commission charge them.
+    deposit_tip_cents?: number | undefined;
+    discount_code?: string | undefined;
     pay_in_installments?: boolean | undefined;
     subscription_id?: string | undefined;
   }[];
@@ -53,6 +57,9 @@ export type SurchargesResponse = {
   subtotal: number;
   // The canonical-currency amount charged now. Optional for rolling deploy compatibility.
   charge_canonical_total_cents?: number | null | undefined;
+  // The commission balance charged after completion, including the tax its own charge collects.
+  // Optional for rolling deploy compatibility.
+  commission_completion_canonical_total_cents?: number | null | undefined;
   // Server-owned listed-currency split for direct-listed Payment Elements. The browser
   // sums this instead of converting aggregate USD tax/shipping, because charge time
   // converts each purchase separately and then sums the rounded components.

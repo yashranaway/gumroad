@@ -13,6 +13,7 @@ import {
   getChargeTodayPrice,
   getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
+  getPaymentSplit,
   getLoadedDirectListedAmountToken,
   getPayLabel,
   getSelectableDirectListedCurrency,
@@ -4013,5 +4014,46 @@ describe("paymentMethodTypesForMountCurrency", () => {
     it("keeps UPI while the amount is not yet known", () => {
       expect(paymentMethodTypesForMountCurrency(inrListed, "inr", null)).toEqual(["card", "link", "upi"]);
     });
+  });
+});
+
+describe("getPaymentSplit", () => {
+  it("renders the server's charge-today and commission balance", () => {
+    expect(
+      getPaymentSplit({
+        total: 19_200,
+        serverChargeTotal: 9_600,
+        serverCommissionCompletionTotal: 9_600,
+        commissionCompletionTotal: 8_000,
+        futureInstallmentsTotal: 0,
+        hasPreorder: false,
+      }),
+    ).toEqual({ today: 9_600, completion: 9_600 });
+  });
+
+  it("falls back to the untaxed split without the server amounts", () => {
+    expect(
+      getPaymentSplit({
+        total: 19_200,
+        serverChargeTotal: null,
+        serverCommissionCompletionTotal: null,
+        commissionCompletionTotal: 8_000,
+        futureInstallmentsTotal: 0,
+        hasPreorder: false,
+      }),
+    ).toEqual({ today: 11_200, completion: 8_000 });
+  });
+
+  it("keeps the untaxed split when the cart also holds a preorder", () => {
+    expect(
+      getPaymentSplit({
+        total: 20_000,
+        serverChargeTotal: 8_000,
+        serverCommissionCompletionTotal: 8_000,
+        commissionCompletionTotal: 8_000,
+        futureInstallmentsTotal: 0,
+        hasPreorder: true,
+      }),
+    ).toEqual({ today: 12_000, completion: 8_000 });
   });
 });

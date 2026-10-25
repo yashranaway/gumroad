@@ -6,7 +6,7 @@ import { getSurcharges, SurchargesResponse } from "$app/data/customer_surcharge"
 import { paymentElementRequiresBillingName } from "$app/data/payment_element_methods";
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { SavedCreditCard, SavedPayPal } from "$app/parsers/card";
-import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
+import { COMMISSION_DEPOSIT_PROPORTION, CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
 import { readBuyerCurrencyPreference, writeBuyerCurrencyPreference } from "$app/utils/buyerCurrencyPreference";
 import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/utils/canadianPostalCodes";
@@ -201,6 +201,8 @@ export type Product = {
   listedPriceCents?: number;
   // The post-discount amount the listed-currency charge will collect for this line today.
   listedChargePriceCents?: number;
+  // The code whose discount this line got, as the order submits it.
+  discountCode?: string | null;
   // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
   // limited to the first billing cycle, or a payment-method update on the subscription manage
   // page where `price` is today's charge — often zero — rather than the plan price). For
@@ -1140,6 +1142,34 @@ export function getChargeTodayPrice(state: State) {
   return total - getFutureInstallmentsTotal(state);
 }
 
+// Both rows come from the server: today's charge already carries only the tax on today, and the
+// commission balance carries the tax its own charge will collect.
+export function getPaymentSplit({
+  total,
+  serverChargeTotal,
+  serverCommissionCompletionTotal,
+  commissionCompletionTotal,
+  futureInstallmentsTotal,
+  hasPreorder,
+}: {
+  total: number;
+  serverChargeTotal: number | null | undefined;
+  serverCommissionCompletionTotal: number | null | undefined;
+  commissionCompletionTotal: number;
+  futureInstallmentsTotal: number;
+  hasPreorder: boolean;
+}) {
+  if (
+    serverChargeTotal != null &&
+    serverCommissionCompletionTotal != null &&
+    commissionCompletionTotal > 0 &&
+    futureInstallmentsTotal === 0 &&
+    !hasPreorder
+  )
+    return { today: serverChargeTotal, completion: serverCommissionCompletionTotal };
+  return { today: total - commissionCompletionTotal - futureInstallmentsTotal, completion: commissionCompletionTotal };
+}
+
 export function getCustomFieldKey(
   field: CustomFieldDescriptor,
   product: { permalink: string; bundleProductId?: string | null },
@@ -1223,6 +1253,19 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
     state.products.map((item) => ({ price: item.price, permalink: item.permalink })),
   );
   const listedLinePrices = getListedLinePrices(state);
+  // The order tips a commission on the deposit it charges today (lineItems in Show.tsx), and the
+  // completion repeats that tip, so the server needs that share rather than the full-price one.
+  const depositLineTips = state.products.some((item) => item.nativeType === "commission")
+    ? computeTipsForLines(
+        state,
+        listedLinePrices.map((line, index) =>
+          state.products[index]?.nativeType === "commission"
+            ? { ...line, price: line.price * COMMISSION_DEPOSIT_PROPORTION }
+            : line,
+        ),
+        { basis: paymentElementDirectListedCurrency ? "listed" : "canonical" },
+      )
+    : [];
   const listedLineTips = paymentElementDirectListedCurrency
     ? computeTipsForLines(state, listedLinePrices, { basis: "listed" })
     : [];
@@ -1258,6 +1301,13 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
             ? { listed_tip_cents: listedLineTips[index] }
             : {}),
           ...(presentmentLineTips[index] != null ? { presentment_tip_cents: presentmentLineTips[index] } : {}),
+          ...(item.nativeType === "commission"
+            ? {
+                listed_price_cents: listedPriceCents,
+                deposit_tip_cents: depositLineTips[index] ?? 0,
+                ...(item.discountCode ? { discount_code: item.discountCode } : {}),
+              }
+            : {}),
           pay_in_installments: item.payInInstallments,
           subscription_id: item.subscription_id,
           recommended_by: item.recommended_by,
