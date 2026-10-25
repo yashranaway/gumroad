@@ -6259,8 +6259,17 @@ class Purchase < ApplicationRecord
       end
     end
 
+    # Runs inside the success transition's transaction, so a raise here rolls back a purchase
+    # the processor already charged. A Redis outage degrades to a stale product cache instead.
     def queue_product_cache_invalidation
       InvalidateProductCacheWorker.perform_in(1.minute, link_id)
+    rescue *ProductFile::EXPECTED_ENQUEUE_ERRORS => e
+      Rails.logger.warn("queue_product_cache_invalidation enqueue failed (#{e.class}) purchase=#{id} link=#{link_id}")
+      begin
+        ErrorNotifier.notify(e, purchase_id: id, link_id:, cache_invalidation_enqueue_failed: true)
+      rescue StandardError => notifier_error
+        Rails.logger.warn("queue_product_cache_invalidation failure could not be reported (#{id}): #{notifier_error.class}")
+      end
     end
 
     def set_succeeded_at
