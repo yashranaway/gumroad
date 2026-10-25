@@ -69,6 +69,48 @@ it("does not append a previous opening's response after reopening", async () => 
   expect(screen.getAllByRole("checkbox", { name: "Select review" })).toHaveLength(1);
 });
 
+it("keeps loading while a previous opening's response finishes before the current one", async () => {
+  let finishOld!: (value: Awaited<ReturnType<typeof getReviews>>) => void;
+  vi.mocked(getReviews).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishOld = resolve;
+      }),
+  );
+  const props = { onClose: vi.fn(), onInsert: vi.fn(), productId: "product-1" };
+  const { rerender } = render(<TestimonialSelectModal {...props} isOpen />);
+  rerender(<TestimonialSelectModal {...props} isOpen={false} />);
+  let finishCurrent!: (value: Awaited<ReturnType<typeof getReviews>>) => void;
+  vi.mocked(getReviews).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishCurrent = resolve;
+      }),
+  );
+  await act(async () => {
+    rerender(<TestimonialSelectModal {...props} isOpen />);
+    await Promise.resolve();
+  });
+  expect(screen.queryByRole("progressbar")).not.toBeNull();
+
+  await act(async () => {
+    finishOld(response("Obsolete review"));
+    await Promise.resolve();
+  });
+
+  expect(screen.queryByText("Obsolete review")).toBeNull();
+  expect(screen.queryByText("No reviews with text or video yet.")).toBeNull();
+  expect(screen.queryByRole("progressbar")).not.toBeNull();
+
+  await act(async () => {
+    finishCurrent(response("Current review"));
+    await Promise.resolve();
+  });
+
+  expect(screen.queryByText("Current review")).not.toBeNull();
+  expect(screen.queryByRole("progressbar")).toBeNull();
+});
+
 it("reloads and clears selections when the product changes while open", async () => {
   vi.mocked(getReviews).mockResolvedValueOnce(response("First product review"));
   const props = { onClose: vi.fn(), onInsert: vi.fn() };
