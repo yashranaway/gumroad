@@ -1224,6 +1224,23 @@ describe Api::V2::LinksController do
         expect(files.first["url"]).to eq("https://example.com/my-file.zip")
       end
 
+      it "reports whether downloads are disabled for each file" do
+        streamed = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf", stream_only: true)
+        downloadable = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf")
+
+        get :show, params: @params
+        files = response.parsed_body["product"]["files"].index_by { |file| file["id"] }
+        expect(files[streamed.external_id]["stream_only"]).to be(true)
+        expect(files[downloadable.external_id]["stream_only"]).to be(false)
+      end
+
+      it "reports stream_only false when the file type cannot open without a download" do
+        create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.zip", stream_only: true)
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["files"].first["stream_only"]).to be(false)
+      end
+
       it "includes covers array and main_cover_id" do
         cover = create(:asset_preview, link: @product)
 
