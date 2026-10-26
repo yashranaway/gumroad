@@ -4,6 +4,7 @@ import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Button } from "$app/components/Button";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -46,7 +47,7 @@ describe("WithTooltip control descriptions", () => {
     render(
       <WithTooltip tip="More detail">
         <a href="https://example.com">Link</a>
-        <input aria-label="Name" />
+        <Input aria-label="Name" />
         <span role="button" tabIndex={0}>
           Custom
         </span>
