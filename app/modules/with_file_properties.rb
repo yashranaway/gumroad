@@ -231,6 +231,8 @@ module WithFileProperties
     # Boxes are read from byte 0 in these containers, so an ID3v2 tag in front of
     # one is invalid rather than merely unusual.
     MP4_CONTAINER_FILETYPES = %w[m4a m4b mov mp4 m4v].freeze
+    # A long video can take longer than this to decode; it then keeps its tag.
+    ID3_STRIP_DECODE_TIMEOUT = 10.minutes
 
     def mp4_container?(extension)
       MP4_CONTAINER_FILETYPES.include?(extension.to_s.downcase)
@@ -238,8 +240,7 @@ module WithFileProperties
 
     # Rewrites the stored object without a leading ID3v2 tag and leaves the
     # repaired bytes in `path`, so the probe that follows measures the file buyers
-    # will actually get. `upload_file` is a PUT, so a failure leaves the original
-    # object untouched.
+    # will actually get. When the rewrite fails, `path` keeps the original bytes.
     def strip_leading_id3_tag(path)
       tag_size = Mp4Id3Tag.leading_tag_size(path)
       return if tag_size.nil?
@@ -251,16 +252,38 @@ module WithFileProperties
           IO.copy_stream(source, repaired)
         end
         repaired.flush
-        # Archive freshness is keyed on file ids and names, not bytes, so ZIPs built
-        # from the tagged object are rebuilt in place. The ids are read before the
-        # rewrite: a retried analyze sees clean bytes and never reaches this again.
-        stale_archive_ids = respond_to?(:product_files_archives) ? product_files_archives.alive.ids : []
+        # Some files' chunk offsets already count the tag, so they play as uploaded and
+        # break once it is cut off. The stored object is replaced in place, so check first.
+        unless decodes_completely?(repaired.path)
+          logger.warn("Analyze -- kept the ID3v2 tag on #{self.class.name} #{id}: the file does not decode without it")
+          return
+        end
 
-        object = s3_object
-        object.upload_file(repaired.path,
-                           content_type: object.content_type,
-                           content_disposition: object.content_disposition,
-                           metadata: object.metadata)
+        # Archive freshness is keyed on file ids and names, not bytes, so ZIPs built
+        # from the tagged object are rebuilt in place. They are hidden before the
+        # rewrite because a retried analyze sees clean bytes and never gets back here,
+        # so their rebuilds are scheduled even when the job is interrupted.
+        stale_archive_ids = respond_to?(:product_files_archives) ? product_files_archives.alive.ids : []
+        begin
+          hide_stale_archives(stale_archive_ids)
+          begin
+            object = s3_object
+            object.upload_file(repaired.path,
+                               content_type: object.content_type,
+                               content_disposition: object.content_disposition,
+                               metadata: object.metadata)
+          rescue Aws::S3::MultipartUploadError, Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
+            upload_error = e
+          end
+          upload_finished = true
+        ensure
+          rebuild_stale_archives(stale_archive_ids, interrupted: !upload_finished)
+        end
+
+        if upload_error
+          logger.warn("Analyze -- could not strip the ID3v2 tag from #{self.class.name} #{id} (#{upload_error.class} => #{upload_error.message})")
+          return
+        end
 
         self.size = File.size(repaired.path)
         IO.copy_stream(repaired.path, path)
@@ -268,15 +291,62 @@ module WithFileProperties
       ensure
         repaired.close!
       end
-      ProductFilesArchive.where(id: stale_archive_ids).find_each do |archive|
-        # Hide the stale ZIP until the rebuild lands. A build already in progress may have read the
-        # tagged bytes, so it is reset too; the worker then declines to mark it ready.
+    end
+
+    # A build already in progress may have read the tagged bytes, so it is reset too;
+    # the worker then declines to mark it ready.
+    def hide_stale_archives(archive_ids)
+      ProductFilesArchive.where(id: archive_ids).find_each do |archive|
         archive.with_lock do
           archive.update!(product_files_archive_state: "queueing") if archive.ready? || archive.in_progress?
         end
-        UpdateProductFilesArchiveWorker.perform_async(archive.id)
       end
-    rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
-      logger.warn("Analyze -- could not strip the ID3v2 tag from #{self.class.name} #{id} (#{e.class} => #{e.message})")
+    end
+
+    # Hidden again because a build can start during the upload, and rebuilt even after an error
+    # or interruption: a request that timed out may still have replaced the object. The rebuild
+    # is scheduled even if the hide fails; while an interruption propagates, failures are only logged.
+    def rebuild_stale_archives(archive_ids, interrupted:)
+      failure = nil
+      [-> { hide_stale_archives(archive_ids) },
+       -> { archive_ids.each { UpdateProductFilesArchiveWorker.perform_async(_1) } }].each do |step|
+        step.call
+      rescue StandardError => e
+        failure ||= e
+      end
+      return if failure.nil?
+      raise failure unless interrupted
+
+      logger.warn("Analyze -- could not rebuild archives for #{self.class.name} #{id} (#{failure.class} => #{failure.message})")
+    end
+
+    # A full decode, not a probe: a probe reads only the headers, which stay valid
+    # when the chunk offsets point at the wrong bytes.
+    def decodes_completely?(path)
+      # Interrupts such as Sidekiq::Shutdown are only let in during the wait, so a started
+      # decoder is always stopped and reaped before the interrupt is raised.
+      Thread.handle_interrupt(Object => :never) do
+        pid = Process.spawn("ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", path,
+                            "-map", "0:a?", "-map", "0:v?", "-f", "null", "-",
+                            in: File::NULL, out: File::NULL, err: File::NULL)
+        waiter = Process.detach(pid)
+        finished = Thread.handle_interrupt(Object => :immediate) { waiter.join(ID3_STRIP_DECODE_TIMEOUT) }
+        finished ? waiter.value.success? : false
+      ensure
+        stop_decoder(pid, waiter) if pid
+      end
+    rescue SystemCallError
+      false
+    end
+
+    def stop_decoder(pid, waiter)
+      return if waiter && !waiter.alive?
+
+      begin
+        Process.kill("KILL", pid)
+      rescue Errno::ESRCH
+      end
+      waiter ? waiter.join : Process.wait(pid)
+    rescue Errno::ECHILD
     end
 end
