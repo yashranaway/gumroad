@@ -693,6 +693,11 @@ const VideoEmbedPreview = ({
     });
   }, []);
   const throttledTrackMediaLocation = React.useCallback(throttle(trackMediaLocation, LOCATION_TRACK_EVENT_DELAY), []);
+
+  // lodash throttle's trailing call stays queued for up to 10s, so without this a position from an
+  // embed that is already gone lands after a newer one and moves the saved position backwards.
+  React.useEffect(() => () => throttledTrackMediaLocation.cancel(), [throttledTrackMediaLocation]);
+
   React.useEffect(() => {
     if (!mediaUrls.length || !isVideoPlayerShowing) return;
     // Setting up the player is asynchronous (the library is fetched on first use), so the embed

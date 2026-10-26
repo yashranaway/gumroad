@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { trackMediaLocationChanged } from "$app/data/media_location";
 import { isMediaPlaybackEvent, MEDIA_PLAYBACK_EVENT, MediaPlaybackEventDetail } from "$app/utils/media_playback";
 
 import { FileItem, FileRow } from "$app/components/Download/FileList";
@@ -88,8 +89,20 @@ describe("embedded video playback reporting", () => {
   afterEach(() => {
     window.removeEventListener(MEDIA_PLAYBACK_EVENT, recordPlaybackEvent);
     cleanup();
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
+
+  const openEmbeddedVideo = async () => {
+    const { player, handlers } = fakePlayer();
+    mocks.createJWPlayer.mockResolvedValue(player);
+    const rendered = renderEmbeddedVideoRow();
+    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+    await act(async () => Promise.resolve());
+    return { rendered, handlers };
+  };
+
+  const reportedLocations = () => vi.mocked(trackMediaLocationChanged).mock.calls.map(([data]) => data.location);
 
   it("reports playback for the player it set up", async () => {
     const { player, handlers } = fakePlayer();
@@ -127,5 +140,40 @@ describe("embedded video playback reporting", () => {
 
     expect(player.on).not.toHaveBeenCalled();
     expect(playbackEvents).toEqual([]);
+  });
+
+  it("cancels a queued position write when the embed is torn down instead of overwriting a newer position", async () => {
+    vi.useFakeTimers();
+    const first = await openEmbeddedVideo();
+    act(() => first.handlers.get("time")?.({ position: 10 }));
+    act(() => first.handlers.get("time")?.({ position: 15 }));
+    first.rendered.unmount();
+
+    const second = await openEmbeddedVideo();
+    act(() => second.handlers.get("time")?.({ position: 50 }));
+    act(() => vi.advanceTimersByTime(10_001));
+
+    expect(reportedLocations()).toEqual([10, 50]);
+  });
+
+  it("keeps trailing position updates while the embed stays on screen", async () => {
+    vi.useFakeTimers();
+    const { handlers } = await openEmbeddedVideo();
+    act(() => handlers.get("time")?.({ position: 10 }));
+    act(() => handlers.get("time")?.({ position: 15 }));
+    act(() => vi.advanceTimersByTime(10_001));
+
+    expect(reportedLocations()).toEqual([10, 15]);
+  });
+
+  it("records the full length on completion without a later queued position", async () => {
+    vi.useFakeTimers();
+    const { handlers } = await openEmbeddedVideo();
+    act(() => handlers.get("time")?.({ position: 10 }));
+    act(() => handlers.get("time")?.({ position: 15 }));
+    act(() => handlers.get("complete")?.());
+    act(() => vi.advanceTimersByTime(10_001));
+
+    expect(reportedLocations()).toEqual([10, 5400]);
   });
 });
