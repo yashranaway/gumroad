@@ -257,6 +257,7 @@ var Evaporate = function(config){
         method: 'POST',
         path: '/' + con.bucket + '/' + me.name + '?uploads',
         step: 'initiate',
+        timeoutMs: 2 * 60 * 1000,
         x_amz_headers: me.xAmzHeadersAtInitiate,
         contentType: me.mimeType
       };
@@ -433,7 +434,9 @@ var Evaporate = function(config){
         method: 'POST',
         contentType: 'application/xml; charset=UTF-8',
         path: '/' + con.bucket + '/' + me.name + '?uploadId='+me.uploadId,
-        step: 'complete'
+        step: 'complete',
+        // A complete POST that never answers would hold the row in "uploading" forever.
+        timeoutMs: 5 * 60 * 1000
       };
 
       complete.onErr = function (){
@@ -645,9 +648,12 @@ var Evaporate = function(config){
             xhr.setRequestHeader(key, requester.x_amz_headers[key]);
           }
         }
+        var stallTimer = requester.timeoutMs ? setTimeout(function(){ xhr.abort(); }, requester.timeoutMs) : null;
+
         xhr.onreadystatechange = function(){
 
           if (xhr.readyState == 4){
+            clearTimeout(stallTimer);
 
             if(payload){l.d('  ### ' + payload.size);} // Test, per http://code.google.com/p/chromium/issues/detail?id=167111#c20
             if (xhr.status == 200){
@@ -658,7 +664,7 @@ var Evaporate = function(config){
           }
         };
 
-        xhr.onerror = function(){requester.onErr(xhr,true);};
+        xhr.onerror = function(){clearTimeout(stallTimer); requester.onErr(xhr,true);};
 
         if (typeof requester.onProgress == 'function'){
           xhr.upload.onprogress = function(evt){

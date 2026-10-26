@@ -10,6 +10,7 @@ class FakeXhr {
   static partResponders: Responder[] = [];
   static partRequests = 0;
   static hungRequests: FakeXhr[] = [];
+  static hangComplete = false;
 
   method = "";
   url = "";
@@ -54,6 +55,8 @@ class FakeXhr {
         ((partXhr: FakeXhr) => partXhr.respond(500, ""));
       FakeXhr.partRequests += 1;
       responder(this);
+    } else if (FakeXhr.hangComplete) {
+      FakeXhr.hungRequests.push(this);
     } else {
       this.respond(200, "<CompleteMultipartUploadResult/>");
     }
@@ -102,6 +105,7 @@ beforeEach(() => {
   FakeXhr.partResponders = [];
   FakeXhr.partRequests = 0;
   FakeXhr.hungRequests = [];
+  FakeXhr.hangComplete = false;
   vi.stubGlobal("XMLHttpRequest", FakeXhr);
 });
 
@@ -184,5 +188,22 @@ it("fails the file once a permanently stalled part is aborted past its budget", 
   expect(error).toHaveBeenCalledTimes(1);
   expect(complete).not.toHaveBeenCalled();
   expect(FakeXhr.partRequests).toBe(2);
+  expect(FakeXhr.hungRequests.every((xhr) => xhr.aborted)).toBe(true);
+});
+
+it("fails the file when the completion request never answers", async () => {
+  vi.useFakeTimers();
+  FakeXhr.partResponders = [(xhr) => xhr.respond(200, "")];
+  FakeXhr.hangComplete = true;
+  const complete = vi.fn();
+  const error = vi.fn();
+
+  const evaporate = buildEvaporate(2);
+  addFile(evaporate, { complete, error });
+
+  await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+
+  expect(error).toHaveBeenCalledTimes(1);
+  expect(complete).not.toHaveBeenCalled();
   expect(FakeXhr.hungRequests.every((xhr) => xhr.aborted)).toBe(true);
 });
