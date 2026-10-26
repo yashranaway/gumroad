@@ -28,6 +28,7 @@ import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
@@ -373,9 +374,12 @@ const NewProductPage = () => {
                         Learn more
                       </a>
                     </div>
-                    <button className="underline" onClick={() => void dismissAiPromo()}>
+                    <LinkButton
+                      className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+                      onClick={() => void dismissAiPromo()}
+                    >
                       close
-                    </button>
+                    </LinkButton>
                   </div>
                 </Alert>
               ) : null}
