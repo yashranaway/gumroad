@@ -5,6 +5,7 @@ import { AssetPreview } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { MAX_PORTRAIT_FRAME_HEIGHT } from "$app/utils/videoFrame";
 
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useOnChange } from "$app/components/useOnChange";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
@@ -92,6 +93,9 @@ export const Covers = ({
   // invisible either way, so the broader condition is a no-op there and stays correct if
   // the cap's shape test changes.
   const frameIsShaped = frameStyle !== undefined;
+  // The indicator row sits over the bottom of the frame, so it stays out of the way while a video
+  // or embed is on screen.
+  const indicatorsOverPlayer = activeCover?.type === "oembed" || activeCover?.type === "video";
 
   const { itemsRef, handleScroll } = useScrollableCarousel(activeCoverIndex, (index) =>
     setActiveCoverId(covers[index]?.id ?? null),
@@ -119,25 +123,53 @@ export const Covers = ({
           <CoverItem cover={cover} frameIsShaped={frameIsShaped} productName={productName} key={cover.id} />
         ))}
       </div>
-      {covers.length > 1 && activeCover?.type !== "oembed" && activeCover?.type !== "video" ? (
+      {covers.length > 1 ? (
         <div
           role="tablist"
           aria-label="Select a cover"
-          className="absolute bottom-0 flex w-full flex-wrap justify-center gap-2 p-3"
+          className={classNames(
+            "absolute bottom-0 flex w-full flex-wrap justify-center gap-2 p-3",
+            // Hidden rather than unmounted: removing the row takes the focused tab with it and drops
+            // focus to the body. Clicks fall through to the player, and focus reveals the row again.
+            indicatorsOverPlayer && "pointer-events-none opacity-0 focus-within:opacity-100",
+          )}
         >
           {covers.map((cover, i) => (
-            <div
+            <LinkButton
               key={i}
               role="tab"
               aria-label={`Show cover ${i + 1}`}
               aria-selected={i === activeCoverIndex}
               aria-controls={cover.id}
+              tabIndex={i === activeCoverIndex ? 0 : -1}
+              onKeyDown={(event) => {
+                let index: number;
+                switch (event.key) {
+                  case "ArrowLeft":
+                    index = (i + covers.length - 1) % covers.length;
+                    break;
+                  case "ArrowRight":
+                    index = (i + 1) % covers.length;
+                    break;
+                  case "Home":
+                    index = 0;
+                    break;
+                  case "End":
+                    index = covers.length - 1;
+                    break;
+                  default:
+                    return;
+                }
+                event.preventDefault();
+                setActiveCoverId(covers[index]?.id ?? null);
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index]?.focus();
+              }}
               onClick={(e) => {
                 e.preventDefault();
                 setActiveCoverId(cover.id);
               }}
               className={classNames(
-                "block rounded-full border border-current bg-background p-2",
+                "block rounded-full border border-current bg-background p-2 focus-visible:outline-2 focus-visible:outline-offset-2",
                 i === activeCoverIndex && "bg-current",
               )}
             />
